@@ -12,11 +12,11 @@ export function useModelActions(entry: Entry, readonly: boolean, onChanged: () =
   const q = encodeURIComponent(entry.name)
   const ask = useConfirm()
 
-  const call = async (what: string, path: string, method = 'POST', retry = true) => {
+  const call = async (what: string, path: string, method = 'POST', retry = true, json?: object) => {
     setBusy(what)
     setMsg(null)
     try {
-      await api(path, { method })
+      await api(path, { method, json })
       return true
     } catch (e) {
       if (retry && e instanceof ApiError && await ask({ title: 'Do it anyway?', body: e.message, label: 'Do it anyway', danger: true })) {
@@ -34,6 +34,11 @@ export function useModelActions(entry: Entry, readonly: boolean, onChanged: () =
   const stop = async () => (await ask({ title: `Stop ${entry.name}?`, body: 'It stops serving right away. Requests in progress are lost, and it has to load again to come back.', label: 'Stop', danger: true })) && doStop()
   const start = () => call('Starting', `/api/models/${q}/start`, 'POST', false)
   const restart = async () => (await ask({ title: `Restart ${entry.name}?`, body: 'It stops, then loads again; that takes minutes and requests in progress are lost.', label: 'Restart', danger: true })) && (await doStop()) && start()
+  const publish = async (on: boolean) => {
+    if (!on && !(await ask({ title: `Unpublish ${entry.name}?`, label: 'Unpublish', danger: true,
+      body: 'Clients can no longer reach it through the gateway. It keeps running, and Publish puts it back.' }))) return false
+    return call(on ? 'Publishing' : 'Unpublishing', `/api/models/${q}/publish`, 'POST', false, { publish: on })
+  }
   const download = () => call('Starting download', `/api/models/${q}/download`, 'POST', false)
   const cancel = () => {
     const repo = entry.download?.repo
@@ -54,5 +59,5 @@ export function useModelActions(entry: Entry, readonly: boolean, onChanged: () =
   }
   const why = !entry.managed ? 'Started outside DGX-kit: watch only.'
     : readonly ? 'Read-only: DGX-kit won’t start, stop or download anything on this box.' : null
-  return { busy, msg, setMsg, start, stop, restart, download, cancel, pause, resume, remove, locked: readonly || !entry.managed || !!busy, why }
+  return { busy, msg, setMsg, start, stop, restart, publish, download, cancel, pause, resume, remove, locked: readonly || !entry.managed || !!busy, why }
 }

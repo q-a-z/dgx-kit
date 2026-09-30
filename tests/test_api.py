@@ -438,3 +438,16 @@ def test_the_running_version_is_reported_before_sign_in(env):
     client, s, _ = env
     v = client.get("/api/me").json()["version"]
     assert isinstance(v, str) and v  # the package's own version, or "dev" when it isn't installed
+
+
+def test_publish_and_unpublish_update_the_gateway_without_touching_the_model(env):
+    client, s, _ = env
+    client.post("/api/models", json=model_body())
+    s.runner.running["llama"] = 8100
+    assert client.post("/api/models/llama/publish", json={"publish": False}).json() == {"publish": False}
+    assert s.store.get("llama").publish is False and s.gateway.synced[-1] == {}  # off the gateway now
+    assert s.runner.running == {"llama": 8100}  # still running
+    assert client.post("/api/models/llama/publish", json={"publish": True}).json() == {"publish": True}
+    assert s.gateway.synced[-1] == {"llama": 8100}  # and back on it
+    assert client.post("/api/models/nope/publish", json={"publish": True}).status_code == 404
+    assert client.post("/api/models/llama/publish", json={}).status_code == 422

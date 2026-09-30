@@ -34,6 +34,10 @@ export function ModelActions({ entry, readonly, onChanged, onOpen, labels = fals
     ...(s === 'paused' ? [btn('start', 'Resume download', a.resume, { ...control, primary: labels }), btn('cancel', 'Cancel download', a.cancel, control)] : []),
     ...(fetching(s) ? [] : [btn('logs', 'Logs', () => onOpen('logs'))]),
     ...(labels && entry.managed ? [btn('settings', 'Settings', () => onOpen('settings'))] : []),
+    // Whether clients can reach it through the gateway; it keeps running either way, and a stopped model publishes once it runs.
+    ...(labels && entry.managed && entry.row
+      ? [btn(entry.row.publish ? 'unpublish' : 'publish', entry.row.publish ? 'Unpublish' : 'Publish', () => a.publish(!entry.row!.publish), control)]
+      : []),
   ]
   return (
     <span className={`acts ${labels ? 'labelled' : ''}`} onClick={(e) => e.stopPropagation()}>

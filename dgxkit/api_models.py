@@ -412,6 +412,25 @@ def remember_stop(s, name: str, container_id: str) -> None:
     _stopped_file(s).write_text(json.dumps(d))
 
 
+class PublishBody(BaseModel):
+    publish: bool
+
+
+@router.post("/models/{name}/publish")
+async def set_publish(name: str, body: PublishBody, request: Request):
+    """List the model on the gateway while it runs, or stop listing it. It keeps running either way."""
+    s = svc(request)
+    if not _exists(s, name):
+        raise HTTPException(404)
+    r = s.store.get(name)
+    if r.publish != body.publish:
+        r.publish = body.publish
+        s.store.save(r)
+        s.log("publish" if body.publish else "unpublish", name)
+    await sync_gateway(s)  # LiteLLM gets the new list now; no restart of the model
+    return {"publish": r.publish}
+
+
 @router.post("/models/{name}/stop")
 async def stop(name: str, request: Request):
     s = svc(request)

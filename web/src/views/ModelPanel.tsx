@@ -57,6 +57,7 @@ export function ModelPanel({ entry, tab, setTab, latest, history, readonly, layo
         {ctx ? <span>ctx <b>{fmtNum(ctx)}</b></span> : null}
         {draft && <span>draft <b>{base(draft)}</b></span>}
         {port ? <span>port <b>{port}</b></span> : null}
+        {entry.managed && r && <span title="Whether it is listed on the gateway while it runs">gateway <b>{r.publish ? 'published' : 'not published'}</b></span>}
         {pid ? <span>PID <b>{pid}</b></span> : null}
         {qc && (qc.decode_mean_tps != null || qc.prefill_mean_tps != null
           ? <span title="Ten-second check taken when it started">at start: decode <b>{fmtNum(qc.decode_mean_tps ?? 0, 0)} t/s</b> · prefill <b>{fmtNum(qc.prefill_mean_tps ?? 0, 0)} t/s</b></span>
