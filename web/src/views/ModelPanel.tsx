@@ -114,17 +114,30 @@ export function ModelPanel({ entry, tab, setTab, latest, history, readonly, layo
 function More({ entry, readonly, onChanged }: { entry: Entry; readonly: boolean; onChanged: () => void }) {
   const a = useModelActions(entry, readonly, onChanged)
   const [fit, setFit] = useState<string | null>(null)
+  const menu = useRef<HTMLDetailsElement>(null)
+  const close = () => { if (menu.current) menu.current.open = false }
+  // A <details> stays open until its own summary is clicked again; a menu should also close when you click
+  // anywhere else, press Escape, or pick an item.
+  useEffect(() => {
+    const away = (e: Event) => { if (menu.current?.open && !menu.current.contains(e.target as Node)) close() }
+    const esc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && menu.current?.open) { close(); menu.current.querySelector('summary')?.focus() }
+    }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc) }
+  }, [])
   const check = () => api<Plan>(`/api/models/${encodeURIComponent(entry.name)}/plan`).then((p) => setFit(p.fits
     ? `Fits now: ${fmtNum(p.context_tokens)} context, KV cache ${fmtBytes(p.kv_bytes)}, about ${fmtNum(p.concurrency, 1)} full-length requests at once.`
     : `Doesn’t fit right now: ${p.reason}`))
   return (
     <>
-      <details className="more">
+      <details className="more" ref={menu}>
         <summary aria-label="More actions" title="More actions"><Icon name="more" /></summary>
         <div className="menu">
-          <button onClick={check}>Check it fits now</button>
+          <button onClick={() => { close(); check() }}>Check it fits now</button>
           <button className="danger" disabled={a.locked || entry.running} title={entry.running ? 'Stop it first' : undefined}
-            onClick={async () => { if (await a.remove()) select(undefined) }}>Remove…</button>
+            onClick={async () => { close(); if (await a.remove()) select(undefined) }}>Remove…</button>
         </div>
       </details>
       {fit && <p className="fit-note">{fit} <button className="link" onClick={() => setFit(null)}>OK</button></p>}

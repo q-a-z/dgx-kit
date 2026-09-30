@@ -26,6 +26,7 @@ Newest first. Every commit adds its entry here.
 - `.gitignore` now also keeps secrets (`.env` files, keys, certificates, a password file), logs and patch leftovers out of the repository, and ignores `state/` and `models/` only at the top of the tree, so a code folder with one of those names is never hidden. The image build skips the docs.
 
 ### Fixed
+- The three-dot menu on a model now closes when you click elsewhere, press Escape, or choose an item (it used to stay open until you clicked the dots again).
 - Stopping a model from the dashboard (or a clean stop from a shell) shows **Stopped**, not **Crashed**.
 - A model that is still loading shows **Starting**, not "Not answering".
 - Starting Nemotron no longer dies while compiling GPU kernels: containers share the kernel caches, the compile is capped at two jobs, and memory lock is lifted.
