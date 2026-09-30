@@ -501,6 +501,8 @@ uninstall() {
     run "${SUDO[@]}" rm -rf "$CONF_DIR" "$STATE_DIR"
   fi
   run "${DOCKER[@]}" rmi "$IMAGE" || true
+  run rm -f "$HOME/.local/bin/$SERVICE"                       # the update command and the installer copy it runs
+  run rm -rf "$HOME/.local/share/$SERVICE-installer"
   echo
   echo "Done."
   [[ $REMOVE_MODELS == yes ]] || echo "Model containers and the LiteLLM gateway were left running."
