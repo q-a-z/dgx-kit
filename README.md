@@ -7,6 +7,8 @@ address through a built-in LiteLLM; and can benchmark a model on request.
 You install one thing, the dashboard. It sets up everything else itself: LiteLLM, its database, the
 engine images and the kernel caches.
 
+Release notes: [RELEASE_NOTES.md](RELEASE_NOTES.md).
+
 ## What it does
 
 - **Watch the machine:** GPU temperature, power and load, CPU, memory, storage and network, with the models laid out in unified memory.
