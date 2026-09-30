@@ -1,0 +1,19 @@
+Nemotron-3.5 (nemotron_v3 reasoning parser): always allow the reasoning->content
+swap when content is empty (generation truncated mid-<think>), so clients that
+send no chat_template_kwargs (e.g. LiteLLM / Hermes) never get content: null.
+
+--- a/vllm/parser/nemotron_v3.py
++++ b/vllm/parser/nemotron_v3.py
+@@ -80,7 +80,11 @@
+     def _should_force_content(
+         request: ChatCompletionRequest | ResponsesRequest,
+     ) -> bool:
+-        chat_template_kwargs = getattr(request, "chat_template_kwargs", None)
++        # PATCH: always allow the reasoning->content swap when content is
++        # empty (truncated mid-<think>), so clients that send no
++        # chat_template_kwargs (e.g. LiteLLM/Hermes) never get content=null.
++        return True
++        chat_template_kwargs = getattr(request, "chat_template_kwargs", None)  # noqa
+         return bool(
+             chat_template_kwargs
+             and (

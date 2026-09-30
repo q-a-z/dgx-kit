@@ -1,0 +1,35 @@
+Mamba-hybrid models with prefix caching (align mode): seed the running state
+block index with the Mamba block size (mamba_spec.block_size), not the KV-cache
+block size (cache_config.block_size). They differ (e.g. 1200 vs 16), so a real
+prefix-cache hit produced an out-of-bounds state-table column and corrupted the
+Triton precopy kernel's addressing. Needed for ornith with prefix caching.
+
+--- a/vllm/v1/worker/gpu/model_states/mamba_hybrid.py
++++ b/vllm/v1/worker/gpu/model_states/mamba_hybrid.py
+@@ -118,8 +118,25 @@
+         self.num_accepted_tokens_gpu[req_index].fill_(1)
+         if self._align_mode:
+             # Seed the running state block from the resumed/prefilled position.
++            # Must use the MAMBA block size (mamba_spec.block_size), not the
++            # scheduler/KV-cache block size (cache_config.block_size) -- these
++            # differ (e.g. 1200 vs 16) and using the wrong one here computes a
++            # state-table column index that is wildly out of bounds for any
++            # request admitted with num_computed_tokens > 0 (a real prefix-cache
++            # hit), corrupting the Triton precopy kernel's addressing.
++            # self._mamba_spec is memoized by _get_mamba_group_info() and is
++            # already populated by the time a real cache hit can occur (that
++            # requires a prior request to have run preprocess_state at least
++            # once). Falls back to cache_config.block_size only before that
++            # (num_computed_tokens is 0 for a request admitted that early, so
++            # the formula yields -1 either way -- harmless).
++            block_size = (
++                self._mamba_spec.block_size
++                if self._mamba_spec is not None
++                else self.cache_config.block_size
++            )
+             self._mamba_state_idx_gpu[req_index].fill_(
+-                (new_req_data.num_computed_tokens - 1) // self.cache_config.block_size
++                (new_req_data.num_computed_tokens - 1) // block_size
+             )
+ 
+     def _get_mamba_group_info(

@@ -1,0 +1,23 @@
+Triton MLA decode attention on GB10 (sm121): standard MLA (kv_lora_rank=512,
+Lk=576, BLOCK_DMODEL=512) at num_stages=2 needs 102400 bytes of shared memory,
+over GB10's 101376-byte per-block limit. Use num_stages=1 for that case too.
+Needed for MLA models such as GLM-4.x-Flash on the Spark.
+
+--- a/vllm/v1/attention/ops/triton_decode_attention.py
++++ b/vllm/v1/attention/ops/triton_decode_attention.py
+@@ -525,10 +525,14 @@
+         # https://github.com/triton-lang/triton/blob/main/third_party/amd/backend/compiler.py
+         extra_kargs = {"waves_per_eu": 1, "matrix_instr_nonkdim": 16, "kpack": 2}
+         num_stages = 1
+-    elif not is_hip_ and BLOCK_DMODEL >= 1024:
++    elif not is_hip_ and (BLOCK_DMODEL >= 1024 or (is_mla and Lk == 576)):
+         # Avoid shared memory overflow on NVIDIA when BLOCK_DMODEL is large
+         # like non-MLA D_QK=576, BLOCK_DMODEL=1024, BLOCK_H=16
+         # exceeds 101376 bytes limit
++        # PATCH (sm121/GB10): standard MLA (kv_lora_rank=512 -> Lk=576 ->
++        # BLOCK_DMODEL=512) also overflows on GB10's ~99KiB shared memory
++        # per block (vs 228KiB on datacenter Blackwell) at num_stages=2 -
++        # Required 102400 bytes > limit 101376. Drop to num_stages=1.
+         num_stages = 1
+ 
+     _fwd_grouped_kernel_stage1[grid](

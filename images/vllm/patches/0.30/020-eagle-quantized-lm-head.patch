@@ -1,0 +1,28 @@
+EAGLE/EAGLE3 lm_head sharing: a quantized (e.g. NVFP4) ParallelLMHead has no
+.weight tensor, which crashed the draft/target lm_head equality check. Treat a
+missing weight or a shape mismatch as "not equal" (do not share) instead.
+Needed for EAGLE3 drafts on NVFP4 targets such as qwen3-coder.
+
+--- a/vllm/v1/worker/gpu/spec_decode/eagle/utils.py
++++ b/vllm/v1/worker/gpu/spec_decode/eagle/utils.py
+@@ -21,10 +21,17 @@
+     # torch.equal on GPU allocates a bool mask the size of the input.
+     # Use the faster GPU path when there is plenty of headroom;
+     # otherwise compare on CPU.
+-    w = draft.weight
++    # NVFP4/quantized ParallelLMHead has no .weight tensor; a draft that
++    # carries its own quantized head simply cannot be proven equal -> don't share.
++    w = getattr(draft, "weight", None)
++    tw = getattr(target, "weight", None)
++    if w is None or tw is None:
++        return False
++    if w.shape != tw.shape:
++        return False
+     if w.is_cuda and torch.accelerator.get_memory_info(w.device)[0] < w.numel() * 2:
+-        return torch.equal(w.cpu(), target.weight.cpu())
+-    return torch.equal(w, target.weight)
++        return torch.equal(w.cpu(), tw.cpu())
++    return torch.equal(w, tw)
+ 
+ 
+ def get_target_lm_head(target_model: nn.Module, target_language_model: nn.Module):

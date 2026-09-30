@@ -1,0 +1,66 @@
+GLM-4.x-Flash (glm4_moe_lite): add EAGLE3 support. Glm4MoeLiteModel mixes in
+EagleModelMixin and returns the auxiliary hidden states, and
+Glm4MoeLiteForCausalLM declares SupportsEagle3.
+
+--- a/vllm/model_executor/models/glm4_moe_lite.py
++++ b/vllm/model_executor/models/glm4_moe_lite.py
+@@ -68,7 +68,7 @@
+ from vllm.platforms import current_platform
+ from vllm.sequence import IntermediateTensors
+ 
+-from .interfaces import SupportsLoRA, SupportsPP
++from .interfaces import EagleModelMixin, SupportsEagle3, SupportsLoRA, SupportsPP  # GLM-EAGLE3 PATCH
+ from .utils import (
+     AutoWeightsLoader,
+     PPMissingLayer,
+@@ -213,7 +213,7 @@
+         "inputs_embeds": 0,
+     }
+ )
+-class Glm4MoeLiteModel(nn.Module):
++class Glm4MoeLiteModel(nn.Module, EagleModelMixin):  # GLM-EAGLE3 PATCH
+     def __init__(self, *, vllm_config: VllmConfig, prefix: str = ""):
+         super().__init__()
+ 
+@@ -288,7 +288,16 @@
+             hidden_states = intermediate_tensors["hidden_states"]
+             residual = intermediate_tensors["residual"]
+ 
+-        for layer in islice(self.layers, self.start_layer, self.end_layer):
++        # GLM-EAGLE3 PATCH: capture auxiliary hidden states for EAGLE-3
++        # speculative decoding drafts (see EagleModelMixin).
++        aux_hidden_states: list[torch.Tensor] = []
++        for idx, layer in enumerate(
++            islice(self.layers, self.start_layer, self.end_layer),
++            start=self.start_layer,
++        ):
++            self._maybe_add_hidden_state(
++                aux_hidden_states, idx, hidden_states, residual
++            )
+             hidden_states, residual = layer(positions, hidden_states, residual)
+ 
+         if not get_pp_group().is_last_rank:
+@@ -296,7 +305,12 @@
+                 {"hidden_states": hidden_states, "residual": residual}
+             )
+ 
++        self._maybe_add_hidden_state(
++            aux_hidden_states, self.end_layer, hidden_states, residual
++        )
+         hidden_states, _ = self.norm(hidden_states, residual)
++        if aux_hidden_states:
++            return hidden_states, aux_hidden_states
+         return hidden_states
+ 
+     def make_empty_intermediate_tensors(
+@@ -520,8 +534,8 @@
+         return loaded_params
+ 
+ 
+-class Glm4MoeLiteForCausalLM(
+-    nn.Module, SupportsPP, SupportsLoRA, Glm4LiteMixtureOfExperts
++class Glm4MoeLiteForCausalLM(  # GLM-EAGLE3 PATCH
++    nn.Module, SupportsPP, SupportsLoRA, SupportsEagle3, Glm4LiteMixtureOfExperts
+ ):
+     packed_modules_mapping = {
+         "gate_up_proj": ["gate_proj", "up_proj"],
