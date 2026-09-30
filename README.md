@@ -285,6 +285,10 @@ DGX-kit itself sets, for the gateway: `LITELLM_MASTER_KEY`, `DATABASE_URL`, `NUM
 
 Back up the settings folder and the state folder to keep your models' settings and keys; for the gateway's own data (users, keys it issued, stored models) also back up the `dgxkit-gateway-pg` volume. Uninstalling never deletes models or caches.
 
+## API
+
+Everything in the dashboard is available over HTTP, for scripts. See [docs/API.md](docs/API.md); a live reference is at `/docs` on the dashboard.
+
 ## When something goes wrong
 
 - **A model crashed.** Open its **Logs** tab; the line that says why is usually near the end. Stop clears the crashed container, and Start tries again.
