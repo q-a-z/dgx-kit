@@ -9,7 +9,11 @@
 #   install.sh --updatepath FILE.tar.gz  update the installed DGX-kit from a package on this machine: unpacks it,
 #                         rebuilds the image, restarts the service. Settings, keys, recipes and password are kept,
 #                         and the previous image stays as :previous for a rollback. Add --user for a user install.
+#   install.sh --updaterepo URL  the same, fetching the latest from a git repository
 #   install.sh --update   the same from the package this script sits in (an already unpacked one)
+#   An update needs no sudo password unless the service file itself changes.
+#
+# The install also leaves a command in ~/.local/bin:   dgx-kit update [PACKAGE.tar.gz]   dgx-kit version
 #   install.sh --uninstall  stop and remove the service and the dashboard; asks before touching anything else.
 #                         Your models and the compiled-kernel caches are never deleted. Add --user for a user install.
 #
@@ -24,7 +28,9 @@ MODE=install
 SCOPE=system
 ACTION=install
 UPDATE_FILE=""
-usage() { echo "usage: $0 [--user] [--check|--dry-run] [--uninstall | --update | --updatepath FILE.tar.gz]" >&2; exit 2; }
+UPDATE_REPO=""
+DEFAULT_UPDATE_REPO=${DGXKIT_UPDATE_REPO:-https://github.com/AIPossum/dgx-kit.git}  # where "dgx-kit update" fetches from
+usage() { echo "usage: $0 [--user] [--check|--dry-run] [--uninstall | --update | --updatepath FILE.tar.gz | --updaterepo URL]" >&2; exit 2; }
 while (( $# )); do
   case $1 in
     --check) MODE=check ;;
@@ -34,6 +40,8 @@ while (( $# )); do
     --update) ACTION=update ;;
     --updatepath) ACTION=update; UPDATE_FILE=${2:-}; [[ -n $UPDATE_FILE ]] || usage; shift ;;
     --updatepath=*) ACTION=update; UPDATE_FILE=${1#*=} ;;
+    --updaterepo) ACTION=update; UPDATE_REPO=${2:-}; [[ -n $UPDATE_REPO ]] || usage; shift ;;
+    --updaterepo=*) ACTION=update; UPDATE_REPO=${1#*=} ;;
     *) usage ;;
   esac
   shift
@@ -71,6 +79,7 @@ bad()  { printf '  \033[31mstop\033[0m  %s\n' "$*"; }
 run()  { if [[ $MODE == install ]]; then "$@"; else printf '  would run: %s\n' "$*"; fi; }
 
 NEEDS=()
+pick_docker() { DOCKER=(docker); docker info >/dev/null 2>&1 || DOCKER=(sudo docker); }  # sudo only if you can't use Docker yourself
 
 check_box() {
   echo "Checking this machine ($SCOPE install)"
@@ -244,12 +253,10 @@ build_image() {
   echo "Building the DGX-kit image (a re-run rebuilds it, which is how an update reaches the service)"
   [[ -f $ROOT_DIR/Dockerfile ]] || { bad "no Dockerfile in $ROOT_DIR; run this script from a DGX-kit checkout"; exit 1; }
   run mkdir -p "$CACHE_DIR"
-  run "${SUDO[@]}" docker build -t "$IMAGE" "$ROOT_DIR"
+  run "${DOCKER[@]}" build -t "$IMAGE" "$ROOT_DIR"
 }
 
-install_service() {
-  echo
-  echo "Starting DGX-kit"
+render_unit() {
   # A user service runs the container as you, so the files it makes in your folders are yours.
   local as_user="" after=""
   if [[ $SCOPE == user ]]; then
@@ -257,8 +264,7 @@ install_service() {
   else
     after=$'After=docker.service\nRequires=docker.service'
   fi
-  local unit
-  unit=$(cat <<EOT
+  cat <<EOT
 [Unit]
 Description=DGX-kit dashboard and model manager
 $after
@@ -280,7 +286,13 @@ Restart=always
 [Install]
 WantedBy=$WANTED_BY
 EOT
-)
+}
+
+install_service() {
+  echo
+  echo "Starting DGX-kit"
+  local unit
+  unit=$(render_unit)
   if [[ $MODE == install ]]; then
     "${SUDO[@]}" mkdir -p "$UNIT_DIR"
     printf '%s\n' "$unit" | "${SUDO[@]}" tee "$UNIT_DIR/$SERVICE.service" >/dev/null
@@ -294,12 +306,99 @@ EOT
     echo "  would write $UNIT_DIR/$SERVICE.service and enable it:"
     printf '%s\n' "$unit" | sed 's/^/    | /'
   fi
+  install_helpers
   local host; host=$(hostname -I 2>/dev/null | awk '{print $1}')
   [[ $BIND == local ]] && host=127.0.0.1
   echo
   echo "DGX-kit: http://${host:-localhost}:$PORT"
   echo "Models, once started, are published at http://${host:-localhost}:$GATEWAY_PORT/v1"
   if [[ $MODE == install && $ACTION == install ]]; then echo "Gateway key (also in $CONF_DIR/config.env): $GATEWAY_KEY"; fi
+}
+
+restart_service() {
+  if [[ $MODE != install ]]; then echo "  would restart $SERVICE"; return; fi
+  if "${SUDO_N[@]}" true 2>/dev/null; then
+    "${SUDO[@]}" "${CTL[@]}" restart "$SERVICE"; return
+  fi
+  # No sudo without a password: stop the container and let the service (Restart=always) bring it back on the new image.
+  local before; before=$("${DOCKER[@]}" inspect "$SERVICE" --format '{{.State.StartedAt}}' 2>/dev/null || true)
+  "${DOCKER[@]}" stop "$SERVICE" >/dev/null 2>&1 || true
+  local i now
+  for i in $(seq 1 40); do
+    now=$("${DOCKER[@]}" inspect "$SERVICE" --format '{{.State.Status}} {{.State.StartedAt}}' 2>/dev/null || true)
+    [[ $now == running\ * && $now != "running $before" ]] && return 0
+    sleep 2
+  done
+  bad "the service didn't come back by itself; run: sudo systemctl restart $SERVICE"; exit 1
+}
+
+apply_update() {
+  local want have
+  want=$(render_unit); have=$(cat "$UNIT_DIR/$SERVICE.service" 2>/dev/null || true)
+  if [[ $want != "$have" ]]; then
+    echo "The service file changed in this version; rewriting it (this one needs administrator rights)"
+    if [[ $MODE == install ]]; then
+      [[ $SCOPE == system ]] && sudo -v
+      "${SUDO[@]}" mkdir -p "$UNIT_DIR"
+      printf '%s\n' "$want" | "${SUDO[@]}" tee "$UNIT_DIR/$SERVICE.service" >/dev/null
+      "${SUDO[@]}" "${CTL[@]}" daemon-reload
+      "${SUDO[@]}" "${CTL[@]}" enable "$SERVICE"
+    else
+      echo "  would rewrite $UNIT_DIR/$SERVICE.service:"; printf '%s\n' "$want" | sed 's/^/    | /'
+    fi
+  else
+    ok "service file unchanged"
+  fi
+  restart_service
+}
+
+report_version() {
+  [[ $MODE == install ]] || return 0
+  local v="" i
+  for i in $(seq 1 20); do
+    v=$("${DOCKER[@]}" exec "$SERVICE" python -c 'from dgxkit.app import app_version; print(app_version())' 2>/dev/null) && break
+    sleep 2
+  done
+  echo
+  echo "Updated${v:+ to version $v}. To roll back: ${DOCKER[*]} tag ${IMAGE%%:*}:previous $IMAGE && ${DOCKER[*]} stop $SERVICE"
+}
+
+install_helpers() {  # the command and the installer copy it runs: both in your home folder, so no sudo
+  local bin=$HOME/.local/bin/$SERVICE share=$HOME/.local/share/$SERVICE-installer scopeflag=""
+  [[ $SCOPE == user ]] && scopeflag="--user"
+  if [[ $MODE != install ]]; then echo "  would install the '$SERVICE' command in $bin"; return; fi
+  mkdir -p "$(dirname "$bin")" "$share"
+  cp "$ROOT_DIR/installer/install.sh" "$share/install.sh"
+  cat > "$bin" <<'TEMPLATE'
+#!/usr/bin/env bash
+# @SERVICE@: update or check the DGX-kit install on this machine. Written by installer/install.sh.
+set -euo pipefail
+SERVICE=@SERVICE@
+IMAGE=@IMAGE@
+REPO=${DGXKIT_UPDATE_REPO:-@REPO@}
+INSTALLER="$HOME/.local/share/@SERVICE@-installer/install.sh"
+run_installer() { DGXKIT_INSTALL_SERVICE=$SERVICE DGXKIT_IMAGE=$IMAGE exec bash "$INSTALLER" @SCOPEFLAG@ "$@"; }
+usage() {
+  cat <<'U'
+usage: @SERVICE@ update [PACKAGE.tar.gz] [--dry-run]   update to the latest from git, or from a package file
+       @SERVICE@ version                               the version that is running
+U
+}
+case "${1:-help}" in
+  update)
+    shift
+    if [[ ${1:-} == *.tar.gz ]]; then f=$1; shift; run_installer --updatepath "$f" "$@"
+    else run_installer --updaterepo "$REPO" "$@"; fi ;;
+  version) docker exec "$SERVICE" python -c 'from dgxkit.app import app_version; print(app_version())' 2>/dev/null \
+             || sudo docker exec "$SERVICE" python -c 'from dgxkit.app import app_version; print(app_version())' ;;
+  help|-h|--help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac
+TEMPLATE
+  sed -i.bak "s|@SERVICE@|$SERVICE|g; s|@IMAGE@|$IMAGE|g; s|@REPO@|$DEFAULT_UPDATE_REPO|g; s|@SCOPEFLAG@|$scopeflag|g" "$bin" && rm -f "$bin.bak"
+  chmod +x "$bin"
+  echo "  command installed: $SERVICE update   (and: $SERVICE version)"
+  case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) echo "  note: add $HOME/.local/bin to your PATH to run '$SERVICE' by name" ;; esac
 }
 
 add_config_key() {  # a setting newer versions need, appended to the config of an older install if it isn't there
@@ -312,53 +411,60 @@ add_config_key() {  # a setting newer versions need, appended to the config of a
 update_from_here() {
   echo "Updating the $SCOPE install called $SERVICE from $ROOT_DIR"
   [[ -f $ROOT_DIR/Dockerfile ]] || { bad "no Dockerfile in $ROOT_DIR; this isn't a DGX-kit package"; exit 1; }
-  if [[ $MODE == install && $SCOPE == system ]]; then echo "This needs administrator rights."; sudo -v; fi
-  PORT=$(prev DGXKIT_PORT); GATEWAY_PORT=$(prev DGXKIT_GATEWAY_PORT); GATEWAY_KEY=$(prev LITELLM_MASTER_KEY)
-  [[ $(prev DGXKIT_BIND) == 127.0.0.1 ]] && BIND=local || BIND=lan
-  if [[ -z $PORT ]]; then
-    bad "no install called $SERVICE found (its settings in $CONF_DIR/config.env are missing or unreadable). Nothing changed."
+  if [[ ! -f $UNIT_DIR/$SERVICE.service ]]; then
+    bad "no install called $SERVICE found ($UNIT_DIR/$SERVICE.service is missing). Nothing changed."
     echo "       To install for the first time, run this script without --update."; exit 1
   fi
-  add_config_key DGXKIT_HOME "$HOME"
-  add_config_key DGXKIT_CACHE_DIR "$CACHE_DIR"
+  # Settings newer versions need are added only when they can be written without asking for a password.
+  if "${SUDO_N[@]}" test -r "$CONF_DIR/config.env" 2>/dev/null; then
+    add_config_key DGXKIT_HOME "$HOME"
+    add_config_key DGXKIT_CACHE_DIR "$CACHE_DIR"
+  fi
   echo
   echo "Keeping the current image as ${IMAGE%%:*}:previous"
   run "${DOCKER[@]}" tag "$IMAGE" "${IMAGE%%:*}:previous" 2>/dev/null || echo "  (no earlier image to keep)"
   build_image
-  install_service
-  echo
-  echo "Updated. To roll back: ${DOCKER[*]} tag ${IMAGE%%:*}:previous $IMAGE && ${SUDO[*]} ${CTL[*]} restart $SERVICE"
+  apply_update
+  install_helpers
+  report_version
 }
 
 update() {
-  DOCKER=(docker)
-  docker info >/dev/null 2>&1 || DOCKER=(sudo docker)
-  if [[ -z $UPDATE_FILE ]]; then update_from_here; return; fi
-  # A package on this machine: check it, unpack it to a scratch folder, and run the update with the packaged installer,
-  # so an update always uses the newest install logic.
-  [[ -f $UPDATE_FILE ]] || { bad "no such file: $UPDATE_FILE"; exit 1; }
-  if [[ -f $UPDATE_FILE.sha256 ]]; then
-    local want got; want=$(awk '{print $1}' "$UPDATE_FILE.sha256")
-    got=$( (sha256sum "$UPDATE_FILE" 2>/dev/null || shasum -a 256 "$UPDATE_FILE") | awk '{print $1}')
-    [[ $want == "$got" ]] || { bad "the checksum doesn't match $UPDATE_FILE.sha256; not using this file"; exit 1; }
-    ok "checksum matches"
-  fi
-  local names; names=$(tar tzf "$UPDATE_FILE" 2>/dev/null) || { bad "$UPDATE_FILE isn't a .tar.gz"; exit 1; }
-  if grep -qE '(^|/)\.\.(/|$)|^/' <<<"$names"; then bad "the package has paths outside its own folder; not unpacking it"; exit 1; fi
-  # The package's folder is the one holding installer/install.sh; not simply the first entry, which on a package
-  # made with macOS tar is a ._ metadata file.
-  names=$(sed 's#^\./##; s#/$##' <<<"$names")
-  local top; top=$(grep -E '^[^/]+/installer/install\.sh$' <<<"$names" | head -1 | cut -d/ -f1)
-  if [[ -z $top ]] || ! grep -qx "$top/Dockerfile" <<<"$names"; then
-    bad "$UPDATE_FILE doesn't look like a DGX-kit package (no installer/install.sh and Dockerfile in one top folder)"; exit 1
-  fi
-  UNPACKED=$(mktemp -d "${TMPDIR:-/tmp}/dgxkit-update.XXXXXX")  # global, so the exit trap can still see it
-  trap 'rm -rf "$UNPACKED"' EXIT
-  tar xzf "$UPDATE_FILE" -C "$UNPACKED"
-  ok "unpacked $top"
-  local flags=(--update)
+  local flags=(--update) top
   [[ $SCOPE == user ]] && flags+=(--user)
   [[ $MODE == dry ]] && flags+=(--dry-run)
+  UNPACKED=$(mktemp -d "${TMPDIR:-/tmp}/dgxkit-update.XXXXXX")  # global, so the exit trap can still see it
+  trap 'rm -rf "$UNPACKED"' EXIT
+  if [[ -n $UPDATE_REPO ]]; then
+    command -v git >/dev/null || { bad "git isn't installed here"; exit 1; }
+    echo "Fetching the latest from $UPDATE_REPO"
+    if ! git clone -q --depth 1 "$UPDATE_REPO" "$UNPACKED/src" 2>"$UNPACKED/git.err"; then
+      bad "couldn't fetch $UPDATE_REPO"; sed 's/^/       /' "$UNPACKED/git.err" | head -4
+      echo "       Is it reachable from this machine, and does this machine have access to it (a deploy key or a token)?"
+      echo "       Or update from a package file:  $SERVICE update PACKAGE.tar.gz"; exit 1
+    fi
+    top=src
+    [[ -f $UNPACKED/src/installer/install.sh && -f $UNPACKED/src/Dockerfile ]] || { bad "$UPDATE_REPO doesn't look like a DGX-kit repository"; exit 1; }
+    ok "fetched $(git -C "$UNPACKED/src" log -1 --format='%h %s' | cut -c1-70)"
+  else
+    [[ -f $UPDATE_FILE ]] || { bad "no such file: $UPDATE_FILE"; exit 1; }
+    if [[ -f $UPDATE_FILE.sha256 ]]; then
+      local want got; want=$(awk '{print $1}' "$UPDATE_FILE.sha256")
+      got=$( (sha256sum "$UPDATE_FILE" 2>/dev/null || shasum -a 256 "$UPDATE_FILE") | awk '{print $1}')
+      [[ $want == "$got" ]] || { bad "the checksum doesn't match $UPDATE_FILE.sha256; not using this file"; exit 1; }
+      ok "checksum matches"
+    fi
+    local names; names=$(tar tzf "$UPDATE_FILE" 2>/dev/null) || { bad "$UPDATE_FILE isn't a .tar.gz"; exit 1; }
+    if grep -qE '(^|/)\.\.(/|$)|^/' <<<"$names"; then bad "the package has paths outside its own folder; not unpacking it"; exit 1; fi
+    names=$(sed 's#^\./##; s#/$##' <<<"$names")
+    top=$(grep -E '^[^/]+/installer/install\.sh$' <<<"$names" | head -1 | cut -d/ -f1)
+    if [[ -z $top ]] || ! grep -qx "$top/Dockerfile" <<<"$names"; then
+      bad "$UPDATE_FILE doesn't look like a DGX-kit package (no installer/install.sh and Dockerfile in one top folder)"; exit 1
+    fi
+    tar xzf "$UPDATE_FILE" -C "$UNPACKED"
+    ok "unpacked $top"
+  fi
+  # The update runs from the new installer, so the newest install logic is always the one that applies it.
   bash "$UNPACKED/$top/installer/install.sh" "${flags[@]}"
 }
 
@@ -407,7 +513,8 @@ if [[ $ACTION == uninstall ]]; then
 fi
 if [[ $ACTION == update ]]; then
   [[ $MODE == check ]] && MODE=dry
-  if [[ -z $UPDATE_FILE ]]; then DOCKER=(docker); docker info >/dev/null 2>&1 || DOCKER=(sudo docker); update_from_here; else update; fi
+  pick_docker
+  if [[ -n $UPDATE_FILE || -n $UPDATE_REPO ]]; then update; else update_from_here; fi
   exit 0
 fi
 
@@ -420,5 +527,6 @@ fi
 ask_questions
 install_missing
 write_config
+pick_docker
 build_image
 install_service
