@@ -23,6 +23,7 @@ Newest first. Every commit adds its entry here.
 ### Changed
 - A re-run of the installer offers your earlier answers, keeps the admin password on Enter, and restarts the service on the new code.
 - README rewritten for people, with screenshots.
+- `.gitignore` now also keeps secrets (`.env` files, keys, certificates, a password file), logs and patch leftovers out of the repository, and ignores `state/` and `models/` only at the top of the tree, so a code folder with one of those names is never hidden. The image build skips the docs.
 
 ### Fixed
 - Stopping a model from the dashboard (or a clean stop from a shell) shows **Stopped**, not **Crashed**.

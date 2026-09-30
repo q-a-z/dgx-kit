@@ -11,3 +11,7 @@ __pycache__
 *.egg-info
 tests
 .pytest_cache
+docs
+.DS_Store
+*.tar.gz
+*.sha256

@@ -1,12 +1,35 @@
+# Python
 __pycache__/
 *.pyc
-.pytest_cache/
 *.egg-info/
-node_modules/
-dist/
-state/
-models/
-web/node_modules/
-web/dist/
+.pytest_cache/
 .venv/
+
+# Web
+node_modules/
+web/dist/
+
+# Data from a development run (./state and ./models at the top only)
+/state/
+/models/
+
+# Release packages built by tools/make-dist.sh
+/dist/
+
+# Secrets and local settings: never commit these
+.env
+.env.*
+*.key
+*.pem
+admin-password.txt
+
+# Logs, backups and patch leftovers
+*.log
+*.bak
+*.orig
+*.rej
+
+# Editors and the OS
 .DS_Store
+.idea/
+.vscode/
