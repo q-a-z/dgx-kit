@@ -7,6 +7,16 @@ address through a built-in LiteLLM; and can benchmark a model on request.
 You install one thing, the dashboard. It sets up everything else itself: LiteLLM, its database, the
 engine images and the kernel caches.
 
+## What it does
+
+- **Watch the machine:** GPU temperature, power and load, CPU, memory, storage and network, with the models laid out in unified memory.
+- **Run models:** start and stop them with sizing from the memory that is free, edit their engine options as one block of text, and see speed and cache numbers live.
+- **One gateway:** every running model is published on one OpenAI-compatible address through a built-in LiteLLM, and you can publish or unpublish each one.
+- **Bring your setup over:** import llmctl `.conf` files, including models whose weights are already on disk.
+- **Measure:** a ten-second speed check after each start, and a full benchmark when you ask for it.
+- **Build GB10 engine images:** vLLM with the GB10 patches and FlashInfer 0.7.0, from the Settings page.
+- **Install, update, roll back and remove** with one script, with or without sudo.
+
 ## Screenshots
 
 ![The dashboard: GPU temperature, power and load, free memory, the LiteLLM gateway and the memory map](docs/screenshots/dashboard.png)
@@ -70,7 +80,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 
 4. Open `http://<the Spark's address>:3000` and sign in.
 
-Running the installer again is safe. It updates an existing install: unpack a newer package and run it.
+Running the installer again is safe: it offers your earlier answers as defaults, keeps your admin password if you press
+Enter, and restarts the service on the new code. For updating, the next section is shorter.
 
 ### Updating
 
@@ -116,11 +127,29 @@ DGXKIT_INSTALL_ADMIN_PASSWORD='choose-one' DGXKIT_INSTALL_PORT=3000 bash install
 `DGXKIT_INSTALL_READONLY=yes` installs a watch-only dashboard that will not start, stop or pull anything.
 `--dry-run` shows every command and the service file it would write.
 
+### All installer options
+
+```
+bash installer/install.sh [--user] [--check | --dry-run] [--uninstall | --update | --updatepath FILE.tar.gz]
+```
+
+| Option | What it does |
+|---|---|
+| *(none)* | Check the machine, ask a few questions, install and start DGX-kit. Needs sudo. |
+| `--user` | The same without sudo: a user service, files under your home. Combines with every other option. |
+| `--check` | Read-only report of what is present and what would be installed. Changes nothing. |
+| `--dry-run` | Print every command and the service file instead of running them. |
+| `--updatepath FILE.tar.gz` | Update an existing install from a package on this machine. Keeps settings, keys, recipes and password; asks nothing. |
+| `--update` | The same from a package you have already unpacked. |
+| `--uninstall` | Remove the service and the dashboard; asks before touching anything else. |
+
+Every question can be answered ahead of time with `DGXKIT_INSTALL_<NAME>` (see *Unattended install* and *Uninstall*).
+
 ## First steps in the dashboard
 
 1. **Settings → Gateway.** LiteLLM starts by itself. If it isn't running, press **Set up LiteLLM**; it makes a key, pulls what it needs and starts LiteLLM with its database. The gateway key is printed at the end of the install and is kept in `/etc/dgx-kit/config.env` (`sudo grep LITELLM_MASTER_KEY /etc/dgx-kit/config.env`).
 2. **Settings → Hugging Face.** Paste a token if you need gated models. It is checked when you save.
-3. **Add a model.** Either add one from Hugging Face on the Models page, or, if you used llmctl, **Settings → Import from llmctl** turns your `.conf` files into models with the same folders, image and options. Nothing starts during an import.
+3. **Add a model.** Either add one from Hugging Face on the Models page, or, if you used llmctl, **Settings → Import** turns your `.conf` files into models with the same folders, image and options. Nothing starts during an import. `$HOME` and `~` in a conf mean your home, and weights named for another machine's folders are found here by folder name. If a conf names an image this machine doesn't have, the import uses the GB10 build of the same vLLM release; build it first under **Settings → Engine images**.
 4. **Start it.** Press Start. The model shows *Starting* while it loads (large models take minutes the first time, while engines compile kernels), then *Serving*. When it first answers, DGX-kit takes a ten-second speed check (decode and prefill) and shows it on the model.
 5. **Use it.** Every running model that is marked to publish appears on the gateway address under its own name:
 
@@ -134,11 +163,31 @@ DGXKIT_INSTALL_ADMIN_PASSWORD='choose-one' DGXKIT_INSTALL_PORT=3000 bash install
 
 ## Everyday use
 
-- **Settings of a model.** Its **Settings** tab is one text box of engine options, the same lines an llmctl `.conf` holds (`--max-model-len 393216`, `--moe-backend marlin`, and so on). Remove a line to clear it. If you don't fix the context or KV cache, DGX-kit sizes them from the memory that is free.
-- **Stop and Restart** always ask first.
-- **Benchmark.** A model's **Benchmark** tab runs the full battery or a quick run, only when you press the button. It refuses to run while other models are busy, because that would spoil the numbers.
+**Each model has a panel** with four tabs: **Live** (speed, queue, KV cache, draft acceptance), **Settings**, **Logs** and **Benchmark**.
+
+- **Publish / Unpublish.** The button in a model's panel lists it on the gateway or takes it off, right away, without restarting the model. Unpublish asks first, because clients lose access. The panel says whether the model is *published*. A stopped model publishes as soon as it runs.
+- **Settings of a model.** One text box of engine options, the same lines an llmctl `.conf` holds (`--max-model-len 393216`, `--moe-backend marlin`, and so on). Remove a line to clear it. If you don't fix the context or KV cache, DGX-kit sizes them from the memory that is free.
+- **Start, Stop and Restart.** Stop and Restart always ask first. A model you stopped shows **Stopped**; one that died shows **Crashed** with its exit code.
+- **Speed check.** When a model you started first answers, DGX-kit takes a ten-second check (two short decodes, two prefills) and shows it on the model. It is skipped when other models are busy.
+- **Benchmark.** The **Benchmark** tab runs the full battery or a quick run, only when you press the button. It refuses to run while other models are busy, because that would spoil the numbers.
 - **Removing a model** (the three-dot menu) removes it from DGX-kit only. Its files stay on disk.
 - **Deleting files from disk** is only possible in **Settings → Delete from disk**, after four confirmations, the last one typing the folder's name. A model that is running can't be deleted, and nothing outside your model folders can be.
+- **Version.** The running version is shown next to the logo, and on the sign-in page.
+
+## Settings
+
+Settings has one tab per topic, and the tab is in the address (`#/settings/images`), so a link opens the same one.
+
+| Tab | What it is for |
+|---|---|
+| Gateway | The LiteLLM address and key, the **Set up LiteLLM** button, and what the gateway serves. |
+| Hugging Face | A token for gated or private models. Checked when you save. |
+| Engine images | The Docker images models run in; pull, change a tag, or build the GB10 vLLM images (patches, FlashInfer 0.7.0). |
+| Model folders | Where DGX-kit looks for models. |
+| Import | Turn llmctl `.conf` files into models. |
+| Delete from disk | The only place model files can be deleted (four confirmations). |
+| Activity | What DGX-kit has done on this machine. |
+| Password | Change the admin password (shown when a password is set). |
 
 ## Where things live
 
@@ -147,6 +196,8 @@ DGXKIT_INSTALL_ADMIN_PASSWORD='choose-one' DGXKIT_INSTALL_PORT=3000 bash install
 | Settings the installer wrote, including the gateway key | `/etc/dgx-kit/config.env` (`~/.config/dgx-kit/config.env` with `--user`) |
 | Recipes and their version history, admin password hash, LiteLLM's database password, Hugging Face token (if set in Settings) | `/var/lib/dgx-kit` (`~/.local/share/dgx-kit` with `--user`) |
 | LiteLLM's database | Docker volume `dgxkit-gateway-pg` |
+| Benchmark runs and their results | `bench/` inside the state folder |
+| The previous dashboard image, kept by an update | Docker image `dgx-kit:previous` |
 | Downloaded models | the folder you chose (default `~/models`) |
 | Compiled GPU kernels, shared by all models | `~/.cache/flashinfer` and `~/.cache/vllm-jit` |
 | The service | `systemctl status dgx-kit` (`systemctl --user status dgx-kit` with `--user`) |
@@ -157,10 +208,14 @@ Back up the settings folder and the state folder to keep your models' settings a
 ## When something goes wrong
 
 - **A model crashed.** Open its **Logs** tab; the line that says why is usually near the end. Stop clears the crashed container, and Start tries again.
+- **A model you stopped shows Crashed.** DGX-kit calls a stop clean when it made the stop itself, when the engine logged "Application shutdown complete", or when the exit code is 0 or 143. A stop that Docker has to force-kill (exit 137) from outside the dashboard can still look like a crash.
+- **"Weights not found".** A model imported with a folder path has no files there. Put them at that path, or add the folder that has them under **Settings → Model folders** and import again.
+- **The gateway says "Key rejected".** The key saved in DGX-kit isn't the one LiteLLM runs with. Under **Settings → Gateway**, save the right key, or press **Re-run LiteLLM setup**.
 - **Killed while compiling kernels** (`cicc` or `ninja` in the log, exit code 137). The container ran out of memory. DGX-kit already limits the compile to two jobs and keeps the kernels in `~/.cache`; if it still happens, raise the model's memory limit or start it when less is running.
 - **"Free memory … is less than desired".** Another model holds memory. Stop something, or start the models one at a time.
 - **The dashboard says a model isn't answering.** *Starting* is normal while it loads. *Not answering* means it answered before and stopped: check its Logs.
-- **Port already in use.** Run the installer again and pick another port.
+- **Port already in use.** Run the installer again and pick another port. It shows what is listening on the one you asked for, and a re-run accepts the port its own running service already holds.
+- **An update went wrong.** Roll back with `docker tag dgx-kit:previous dgx-kit:latest` and restart the service; the update prints the exact command.
 - **Can't sign in.** Run `bash installer/install.sh` again and set a new password.
 
 ## Uninstall
