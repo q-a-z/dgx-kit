@@ -87,20 +87,30 @@ Enter, and restarts the service on the new code. For updating, the next section 
 
 ### Updating
 
-To update from a newer package, keep the `.tar.gz` (and its `.sha256` beside it, if you have one) and run:
+The install leaves a `dgx-kit` command. Updating is one line:
 
 ```
-bash installer/install.sh --updatepath /path/to/dgx-kit-0.1.1.tar.gz          # add --user for a user install
+dgx-kit update                      # fetch the latest from git and update
+dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
+dgx-kit update dgx-kit-0.1.1.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit version                     # what is running
 ```
 
-It checks the checksum, unpacks the package to a scratch folder, and updates from the packaged installer, so the newest
-install logic always runs. Your settings, keys, recipes and admin password are kept, and it asks nothing. It rebuilds the
-image, refreshes the service file and restarts the service; model containers keep running. The image it replaces is kept
-as `dgx-kit:previous`; to go back, run `docker tag dgx-kit:previous dgx-kit:latest` and restart the service
-(the command is printed at the end). `--dry-run` shows what it would do.
+An update needs no sudo password: it rebuilds the dashboard image, restarts the service, and keeps your settings, keys,
+recipes and admin password. Model containers keep running. The image it replaces stays as `dgx-kit:previous`, and the
+update prints the one command that goes back. `--dry-run` shows what it would do. It asks for sudo only if the service
+file itself changed in that version.
 
-`bash installer/install.sh --update` does the same from a package you have already unpacked.
-The first time, run the new package's installer (unpack it and use `--update`), since an older installer doesn't know these options.
+- **The first time**, the command doesn't exist yet: unpack the new package (or use a clone) and run
+  `bash installer/install.sh --update` once. That installs `dgx-kit` into `~/.local/bin` (add it to your `PATH` if the
+  shell says *command not found*).
+- **From git** needs this machine to be able to read the repository. For a private one, add a read-only deploy key and
+  let `git` use it (an `~/.ssh/config` entry for the host). `DGXKIT_UPDATE_REPO=<url>` points the command at another repository.
+- **From a file or a folder** needs no network. A checksum file `<name>.sha256` beside an archive is checked if it is there.
+- **Add `--user`** to every installer command if you installed with `--user`; the `dgx-kit` command remembers that itself.
+
+The same options exist on the installer itself: `--updatepath PATH` (archive or folder), `--updaterepo URL`, and `--update`
+for the package you are standing in.
 
 ### Without sudo
 
@@ -132,7 +142,7 @@ DGXKIT_INSTALL_ADMIN_PASSWORD='choose-one' DGXKIT_INSTALL_PORT=3000 bash install
 ### All installer options
 
 ```
-bash installer/install.sh [--user] [--check | --dry-run] [--uninstall | --update | --updatepath FILE.tar.gz]
+bash installer/install.sh [--user] [--check | --dry-run] [--uninstall | --update | --updatepath PATH | --updaterepo URL]
 ```
 
 | Option | What it does |
@@ -141,8 +151,9 @@ bash installer/install.sh [--user] [--check | --dry-run] [--uninstall | --update
 | `--user` | The same without sudo: a user service, files under your home. Combines with every other option. |
 | `--check` | Read-only report of what is present and what would be installed. Changes nothing. |
 | `--dry-run` | Print every command and the service file instead of running them. |
-| `--updatepath FILE.tar.gz` | Update an existing install from a package on this machine. Keeps settings, keys, recipes and password; asks nothing. |
-| `--update` | The same from a package you have already unpacked. |
+| `--updatepath PATH` | Update an existing install from a package on this machine: a `.tar.gz`, `.tgz` or `.zip`, or a folder (a git clone or an unpacked package). Keeps settings, keys, recipes and password; asks nothing. |
+| `--updaterepo URL` | The same, fetching the latest from a git repository. |
+| `--update` | The same from the package or clone you are standing in. |
 | `--uninstall` | Remove the service and the dashboard; asks before touching anything else. |
 
 Every question can be answered ahead of time with `DGXKIT_INSTALL_<NAME>` (see *Unattended install* and *Uninstall*).
@@ -200,6 +211,7 @@ Settings has one tab per topic, and the tab is in the address (`#/settings/image
 | LiteLLM's database | Docker volume `dgxkit-gateway-pg` |
 | Benchmark runs and their results | `bench/` inside the state folder |
 | The previous dashboard image, kept by an update | Docker image `dgx-kit:previous` |
+| The `dgx-kit` command and the installer copy it runs | `~/.local/bin/dgx-kit`, `~/.local/share/dgx-kit-installer` |
 | Downloaded models | the folder you chose (default `~/models`) |
 | Compiled GPU kernels, shared by all models | `~/.cache/flashinfer` and `~/.cache/vllm-jit` |
 | The service | `systemctl status dgx-kit` (`systemctl --user status dgx-kit` with `--user`) |
@@ -217,7 +229,8 @@ Back up the settings folder and the state folder to keep your models' settings a
 - **"Free memory … is less than desired".** Another model holds memory. Stop something, or start the models one at a time.
 - **The dashboard says a model isn't answering.** *Starting* is normal while it loads. *Not answering* means it answered before and stopped: check its Logs.
 - **Port already in use.** Run the installer again and pick another port. It shows what is listening on the one you asked for, and a re-run accepts the port its own running service already holds.
-- **An update went wrong.** Roll back with `docker tag dgx-kit:previous dgx-kit:latest` and restart the service; the update prints the exact command.
+- **An update went wrong.** Roll back with `docker tag dgx-kit:previous dgx-kit:latest` and `docker stop dgx-kit` (the service brings it back on the old image); the update prints the exact command.
+- **`dgx-kit: command not found`.** Add `~/.local/bin` to your `PATH`, or run `bash installer/install.sh --update` from a package or clone to install the command.
 - **Can't sign in.** Run `bash installer/install.sh` again and set a new password.
 
 ## Uninstall

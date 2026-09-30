@@ -6,14 +6,15 @@
 #                         and the NVIDIA container toolkit already set up, and you in the docker group.
 #   install.sh --check    read-only: report what's present and what would be installed, change nothing
 #   install.sh --dry-run  ask the questions and print every command instead of running it
-#   install.sh --updatepath FILE.tar.gz  update the installed DGX-kit from a package on this machine: unpacks it,
+#   install.sh --updatepath PATH  update the installed DGX-kit from a package on this machine. PATH is a .tar.gz, .tgz or .zip
+#                         archive, or a folder (a git clone or an unpacked package). An archive is unpacked,
 #                         rebuilds the image, restarts the service. Settings, keys, recipes and password are kept,
 #                         and the previous image stays as :previous for a rollback. Add --user for a user install.
 #   install.sh --updaterepo URL  the same, fetching the latest from a git repository
 #   install.sh --update   the same from the package this script sits in (an already unpacked one)
 #   An update needs no sudo password unless the service file itself changes.
 #
-# The install also leaves a command in ~/.local/bin:   dgx-kit update [PACKAGE.tar.gz]   dgx-kit version
+# The install also leaves a command in ~/.local/bin:   dgx-kit update [PATH]   dgx-kit version
 #   install.sh --uninstall  stop and remove the service and the dashboard; asks before touching anything else.
 #                         Your models and the compiled-kernel caches are never deleted. Add --user for a user install.
 #
@@ -30,7 +31,7 @@ ACTION=install
 UPDATE_FILE=""
 UPDATE_REPO=""
 DEFAULT_UPDATE_REPO=${DGXKIT_UPDATE_REPO:-https://github.com/AIPossum/dgx-kit.git}  # where "dgx-kit update" fetches from
-usage() { echo "usage: $0 [--user] [--check|--dry-run] [--uninstall | --update | --updatepath FILE.tar.gz | --updaterepo URL]" >&2; exit 2; }
+usage() { echo "usage: $0 [--user] [--check|--dry-run] [--uninstall | --update | --updatepath PATH | --updaterepo URL]" >&2; exit 2; }
 while (( $# )); do
   case $1 in
     --check) MODE=check ;;
@@ -335,7 +336,11 @@ restart_service() {
 apply_update() {
   local want have
   want=$(render_unit); have=$(cat "$UNIT_DIR/$SERVICE.service" 2>/dev/null || true)
-  if [[ $want != "$have" ]]; then
+  if [[ $want != "$have" && $MODE == install && $SCOPE == system && ! -t 0 ]] && ! sudo -n true 2>/dev/null; then
+    # Nobody to ask for a password: update the image and restart, and say what is left.
+    echo "  note: this version's service file differs from the installed one. Run the installer once with sudo to refresh it:"
+    echo "        bash installer/install.sh --update        (nothing else is affected; the new image is running)"
+  elif [[ $want != "$have" ]]; then
     echo "The service file changed in this version; rewriting it (this one needs administrator rights)"
     if [[ $MODE == install ]]; then
       [[ $SCOPE == system ]] && sudo -v
@@ -380,14 +385,15 @@ INSTALLER="$HOME/.local/share/@SERVICE@-installer/install.sh"
 run_installer() { DGXKIT_INSTALL_SERVICE=$SERVICE DGXKIT_IMAGE=$IMAGE exec bash "$INSTALLER" @SCOPEFLAG@ "$@"; }
 usage() {
   cat <<'U'
-usage: @SERVICE@ update [PACKAGE.tar.gz] [--dry-run]   update to the latest from git, or from a package file
+usage: @SERVICE@ update [PATH] [--dry-run]   update to the latest from git, or from PATH:
+                                               a .tar.gz, .tgz or .zip, or a folder (a git clone, or an unpacked package)
        @SERVICE@ version                               the version that is running
 U
 }
 case "${1:-help}" in
   update)
     shift
-    if [[ ${1:-} == *.tar.gz ]]; then f=$1; shift; run_installer --updatepath "$f" "$@"
+    if [[ -n ${1:-} && ( -d $1 || $1 == *.tar.gz || $1 == *.tgz || $1 == *.zip ) ]]; then f=$1; shift; run_installer --updatepath "$f" "$@"
     else run_installer --updaterepo "$REPO" "$@"; fi ;;
   version) docker exec "$SERVICE" python -c 'from dgxkit.app import app_version; print(app_version())' 2>/dev/null \
              || sudo docker exec "$SERVICE" python -c 'from dgxkit.app import app_version; print(app_version())' ;;
@@ -429,6 +435,14 @@ update_from_here() {
   report_version
 }
 
+archive_names() {  # the paths inside a .tar.gz, .tgz or .zip
+  if [[ $1 == *.zip ]]; then python3 -c 'import sys, zipfile; print("\n".join(zipfile.ZipFile(sys.argv[1]).namelist()))' "$1"
+  else tar tzf "$1"; fi
+}
+archive_extract() {  # archive, folder
+  if [[ $1 == *.zip ]]; then python3 -m zipfile -e "$1" "$2"; else tar xzf "$1" -C "$2"; fi
+}
+
 update() {
   local flags=(--update) top
   [[ $SCOPE == user ]] && flags+=(--user)
@@ -441,27 +455,40 @@ update() {
     if ! git clone -q --depth 1 "$UPDATE_REPO" "$UNPACKED/src" 2>"$UNPACKED/git.err"; then
       bad "couldn't fetch $UPDATE_REPO"; sed 's/^/       /' "$UNPACKED/git.err" | head -4
       echo "       Is it reachable from this machine, and does this machine have access to it (a deploy key or a token)?"
-      echo "       Or update from a package file:  $SERVICE update PACKAGE.tar.gz"; exit 1
+      echo "       Or update from a package, a zip, or a clone you already have:  $SERVICE update PATH"; exit 1
     fi
     top=src
     [[ -f $UNPACKED/src/installer/install.sh && -f $UNPACKED/src/Dockerfile ]] || { bad "$UPDATE_REPO doesn't look like a DGX-kit repository"; exit 1; }
     ok "fetched $(git -C "$UNPACKED/src" log -1 --format='%h %s' | cut -c1-70)"
+  elif [[ -d $UPDATE_FILE ]]; then  # a git clone or an unpacked package: used where it is
+    local dir; dir=$(cd "$UPDATE_FILE" && pwd)
+    if [[ ! -f $dir/installer/install.sh || ! -f $dir/Dockerfile ]]; then
+      bad "$UPDATE_FILE isn't a DGX-kit folder (installer/install.sh and Dockerfile not found in it)"; exit 1
+    fi
+    if git -C "$dir" rev-parse --git-dir >/dev/null 2>&1; then
+      ok "using the git clone at $dir ($(git -C "$dir" log -1 --format='%h %s' | cut -c1-60))"
+      [[ -z $(git -C "$dir" status --porcelain 2>/dev/null) ]] || echo "  note: it has uncommitted changes, and they are included in the update"
+    else
+      ok "using the folder $dir"
+    fi
+    bash "$dir/installer/install.sh" "${flags[@]}"
+    return
   else
-    [[ -f $UPDATE_FILE ]] || { bad "no such file: $UPDATE_FILE"; exit 1; }
+    [[ -f $UPDATE_FILE ]] || { bad "no such file or folder: $UPDATE_FILE"; exit 1; }
     if [[ -f $UPDATE_FILE.sha256 ]]; then
       local want got; want=$(awk '{print $1}' "$UPDATE_FILE.sha256")
       got=$( (sha256sum "$UPDATE_FILE" 2>/dev/null || shasum -a 256 "$UPDATE_FILE") | awk '{print $1}')
       [[ $want == "$got" ]] || { bad "the checksum doesn't match $UPDATE_FILE.sha256; not using this file"; exit 1; }
       ok "checksum matches"
     fi
-    local names; names=$(tar tzf "$UPDATE_FILE" 2>/dev/null) || { bad "$UPDATE_FILE isn't a .tar.gz"; exit 1; }
+    local names; names=$(archive_names "$UPDATE_FILE" 2>/dev/null) || { bad "$UPDATE_FILE isn't a .tar.gz, .tgz or .zip archive"; exit 1; }
     if grep -qE '(^|/)\.\.(/|$)|^/' <<<"$names"; then bad "the package has paths outside its own folder; not unpacking it"; exit 1; fi
     names=$(sed 's#^\./##; s#/$##' <<<"$names")
     top=$(grep -E '^[^/]+/installer/install\.sh$' <<<"$names" | head -1 | cut -d/ -f1)
     if [[ -z $top ]] || ! grep -qx "$top/Dockerfile" <<<"$names"; then
       bad "$UPDATE_FILE doesn't look like a DGX-kit package (no installer/install.sh and Dockerfile in one top folder)"; exit 1
     fi
-    tar xzf "$UPDATE_FILE" -C "$UNPACKED"
+    archive_extract "$UPDATE_FILE" "$UNPACKED" >/dev/null
     ok "unpacked $top"
   fi
   # The update runs from the new installer, so the newest install logic is always the one that applies it.

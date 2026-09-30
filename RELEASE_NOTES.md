@@ -7,7 +7,7 @@ Newest first. Every commit adds its entry here.
 ### Added
 - **Publish / Unpublish** buttons on each model: list it on the gateway or take it off without restarting it. Unpublish asks first.
 - **Settings tabs:** Gateway, Hugging Face, Engine images, Model folders, Import, Delete from disk, Activity and Password are separate tabs, and the tab is in the address (`#/settings/images`).
-- **`dgx-kit update`:** the installer leaves a command in `~/.local/bin`. `dgx-kit update` fetches the latest from git and updates; `dgx-kit update PACKAGE.tar.gz` does it from a file; `dgx-kit version` shows what is running. Installer options `--updaterepo`, `--updatepath` and `--update` do the same; an update needs no sudo password unless the service file changes.
+- **`dgx-kit update`:** the installer leaves a command in `~/.local/bin`, so an update is one line: `dgx-kit update` fetches the latest from git, `dgx-kit update PATH` updates from a package (`.tar.gz`, `.tgz` or a GitHub `.zip`) or from a git clone or unpacked folder, and `dgx-kit version` shows what is running. An update needs no sudo password unless the service file changes, keeps the previous image for a rollback, and never touches your settings, keys, recipes or password. The installer options are `--updatepath`, `--updaterepo` and `--update`. Uninstalling removes the command too.
 - **The running version** is shown next to the logo and on the sign-in page.
 - **Bundled LiteLLM gateway** with its own Postgres, set up by one button (Settings, Gateway), with memory limits; the top link opens LiteLLM's admin page.
 - **Hugging Face token** setting, checked when saved.
