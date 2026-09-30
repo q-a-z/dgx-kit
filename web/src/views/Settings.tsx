@@ -5,50 +5,72 @@ import { usePoll } from '../usePoll'
 import { Folders } from './Library'
 import { DiskDelete } from './DiskDelete'
 import { GatewayCard } from './Models'
+import { go } from '../nav'
 import { Images, Log } from './Other'
 
 type Lib = Parameters<typeof Folders>[0]['lib']
 
-/** Set-up-once things: how clients reach the models, which engine images run them, where models live. */
-export function Settings({ canChangePassword }: { canChangePassword: boolean }) {
+const TABS = [
+  { id: 'gateway', label: 'Gateway' },
+  { id: 'hf', label: 'Hugging Face' },
+  { id: 'images', label: 'Engine images' },
+  { id: 'folders', label: 'Model folders' },
+  { id: 'import', label: 'Import' },
+  { id: 'disk', label: 'Delete from disk' },
+  { id: 'activity', label: 'Activity' },
+  { id: 'password', label: 'Password' },
+]
+
+/** Set-up-once things, one tab each: how clients reach the models, which engine images run them, where models live.
+ *  The tab is in the address (#/settings/images), so a reload, Back and a shared link land on the same one. */
+export function Settings({ canChangePassword, tab }: { canChangePassword: boolean; tab?: string }) {
   const lib = usePoll<Pick<Lib, 'paths' | 'missing'>>('/api/library/paths', 30000)
+  const tabs = TABS.filter((t) => t.id !== 'password' || canChangePassword)
+  const current = tabs.find((t) => t.id === tab)?.id ?? 'gateway'
   return (
     <div className="page narrow-page settings">
-      
       <h1>Settings</h1>
-      <nav className="toc" aria-label="On this page">
-        <a href="#gateway" onClick={jump}>Gateway</a><a href="#hf" onClick={jump}>Hugging Face</a><a href="#images" onClick={jump}>Engine images</a>
-        <a href="#folders" onClick={jump}>Model folders</a><a href="#disk" onClick={jump}>Delete from disk</a><a href="#import" onClick={jump}>Import</a><a href="#activity" onClick={jump}>Activity</a>
-        {canChangePassword && <a href="#password" onClick={jump}>Password</a>}
-      </nav>
-      <h2 id="gateway">Gateway</h2>
-      <p className="muted lead">Clients use one OpenAI-compatible address for every running model.</p>
-      <div className="bare-head"><GatewayCard /></div>
-      <h2 id="hf">Hugging Face</h2>
-      <p className="muted lead">A token lets DGX-kit look up and download gated or private models. Without one, public models still work.</p>
-      <HfToken />
-      <h2 id="images">Engine images</h2>
-      <p className="muted lead">The Docker images models run in. Each model can also pick its own image in its settings.</p>
-      <Images />
-      <h2 id="folders">Model folders</h2>
-      {lib.data ? <Folders key={lib.data.paths.join('\n')} lib={lib.data} onSaved={lib.reload} /> : <Pending error={lib.error} what="the model folders" />}
-      <h2 id="disk">Delete from disk</h2>
-      <p className="muted lead">The only place model files can be deleted. Removing a model from its menu never touches its files.</p>
-      <DiskDelete />
-      <h2 id="import">Import from llmctl</h2>
-      <p className="muted lead">Turns llmctl .conf files into DGX-kit models: same folders, image, draft and options. Nothing starts, and llmctl’s containers are left alone.</p>
-      <ImportLlmctl />
-      <h2 id="activity">Activity</h2>
-      <Log canChangePassword={false} />
-      {canChangePassword && <><h2 id="password">Password</h2><ChangePassword /></>}
+      <div className="tabs" role="tablist" aria-label="Settings">
+        {tabs.map((t) => (
+          <button key={t.id} role="tab" aria-selected={current === t.id} className={current === t.id ? 'on' : ''} onClick={() => go({ page: 'settings', arg: t.id })}>{t.label}</button>
+        ))}
+      </div>
+      <div role="tabpanel" aria-label={tabs.find((t) => t.id === current)?.label}>
+        {current === 'gateway' && (<>
+          <p className="muted lead">Clients use one OpenAI-compatible address for every running model.</p>
+          <div className="bare-head"><GatewayCard /></div>
+        </>)}
+        {current === 'hf' && (<>
+          <p className="muted lead">A token lets DGX-kit look up and download gated or private models. Without one, public models still work.</p>
+          <HfToken />
+        </>)}
+        {current === 'images' && (<>
+          <p className="muted lead">The Docker images models run in. Each model can also pick its own image in its settings.</p>
+          <Images />
+        </>)}
+        {current === 'folders' && (<>
+          <p className="muted lead">Where DGX-kit looks for models on this machine.</p>
+          {lib.data ? <Folders key={lib.data.paths.join('\n')} lib={lib.data} onSaved={lib.reload} /> : <Pending error={lib.error} what="the model folders" />}
+        </>)}
+        {current === 'import' && (<>
+          <p className="muted lead">Turns llmctl .conf files into DGX-kit models: same folders, image, draft and options. Nothing starts, and llmctl’s containers are left alone.</p>
+          <ImportLlmctl />
+        </>)}
+        {current === 'disk' && (<>
+          <p className="muted lead">The only place model files can be deleted. Removing a model from its menu never touches its files.</p>
+          <DiskDelete />
+        </>)}
+        {current === 'activity' && (<>
+          <p className="muted lead">What DGX-kit has done on this machine, newest first.</p>
+          <Log canChangePassword={false} />
+        </>)}
+        {current === 'password' && (<>
+          <p className="muted lead">Changing it signs every other browser out.</p>
+          <ChangePassword />
+        </>)}
+      </div>
     </div>
   )
-}
-
-// In-page links without touching the hash router.
-function jump(e: React.MouseEvent<HTMLAnchorElement>) {
-  e.preventDefault()
-  document.getElementById(e.currentTarget.getAttribute('href')!.slice(1))?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 type HfConf = { set: boolean; hint: string | null; source: string | null }

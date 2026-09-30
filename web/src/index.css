@@ -353,14 +353,10 @@ details.drafts summary { cursor: pointer; color: var(--muted); }
 
 .settings h2 { font-size: 16px; margin: 30px 0 4px; scroll-margin-top: 70px; }
 .settings .grid { grid-template-columns: 1fr; }
-.toc { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 4px 0 8px; }
-.toc a { color: var(--muted); text-decoration: none; }
-.toc a:hover { color: var(--text); }
 .narrow-page > .card { margin-top: 12px; }
 
 .page .model-head { grid-template-columns: minmax(0, 1fr) auto; }
 @media (max-width: 800px) { .page .model-head { grid-template-columns: 1fr; } }
-.toc a { padding: 0; }
 .settings .card > h2:first-child, .settings .bare-head .card > .row:first-child > h2 { display: none; }
 .settings .bare-head .card > .row:first-child { justify-content: flex-end; }
 .controls { align-items: center; }
@@ -719,3 +715,5 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .served { display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center; }
 .served code { padding: 2px 8px; border-radius: 6px; background: var(--raised); color: var(--text); }
 .ver { margin-left: 8px; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.settings .tabs { flex-wrap: wrap; margin-bottom: 16px; }
+.settings [role=tabpanel] > .lead { margin-top: 0; }

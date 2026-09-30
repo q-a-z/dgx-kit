@@ -11,12 +11,13 @@ export function parse(hash: string): Route {
   const [page, ...rest] = decodeURIComponent(hash.replace(/^#\/?/, '')).split('/')
   if (page === 'model' && rest.length) return { page: 'home', arg: rest.join('/') }
   if (page === 'run') return { page: 'home', arg: RUN }
-  if (page === 'settings' || page === 'library') return { page }
+  if (page === 'settings') return { page, arg: rest.join('/') || undefined }  // #/settings/<tab>
+  if (page === 'library') return { page }
   return { page: 'home' }
 }
 
 export const href = (r: Route) =>
-  r.page === 'settings' ? '#/settings' : r.page === 'library' ? '#/library' : r.arg === RUN ? '#/run' : r.arg ? `#/model/${encodeURIComponent(r.arg)}` : '#/'
+  r.page === 'settings' ? `#/settings${r.arg ? `/${encodeURIComponent(r.arg)}` : ''}` : r.page === 'library' ? '#/library' : r.arg === RUN ? '#/run' : r.arg ? `#/model/${encodeURIComponent(r.arg)}` : '#/'
 export const go = (r: Route) => { location.hash = href(r) }
 export const select = (name: string | undefined) => go({ page: 'home', arg: name })
 

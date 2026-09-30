@@ -60,7 +60,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
         {canSignOut && <button className="ghost" onClick={onSignOut}>Sign out</button>}
       </header>
       <main>
-        {route.page === 'settings' ? <Settings canChangePassword={canSignOut} />
+        {route.page === 'settings' ? <Settings canChangePassword={canSignOut} tab={route.arg} />
           : route.page === 'library' ? <LibraryPage />
           : !latest || !layout ? <p className="muted">Waiting for the first reading…</p>
           : <Home view={view} setView={setView} latest={latest} history={history} entries={fleet.entries} orphans={fleet.orphans} alerts={alerts} loaded={fleet.loaded}
