@@ -212,6 +212,13 @@ export function GatewayCard() {
             </button>
             <span className="muted">Makes the key, pulls the images, starts Postgres and LiteLLM. Safe to run again; it only repairs what’s missing.</span>
           </div>
+          {data.extra_env_file && (
+            <p className="muted small">
+              Extra LiteLLM settings, for example <code>STORE_MODEL_IN_DB=True</code>, go in <code>{data.extra_env_file}</code>, one NAME=value per line.
+              Save it, then press {data.reachable ? 'Re-run LiteLLM setup' : 'Set up LiteLLM'} to apply them.
+              {data.extra_env?.length ? ` Applied now: ${data.extra_env.join(', ')}.` : ' None applied yet.'}
+            </p>
+          )}
         </>
       )}
       <label>Address clients use

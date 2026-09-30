@@ -20,6 +20,8 @@ Newest first. Every commit adds its entry here.
 - **Combined GPU/CPU temperature and load gauges**, with icons.
 - **Installer:** `--user` (no sudo), unattended answers, `--uninstall`, `--dry-run`, a Dockerfile for the dashboard image, and `tools/make-dist.sh` for release packages.
 
+- **Extra LiteLLM settings:** `litellm/extra.env` in the state folder takes your own LiteLLM environment variables, one `NAME=value` per line (for example `STORE_MODEL_IN_DB=True`). DGX-kit creates it with examples, applies it when the gateway is made again (the **Re-run LiteLLM setup** button), and the Gateway tab shows its path and what is applied. `LITELLM_MASTER_KEY` and `DATABASE_URL` stay managed by DGX-kit.
+
 ### Changed
 - A re-run of the installer offers your earlier answers, keeps the admin password on Enter, and restarts the service on the new code.
 - README rewritten for people, with screenshots.

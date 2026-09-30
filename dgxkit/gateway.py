@@ -20,6 +20,17 @@ DB_NAME = "dgxkit-gateway-db"
 DB_IMAGE = os.environ.get("DGXKIT_IMAGE_POSTGRES", "postgres:16")
 DB_PORT = 5433  # loopback only, off 5432 so it never meets a Postgres someone else runs
 DB_VOLUME = "dgxkit-gateway-pg"
+EXTRA_ENV = "extra.env"  # in the gateway's folder of the state folder: your own LiteLLM settings
+ENV_LABEL = "dgxkit.gateway-env"  # a digest of extra.env on the container, so a changed file recreates it
+RESERVED_ENV = {"LITELLM_MASTER_KEY", "DATABASE_URL"}  # the dashboard owns these; a typo there would break the gateway
+EXTRA_ENV_HELP = """# Extra environment variables for the LiteLLM container, one NAME=value per line.
+# DGX-kit applies them when it creates the gateway: save this file, then press "Re-run LiteLLM setup" in
+# Settings, Gateway (the gateway restarts for a moment). LITELLM_MASTER_KEY and DATABASE_URL are managed by DGX-kit.
+#
+# Examples (remove the # to use one):
+# STORE_MODEL_IN_DB=True
+# LITELLM_LOG=INFO
+"""
 MEMORY_LIMIT = "4g"  # a leaking proxy gets killed alone instead of taking the models with it
 NAME = "dgxkit-gateway"
 IMAGE = os.environ.get("DGXKIT_IMAGE_LITELLM", "ghcr.io/berriai/litellm:main-stable")
@@ -37,6 +48,35 @@ def litellm_config(published: dict[str, int]) -> dict:
         "litellm_settings": {"drop_params": True, "disable_cache": True, "disable_spend_logs": True},
         "general_settings": {"master_key": "os.environ/LITELLM_MASTER_KEY"},
     }
+
+
+def read_extra_env(directory: Path) -> dict[str, str]:
+    """The NAME=value lines of extra.env; comments, blank lines, bad names and the reserved ones are skipped."""
+    import re
+    out: dict[str, str] = {}
+    try:
+        text = (directory / EXTRA_ENV).read_text()
+    except OSError:
+        return out
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        name = name.strip().removeprefix("export ").strip()
+        value = value.strip()
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or name in RESERVED_ENV:
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        out[name] = value
+    return out
+
+
+def env_digest(extra: dict[str, str]) -> str:
+    import hashlib
+    import json
+    return hashlib.sha1(json.dumps(extra, sort_keys=True).encode()).hexdigest()[:12]
 
 
 def _secret(state_dir: str, name: str, prefix: str = "") -> str:
@@ -99,9 +139,15 @@ class Gateway:
         self.published = dict(published)
         changed = self._write(yaml.safe_dump(litellm_config(published), sort_keys=False))
         try:
+            if not (self.dir / EXTRA_ENV).exists():
+                (self.dir / EXTRA_ENV).write_text(EXTRA_ENV_HELP)
+            extra = read_extra_env(self.dir)
+            digest = env_digest(extra)
             c = self._container()
-            current = getattr(c, "labels", {}).get(LABEL, GENERATION) == GENERATION if c is not None else False
-            if c is not None and c.status == "running" and (current or not self.db):
+            labels = (getattr(c, "labels", None) or {}) if c is not None else {}
+            current = labels.get(LABEL, GENERATION) == GENERATION
+            same_env = labels.get(ENV_LABEL, env_digest({})) == digest  # a container from before extra.env had no extras
+            if c is not None and c.status == "running" and (current or not self.db) and same_env:
                 if changed:
                     c.restart(timeout=10)
                 self.problem = None
@@ -125,6 +171,7 @@ class Gateway:
                 if self.problem:
                     return
                 env["DATABASE_URL"] = f"postgresql://litellm:{_secret(str(self.dir.parent), 'db.password')}@127.0.0.1:{DB_PORT}/litellm"
+            env.update({k: v for k, v in extra.items() if k not in RESERVED_ENV})
             if c is not None:
                 c.remove(force=True)
             # Mount the folder, not the file: the config is replaced atomically, which
@@ -132,7 +179,7 @@ class Gateway:
             self.docker.containers.run(
                 self.image, ["--config", "/app/dgxkit/config.yaml",
                              "--host", self.host, "--port", str(self.port)],
-                name=NAME, detach=True, labels={LABEL: GENERATION}, network_mode="host",
+                name=NAME, detach=True, labels={LABEL: GENERATION, ENV_LABEL: digest}, network_mode="host",
                 environment=env,
                 mem_limit=MEMORY_LIMIT,
                 volumes={str(self.dir): {"bind": "/app/dgxkit", "mode": "ro"}},
@@ -221,7 +268,8 @@ class Gateway:
             self._client = None
         return {"state": state, "port": port, "image": self.image, "problem": self.remote_problem if external else self.problem,
                 "models": sorted(self.published), "external": external,
-                "db": db, "key_ready": bool(self.master_key)}
+                "db": db, "key_ready": bool(self.master_key),
+                "extra_env": sorted(read_extra_env(self.dir)), "extra_env_file": str(self.dir / EXTRA_ENV)}
 
 
 ID_PREFIX = "dgxkit-"

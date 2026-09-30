@@ -193,7 +193,7 @@ Settings has one tab per topic, and the tab is in the address (`#/settings/image
 
 | Tab | What it is for |
 |---|---|
-| Gateway | The LiteLLM address and key, the **Set up LiteLLM** button, and what the gateway serves. |
+| Gateway | The LiteLLM address and key, the **Set up LiteLLM** button, what the gateway serves, and where its extra settings file is. |
 | Hugging Face | A token for gated or private models. Checked when you save. |
 | Engine images | The Docker images models run in; pull, change a tag, or build the GB10 vLLM images (patches, FlashInfer 0.7.0). |
 | Model folders | Where DGX-kit looks for models. |
@@ -210,6 +210,7 @@ Settings has one tab per topic, and the tab is in the address (`#/settings/image
 | Recipes and their version history, admin password hash, LiteLLM's database password, Hugging Face token (if set in Settings) | `/var/lib/dgx-kit` (`~/.local/share/dgx-kit` with `--user`) |
 | LiteLLM's database | Docker volume `dgxkit-gateway-pg` |
 | Benchmark runs and their results | `bench/` inside the state folder |
+| Your own LiteLLM settings (for example `STORE_MODEL_IN_DB=True`) | `litellm/extra.env` inside the state folder; save it, then **Re-run LiteLLM setup** |
 | The previous dashboard image, kept by an update | Docker image `dgx-kit:previous` |
 | The `dgx-kit` command and the installer copy it runs | `~/.local/bin/dgx-kit`, `~/.local/share/dgx-kit-installer` |
 | Downloaded models | the folder you chose (default `~/models`) |

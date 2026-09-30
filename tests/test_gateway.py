@@ -26,6 +26,7 @@ class FakeDocker:
             def run(self, image, cmd, **kw):
                 outer.runs.append((image, cmd, kw))
                 outer.container = FakeContainer()
+                outer.container.labels = kw.get("labels", {})  # as Docker keeps them
 
         class Images:
             def get(self, image):
@@ -194,3 +195,22 @@ def test_status_reports_each_part_of_the_bundled_stack(tmp_path):
     assert g.status()["db"] == "missing" and g.status()["key_ready"]
     g.sync({})
     assert g.status()["db"] == "running" and g.status()["state"] == "running"
+
+
+def test_extra_env_file_is_created_read_applied_and_changes_recreate_the_container(tmp_path):
+    from dgxkit.gateway import EXTRA_ENV
+    d = FakeDocker()
+    g = Gateway(str(tmp_path), port=45994, master_key="k", client=d)
+    g.sync({})
+    f = tmp_path / "litellm" / EXTRA_ENV
+    assert f.exists() and "STORE_MODEL_IN_DB" in f.read_text()  # made with examples, all commented out
+    assert "STORE_MODEL_IN_DB" not in d.runs[0][2]["environment"]
+    f.write_text("# a comment\nSTORE_MODEL_IN_DB='True'\nexport LITELLM_LOG=INFO\nLITELLM_MASTER_KEY=hijack\nDATABASE_URL=nope\nbad name=1\n")
+    g.sync({})  # the file changed, so the gateway is made again with it
+    env = d.runs[-1][2]["environment"]
+    assert env["STORE_MODEL_IN_DB"] == "True" and env["LITELLM_LOG"] == "INFO"  # quotes and "export" are fine; it can override a default
+    assert env["LITELLM_MASTER_KEY"] == "k" and "DATABASE_URL" not in env and "bad name" not in env  # the managed ones are protected
+    assert len(d.runs) == 2
+    g.sync({})
+    assert len(d.runs) == 2  # the same file: nothing to recreate
+    assert g.status()["extra_env"] == ["LITELLM_LOG", "STORE_MODEL_IN_DB"] and g.status()["extra_env_file"] == str(f)

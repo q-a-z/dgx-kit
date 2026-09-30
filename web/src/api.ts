@@ -140,4 +140,4 @@ export type Action = { t: number; action: string; detail: string }
 
 export const fmtRate = (b: number | null | undefined) => (b == null ? '–' : `${fmtBytes(b)}/s`)
 export const sum = (r: Record<string, number> | undefined) => (r ? Object.values(r).reduce((a, b) => a + b, 0) : undefined)
-export type Gateway = { state: string | null; port: number; image: string; problem: string | null; models: string[]; external?: string | null; db?: string | null; key_ready?: boolean; url?: string; reachable?: boolean; auth?: string | null; served?: string[]; error?: string }
+export type Gateway = { state: string | null; port: number; image: string; problem: string | null; models: string[]; external?: string | null; db?: string | null; extra_env?: string[]; extra_env_file?: string; key_ready?: boolean; url?: string; reachable?: boolean; auth?: string | null; served?: string[]; error?: string }
