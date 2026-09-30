@@ -22,3 +22,17 @@ def test_two_homes_with_the_folder_is_not_guessed(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path / "root"))
     monkeypatch.delenv("DGXKIT_HOME", raising=False)
     assert expand_home("~/models", homes=str(homes)) == str(tmp_path / "root" / "models")  # ambiguous: don't pick one
+
+
+def test_the_state_folder_defaults_to_one_the_user_can_write(tmp_path, monkeypatch):
+    import os
+    from dgxkit import app
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setattr(os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(os.path, "isdir", lambda p: False)  # no installer folder on this machine
+    assert app.default_state_dir() == str(tmp_path / ".local" / "share" / "dgx-kit")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    assert app.default_state_dir() == str(tmp_path / "data" / "dgx-kit")
+    monkeypatch.setattr(os, "geteuid", lambda: 0)  # root (the installed container) keeps the installer's folder
+    assert app.default_state_dir() == "/var/lib/dgx-kit"

@@ -58,7 +58,8 @@ def build_services() -> Services:
     from .control import DockerRunner
 
     root = os.environ.get("DGXKIT_ROOT", "/")
-    state = os.environ.get("DGXKIT_STATE_DIR", "/var/lib/dgx-kit")
+    state = os.environ.get("DGXKIT_STATE_DIR") or default_state_dir()
+    print(f"DGX-kit state folder: {state}", flush=True)
     models = os.environ.get("DGXKIT_MODELS_DIR", os.path.expanduser("~/models"))
     token = os.environ.get("HF_TOKEN") or None
     images = ImageManager(state_dir=state)
@@ -104,6 +105,17 @@ async def first_run(s: Services) -> None:
         await sync_gateway(s)
     except Exception as e:  # Docker down at boot; the next start or stop retries
         s.log("gateway", f"not started: {e}")
+
+
+def default_state_dir() -> str:
+    """The installer's folder when it is there and usable (or we are root and can make it), else one in the user's own
+    home, so running from a clone works without root."""
+    system = "/var/lib/dgx-kit"
+    if os.path.isdir(system) and os.access(system, os.W_OK):
+        return system
+    if os.geteuid() == 0:
+        return system
+    return os.path.join(os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share"), "dgx-kit")
 
 
 def app_version() -> str:

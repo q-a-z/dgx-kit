@@ -26,6 +26,7 @@ Newest first. Every commit adds its entry here.
 - `.gitignore` now also keeps secrets (`.env` files, keys, certificates, a password file), logs and patch leftovers out of the repository, and ignores `state/` and `models/` only at the top of the tree, so a code folder with one of those names is never hidden. The image build skips the docs.
 
 ### Fixed
+- Running DGX-kit from a clone, without the installer, no longer stops at start with a permission error on `/var/lib/dgx-kit`: the state folder then defaults to `~/.local/share/dgx-kit`, and the start-up line says where the state is kept. Set `DGXKIT_STATE_DIR` to choose another.
 - The three-dot menu on a model now closes when you click elsewhere, press Escape, or choose an item (it used to stay open until you clicked the dots again).
 - Stopping a model from the dashboard (or a clean stop from a shell) shows **Stopped**, not **Crashed**.
 - A model that is still loading shows **Starting**, not "Not answering".

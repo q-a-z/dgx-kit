@@ -219,6 +219,8 @@ Settings has one tab per topic, and the tab is in the address (`#/settings/image
 
 Back up the settings folder and the state folder to keep your models' settings and keys.
 
+Running from a clone without the installer keeps its state in `~/.local/share/dgx-kit` (set `DGXKIT_STATE_DIR` to change it); the start-up line prints the folder. The state folder is never in the repository.
+
 ## When something goes wrong
 
 - **A model crashed.** Open its **Logs** tab; the line that says why is usually near the end. Stop clears the crashed container, and Start tries again.
