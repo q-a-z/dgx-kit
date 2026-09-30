@@ -692,6 +692,35 @@ async def reveal_gateway_key(request: Request):
     return {"key": gateway_key(svc(request))}
 
 
+class ExtraEnvBody(BaseModel):
+    text: str
+    apply: bool = False
+
+
+@router.get("/gateway/extra")
+async def get_gateway_extra(request: Request):
+    """The gateway's own extra settings file (litellm/extra.env in the state folder) and whether it is live."""
+    return await asyncio.to_thread(svc(request).gateway.extra_env_state)
+
+
+@router.put("/gateway/extra")
+async def put_gateway_extra(body: ExtraEnvBody, request: Request):
+    """Save the file; with apply, make the gateway again now so the settings take effect (it restarts for a moment)."""
+    s = svc(request)
+    if len(body.text) > 20000:
+        raise HTTPException(413, "that is a lot for a list of settings")
+    from .gateway import EXTRA_ENV
+    f = s.gateway.dir / EXTRA_ENV
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(body.text if body.text.endswith("\n") or not body.text else body.text + "\n")
+    tmp.replace(f)
+    s.log("litellm settings", "applied" if body.apply else "saved")
+    if body.apply:
+        await sync_gateway(s)
+    return await asyncio.to_thread(s.gateway.extra_env_state)
+
+
 @router.post("/gateway/sync")
 async def gateway_sync(request: Request):
     s = svc(request)

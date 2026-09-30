@@ -214,3 +214,19 @@ def test_extra_env_file_is_created_read_applied_and_changes_recreate_the_contain
     g.sync({})
     assert len(d.runs) == 2  # the same file: nothing to recreate
     assert g.status()["extra_env"] == ["LITELLM_LOG", "STORE_MODEL_IN_DB"] and g.status()["extra_env_file"] == str(f)
+
+
+def test_extra_env_reports_ignored_lines_and_whether_the_saved_file_is_live(tmp_path):
+    from dgxkit.gateway import EXTRA_ENV, parse_extra_env
+    ok, bad = parse_extra_env("# c\nA=1\nnot a setting\n9X=2\nLITELLM_MASTER_KEY=x\nB = 'two'\n")
+    assert ok == {"A": "1", "B": "two"}
+    assert [(b["line"], b["why"]) for b in bad] == [(3, "not NAME=value"), (4, "not a valid variable name"), (5, "managed by DGX-kit")]
+    d = FakeDocker()
+    g = Gateway(str(tmp_path), port=45993, master_key="k", client=d)
+    g.sync({})
+    assert g.extra_env_state()["pending"] is False  # nothing saved that the gateway lacks
+    (tmp_path / "litellm" / EXTRA_ENV).write_text("STORE_MODEL_IN_DB=True\n")
+    st = g.extra_env_state()
+    assert st["pending"] is True and st["applied"] == ["STORE_MODEL_IN_DB"]  # saved, not applied yet
+    g.sync({})
+    assert g.extra_env_state()["pending"] is False  # applied: the gateway was made again with it

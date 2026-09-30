@@ -50,27 +50,39 @@ def litellm_config(published: dict[str, int]) -> dict:
     }
 
 
-def read_extra_env(directory: Path) -> dict[str, str]:
-    """The NAME=value lines of extra.env; comments, blank lines, bad names and the reserved ones are skipped."""
+def parse_extra_env(text: str) -> tuple[dict[str, str], list[dict]]:
+    """The NAME=value lines of extra.env, and the lines that were skipped with the reason.
+    Comments and blank lines are not reported."""
     import re
     out: dict[str, str] = {}
-    try:
-        text = (directory / EXTRA_ENV).read_text()
-    except OSError:
-        return out
-    for line in text.splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
+    ignored: list[dict] = []
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            ignored.append({"line": n, "text": line[:80], "why": "not NAME=value"})
             continue
         name, _, value = line.partition("=")
         name = name.strip().removeprefix("export ").strip()
         value = value.strip()
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name) or name in RESERVED_ENV:
-            continue
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
-        out[name] = value
-    return out
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
+            ignored.append({"line": n, "text": line[:80], "why": "not a valid variable name"})
+        elif name in RESERVED_ENV:
+            ignored.append({"line": n, "text": name, "why": "managed by DGX-kit"})
+        else:
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+                value = value[1:-1]
+            out[name] = value
+    return out, ignored
+
+
+def read_extra_env(directory: Path) -> dict[str, str]:
+    """The settings in extra.env that apply."""
+    try:
+        return parse_extra_env((directory / EXTRA_ENV).read_text())[0]
+    except OSError:
+        return {}
 
 
 def env_digest(extra: dict[str, str]) -> str:
@@ -220,6 +232,23 @@ class Gateway:
                 return None
             time.sleep(1)
         return "Postgres didn't come up in 30 seconds"
+
+    def extra_env_state(self) -> dict:
+        """The extra.env file, its text, and whether what is saved is what the running gateway was made with."""
+        f = self.dir / EXTRA_ENV
+        try:
+            text = f.read_text()
+        except OSError:
+            text = EXTRA_ENV_HELP
+        names = parse_extra_env(text)
+        pending = False
+        try:
+            c = self._container()
+            if c is not None:
+                pending = (getattr(c, "labels", None) or {}).get(ENV_LABEL, env_digest({})) != env_digest(names[0])
+        except Exception:
+            pass
+        return {"file": str(f), "text": text, "applied": sorted(names[0]), "ignored": names[1], "pending": pending}
 
     def _external(self):
         """_external_now(), remembered for 15 seconds, since every page poll asks."""

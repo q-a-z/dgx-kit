@@ -48,8 +48,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 1. Get the package onto the Spark and unpack it:
 
    ```
-   tar xzf dgx-kit-0.1.1.tar.gz
-   cd dgx-kit-0.1.1
+   tar xzf dgx-kit-0.1.2.tar.gz
+   cd dgx-kit-0.1.2
    ```
 
 2. Look before you leap (changes nothing):
@@ -92,7 +92,7 @@ The install leaves a `dgx-kit` command. Updating is one line:
 ```
 dgx-kit update                      # fetch the latest from git and update
 dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
-dgx-kit update dgx-kit-0.1.1.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit update dgx-kit-0.1.2.tar.gz # from a package, a .tgz, or a GitHub .zip
 dgx-kit version                     # what is running
 ```
 
@@ -193,7 +193,7 @@ Settings has one tab per topic, and the tab is in the address (`#/settings/image
 
 | Tab | What it is for |
 |---|---|
-| Gateway | The LiteLLM address and key, the **Set up LiteLLM** button, what the gateway serves, and where its extra settings file is. |
+| Gateway | The LiteLLM address and key, the **Set up LiteLLM** button, what the gateway serves, and an editor for its extra LiteLLM settings. |
 | Hugging Face | A token for gated or private models. Checked when you save. |
 | Engine images | The Docker images models run in; pull, change a tag, or build the GB10 vLLM images (patches, FlashInfer 0.7.0). |
 | Model folders | Where DGX-kit looks for models. |
@@ -204,23 +204,86 @@ Settings has one tab per topic, and the tab is in the address (`#/settings/image
 
 ## Where things live
 
+DGX-kit keeps three kinds of things apart: **settings** the installer wrote (one file), **state** it creates while running (a folder), and **your data** (models and caches). A system install (with sudo) and a `--user` install use different folders:
+
+| | System install | `--user` install |
+|---|---|---|
+| Settings folder | `/etc/dgx-kit` | `~/.config/dgx-kit` |
+| State folder | `/var/lib/dgx-kit` | `~/.local/share/dgx-kit` |
+| Service | `systemctl status dgx-kit` | `systemctl --user status dgx-kit` |
+
+Both are owned by root on a system install, so reading or editing them by hand needs `sudo`. When you run from a clone without the installer, the state folder is `/var/lib/dgx-kit` if you can write there, else `~/.local/share/dgx-kit`; set `DGXKIT_STATE_DIR` to choose. The start-up line prints the folder ("DGX-kit state folder: …"). The state folder is never part of the repository.
+
+### The settings file: `config.env`
+
+`/etc/dgx-kit/config.env` (mode 600, root only): one `NAME=value` per line, read by the service and passed to the container. The installer writes it from your answers.
+
+| Key | Meaning | Default |
+|---|---|---|
+| `DGXKIT_MODELS_DIR` | The folder models are downloaded to and looked for in | `~/models` |
+| `DGXKIT_PORT` | The dashboard port | `3000` |
+| `DGXKIT_BIND` | The address the dashboard listens on (`0.0.0.0` = the network, `127.0.0.1` = this machine only) | `0.0.0.0` |
+| `DGXKIT_GATEWAY_PORT` | The LiteLLM gateway port | `4000` |
+| `LITELLM_MASTER_KEY` | The gateway key. Also shown and copyable in Settings, Gateway | generated |
+| `DGXKIT_PULL_IMAGES` | `yes` pulls the engine images at start | `no` |
+| `DGXKIT_CACHE_DIR` | Where the shared compiled-kernel caches (`flashinfer`, `vllm-jit`) live | `~/.cache` |
+| `DGXKIT_HOME` | The real home folder, so `~` and `$HOME` in an imported llmctl conf mean your home | your home |
+| `HF_TOKEN` | A Hugging Face token (can also be set in Settings) | empty |
+| `DGXKIT_READONLY` | `1` hides everything that changes things: a look-only dashboard | off |
+
+To change one: edit the file with `sudo`, then restart (`sudo systemctl restart dgx-kit`) or re-run the installer, which offers your earlier answers. The admin password is **not** in this file; only its hash is stored, in `admin.pw` (below).
+
+Other variables the program reads, mostly for developers: `DGXKIT_STATE_DIR` (state folder), `DGXKIT_MODEL_PATHS` (extra model folders, colon separated), `DGXKIT_WEB_DIR` (the built web page), `DGXKIT_GPU_INDEX` (which GPU to show), `DGXKIT_NO_PASSWORD` (run without a password), `DGXKIT_FAKE_GPU` and `DGXKIT_ROOT` (a demo instance without a GPU), `DGXKIT_IMAGE_VLLM`, `DGXKIT_IMAGE_SGLANG`, `DGXKIT_IMAGE_LLAMACPP`, `DGXKIT_IMAGE_LITELLM`, `DGXKIT_IMAGE_POSTGRES` (engine image tags), `DGXKIT_FLASHINFER` (the FlashInfer version the GB10 vLLM builds install, `0.7.0`), `DGXKIT_VLLM_029_BASE` and `DGXKIT_VLLM_030_BASE` (the vLLM releases those builds start from), and for the installer `DGXKIT_INSTALL_*` and `DGXKIT_UPDATE_REPO` (see the installer options).
+
+### The state folder
+
+| File or folder | What it holds |
+|---|---|
+| `admin.pw` | A scrypt hash of the admin password (never the password itself) |
+| `session.key` | The key that signs login cookies. Deleting it logs everyone out |
+| `settings.yaml` | What you set in Settings: the gateway address, Model folders |
+| `gateway.key` | A gateway key entered in Settings, if you set one there |
+| `hf.token` | The Hugging Face token entered in Settings (mode 600) |
+| `images.yaml` | Your engine image choices (Settings, Engine images) |
+| `models/` | One `<name>.yaml` recipe per model: the engine, its options, and the gateway and sizing settings |
+| `models-history/` | Every earlier version of each recipe, for the version diff and restore |
+| `templates/` | Recipe templates |
+| `quick/` | The latest ten-second speed check of each model |
+| `bench/` | Benchmark runs and their results |
+| `user-stopped.json` | Which models you stopped yourself, so a stop is shown as **Stopped** and not **Crashed** |
+| `litellm/config.yaml` | The LiteLLM config DGX-kit **generates**. It is rewritten on every gateway setup: don't edit it |
+| `litellm/db.password` | The password of the gateway's Postgres |
+| `litellm/master.key` | The gateway key, only when none is set in `config.env` or Settings |
+| `litellm/extra.env` | Your own LiteLLM settings. Edit it in Settings, Gateway (below) |
+
+### Extra LiteLLM settings
+
+LiteLLM reads its options from environment variables. Anything DGX-kit doesn't set itself goes in `litellm/extra.env`, one `NAME=value` per line, `#` for comments. A new install creates it with commented examples (`# STORE_MODEL_IN_DB=True`, `# LITELLM_LOG=INFO`).
+
+The easy way: **Settings, Gateway, Extra LiteLLM settings**. Edit the text, press **Save**, then **Save and apply**, which makes the gateway again (it restarts for a few seconds; models keep running). Lines DGX-kit can't use are listed under the box. The gateway is recreated whenever the file's content changes, and **Re-run LiteLLM setup** does the same. `LITELLM_MASTER_KEY` and `DATABASE_URL` are managed by DGX-kit and ignored here. To enable LiteLLM's model database, add `STORE_MODEL_IN_DB=True`.
+
+DGX-kit itself sets, for the gateway: `LITELLM_MASTER_KEY`, `DATABASE_URL`, `NUM_WORKERS=1`, `LITELLM_LOG=ERROR`, `LITELLM_DISABLE_NO_REDIS_WARNING=true`, and a 4 GB memory limit.
+
+### Docker objects
+
+| What | Name |
+|---|---|
+| The dashboard | container and image `dgx-kit` (the previous image is kept as `dgx-kit:previous`) |
+| One per running model | container `dgxkit-<model name>` |
+| The gateway and its database | containers `dgxkit-gateway` and `dgxkit-gateway-db` (Postgres 16, reachable only on this machine, port 5433) |
+| LiteLLM's database | Docker volume `dgxkit-gateway-pg` |
+| Images DGX-kit builds | `dgx-kit/vllm:<series>-gb10` |
+
+### Files outside those folders
+
 | What | Where |
 |---|---|
-| Settings the installer wrote, including the gateway key | `/etc/dgx-kit/config.env` (`~/.config/dgx-kit/config.env` with `--user`) |
-| Recipes and their version history, admin password hash, LiteLLM's database password, Hugging Face token (if set in Settings) | `/var/lib/dgx-kit` (`~/.local/share/dgx-kit` with `--user`) |
-| LiteLLM's database | Docker volume `dgxkit-gateway-pg` |
-| Benchmark runs and their results | `bench/` inside the state folder |
-| Your own LiteLLM settings (for example `STORE_MODEL_IN_DB=True`) | `litellm/extra.env` inside the state folder; save it, then **Re-run LiteLLM setup** |
-| The previous dashboard image, kept by an update | Docker image `dgx-kit:previous` |
 | The `dgx-kit` command and the installer copy it runs | `~/.local/bin/dgx-kit`, `~/.local/share/dgx-kit-installer` |
+| The service unit | `/etc/systemd/system/dgx-kit.service` (`~/.config/systemd/user/dgx-kit.service` with `--user`) |
 | Downloaded models | the folder you chose (default `~/models`) |
 | Compiled GPU kernels, shared by all models | `~/.cache/flashinfer` and `~/.cache/vllm-jit` |
-| The service | `systemctl status dgx-kit` (`systemctl --user status dgx-kit` with `--user`) |
-| Containers | `dgxkit-<model name>`, `dgxkit-gateway`, `dgxkit-gateway-db` |
 
-Back up the settings folder and the state folder to keep your models' settings and keys.
-
-Running from a clone without the installer keeps its state in `~/.local/share/dgx-kit` (set `DGXKIT_STATE_DIR` to change it); the start-up line prints the folder. The state folder is never in the repository.
+Back up the settings folder and the state folder to keep your models' settings and keys; for the gateway's own data (users, keys it issued, stored models) also back up the `dgxkit-gateway-pg` volume. Uninstalling never deletes models or caches.
 
 ## When something goes wrong
 

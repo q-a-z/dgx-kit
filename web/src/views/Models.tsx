@@ -169,6 +169,42 @@ export function Editor({ model, onDone }: { model: ModelRow; onDone: (msg: strin
   )
 }
 
+type ExtraEnvState = { file: string; text: string; applied: string[]; ignored: { line: number; text: string; why: string }[]; pending: boolean }
+
+/** LiteLLM's own environment variables (litellm/extra.env in the state folder), edited here. */
+function ExtraEnv({ onApplied }: { onApplied: () => void }) {
+  const { data, reload } = usePoll<ExtraEnvState>('/api/gateway/extra', 30000)
+  const [text, setText] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null)
+  if (!data) return null
+  const shown = text ?? data.text
+  const put = (apply: boolean) => {
+    if (apply && !window.confirm('Apply now? The LiteLLM gateway restarts for a few seconds; running models are not touched.')) return
+    setBusy(true)
+    api<ExtraEnvState>('/api/gateway/extra', { method: 'PUT', json: { text: shown, apply } })
+      .then(() => { setText(null); setMsg({ text: apply ? 'Saved and applied.' : 'Saved. Not applied yet.' }); reload(); onApplied() })
+      .catch((e: Error) => setMsg({ text: e.message, bad: true }))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <label>Extra LiteLLM settings
+      <textarea className="mono" rows={6} spellCheck={false} value={shown} onChange={(e) => setText(e.target.value)} />
+      <small className="muted">
+        One <code>NAME=value</code> per line, for example <code>STORE_MODEL_IN_DB=True</code>; <code>#</code> starts a comment. File: <code>{data.file}</code>.
+        {data.applied.length ? ` Saved: ${data.applied.join(', ')}.` : ' Nothing set.'}
+        {data.pending && text === null && ' Saved but not applied to the running gateway yet.'}
+      </small>
+      {data.ignored.map((i) => <small key={i.line} className="bad">Line {i.line} ignored ({i.why}): {i.text}</small>)}
+      <span className="row">
+        <button disabled={busy || text === null} onClick={() => put(false)}>Save</button>
+        <button className="primary" disabled={busy || (text === null && !data.pending)} onClick={() => put(true)}>Save and apply</button>
+        {msg && <span className={msg.bad ? 'bad' : 'muted'}>{msg.text}</span>}
+      </span>
+    </label>
+  )
+}
+
 type GatewayConf = { url: string | null; url_default: string; key_set: boolean; key_hint: string | null }
 
 /** Where the gateway is and its key: DGX-kit publishes running models there and checks it with them. */
@@ -212,13 +248,7 @@ export function GatewayCard() {
             </button>
             <span className="muted">Makes the key, pulls the images, starts Postgres and LiteLLM. Safe to run again; it only repairs what’s missing.</span>
           </div>
-          {data.extra_env_file && (
-            <p className="muted small">
-              Extra LiteLLM settings, for example <code>STORE_MODEL_IN_DB=True</code>, go in <code>{data.extra_env_file}</code>, one NAME=value per line.
-              Save it, then press {data.reachable ? 'Re-run LiteLLM setup' : 'Set up LiteLLM'} to apply them.
-              {data.extra_env?.length ? ` Applied now: ${data.extra_env.join(', ')}.` : ' None applied yet.'}
-            </p>
-          )}
+          {data.extra_env_file && <ExtraEnv onApplied={reload} />}
         </>
       )}
       <label>Address clients use

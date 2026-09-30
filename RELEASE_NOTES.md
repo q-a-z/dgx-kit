@@ -2,7 +2,15 @@
 
 Newest first. Every commit adds its entry here.
 
-## 0.1.1 (in progress)
+## 0.1.2 (in progress)
+
+### Added
+- **Extra LiteLLM settings editor** in Settings, Gateway: edit `litellm/extra.env` in the page (Save, or Save and apply, which restarts the gateway for a few seconds), see which lines are ignored and whether the saved file is live. No root editing needed.
+
+### Changed
+- README now documents every file and folder in the settings and state folders, every `config.env` key, the other variables, the Docker objects and the `--user` equivalents.
+
+## 0.1.1
 
 ### Added
 - **Publish / Unpublish** buttons on each model: list it on the gateway or take it off without restarting it. Unpublish asks first.
