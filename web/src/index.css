@@ -617,12 +617,12 @@ main { max-width: 1320px; }
 .list-view { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
 .system { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .sys-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.sys-head .stats-title { margin-left: 24px; width: 23rem; max-width: 100%; }
+.sys-head .stats-title { margin-left: 24px; }
 .sys-head h2 { font-size: 15px; margin: 0; }
 .sys-head .muted { font-size: 12px; }
-.sys-row { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 32px; align-items: center; }
+.sys-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: center; }
 .sys-row .cell { display: grid; gap: 8px; align-content: center; min-width: 0; }
-.gauges { display: flex; gap: 16px; align-items: flex-end; position: relative; }
+.gauges { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; position: relative; }
 .donut { display: grid; justify-items: center; gap: 0; width: 120px; }
 .donut .lbl { font-size: 12px; color: var(--muted); margin-top: -8px; text-align: center; white-space: nowrap; }
 .donut .dv { fill: var(--text); font: 600 22px var(--font); font-variant-numeric: tabular-nums; }
@@ -727,7 +727,9 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .conn { text-decoration: none; }
 .dot.ok:not(.on), .conn .dot.ok { background: var(--ok); }
 .conn .dot.pending { background: var(--faint); }
-.sys-row .stats { justify-self: end; width: 23rem; max-width: 100%; }
+.sys-row .stats { justify-self: end; }
+.stats .traffic { justify-content: end; }
+.stats .traffic > div { text-align: right; }
 .pace { font-size: 11px; }
 .pace.ok { color: var(--ok); } .pace.warn { color: var(--warn); } .pace.bad { color: var(--bad); }
 
