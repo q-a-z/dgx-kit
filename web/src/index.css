@@ -621,7 +621,7 @@ main { max-width: 1320px; }
 .sys-head .muted { font-size: 12px; }
 .sys-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .sys-row .cell { display: grid; gap: 8px; align-content: center; min-width: 0; }
-.gauges { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; position: relative; }
+.gauges { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-end; position: relative; }
 .donut { display: grid; justify-items: center; gap: 0; width: 120px; }
 .donut .lbl { font-size: 12px; color: var(--muted); margin-top: -8px; text-align: center; white-space: nowrap; }
 .donut .dv { fill: var(--text); font: 600 22px var(--font); font-variant-numeric: tabular-nums; }
