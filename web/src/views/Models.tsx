@@ -234,6 +234,12 @@ export function GatewayCard() {
   return (
     <section className="card wide gateway-settings">
       {status && <p className={status.bad ? 'bad' : ''}><span aria-hidden>{status.bad ? '▲ ' : '● '}</span>{status.text}</p>}
+      {data && (
+        <p className="gw-row">
+          <code>{(data.url ?? `${location.hostname}:${data.port}/v1`).replace(/^https?:\/\//, '')}</code>
+          <a className="gw-link" href={(data.url ?? `${location.protocol}//${location.hostname}:${data.port}/v1`).replace(/\/v1$/, '/ui/')} target="_blank" rel="noreferrer">Open LiteLLM ↗</a>
+        </p>
+      )}
       {data && !data.external && !c.url && (
         <>
           <ul className="muted small">

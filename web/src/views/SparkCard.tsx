@@ -1,7 +1,6 @@
-import { fmtNum, type Gateway, type Live, type Snapshot } from '../api'
+import { fmtNum, type Live, type Snapshot } from '../api'
 import { Donut } from '../components/Donut'
 import type { Entry } from '../fleet'
-import { usePoll } from '../usePoll'
 
 // GB10 GPU power scale; the zones above 80 W are where the box runs hot and loud.
 const POWER_MAX = 120
@@ -69,32 +68,7 @@ export function SparkCard({ latest, hwOpen, toggleHw }: {
           </div>
         )}
         <TrafficStats latest={latest} />
-        <GatewayLine />
       </div>
     </section>
   )
 }
-
-/** How clients reach the models, with a link to LiteLLM itself (the clipboard API doesn't exist on plain http). */
-export function GatewayLine() {
-  const { data } = usePoll<Gateway>('/api/gateway', 10000)
-  if (!data) return null
-  const url = data.url ?? `${location.protocol}//${location.hostname}:${data.port}/v1`
-  const up = data.reachable ?? data.state === 'running'
-  return (
-    <div className="cell gw">
-      <span className="lbl">Gateway</span>
-      <span className="gw-row">
-        <span className={`gw-status ${up && data.auth !== 'rejected' ? 'ok' : 'warn'}`}>
-          <span className="gw-dot" aria-hidden />{data.auth === 'rejected' ? 'Key rejected' : up ? 'Running' : 'Not answering'}
-        </span>
-        <code title={url}>{url.replace(/^https?:\/\//, '')}</code>
-        <a className="gw-link" href={url.replace(/\/v1$/, '/ui/')} target="_blank" rel="noreferrer">Open LiteLLM ↗</a>
-      </span>
-      {(data.served?.length ? data.served : data.models).length
-        ? <span className="served"><span className="lbl">Serves</span>{(data.served?.length ? data.served : data.models).map((m) => <code key={m}>{m}</code>)}</span>
-        : <span className="muted small">No models published yet</span>}
-    </div>
-  )
-}
-

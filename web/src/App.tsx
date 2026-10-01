@@ -43,6 +43,10 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
   useEffect(() => {
     api<Slo>('/api/settings/slo').then(setSlo).catch(() => {})
   }, [])
+  const g = gateway.data
+  const gwUp = !!g && (g.reachable ?? g.state === 'running') && g.auth !== 'rejected'
+  const gwState = !g ? 'pending' : gwUp ? 'ok' : 'bad'
+  const gwTitle = !g ? 'LiteLLM gateway: checking' : gwUp ? 'LiteLLM gateway: answering' : `LiteLLM gateway: ${g.auth === 'rejected' ? 'rejects the key' : g.problem ?? 'not answering'}`
   const alerts = alertsFor(fleet.entries, latest, gateway.data ?? undefined, readonly)
   const [view, setView] = useView()
 
@@ -56,6 +60,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
         <a className={`navlink ${route.page === 'library' ? 'on' : ''}`} href={href({ page: 'library' })}>Models on disk</a>
         <a className={`navlink ${route.page === 'settings' ? 'on' : ''}`} href={href({ page: 'settings' })}>Settings</a>
         {readonly && <span className="pill warn" title="DGX-kit won't start, stop, pull or download anything on this box">Read-only</span>}
+        <a className="conn" href={href({ page: 'settings', arg: 'gateway' })} title={gwTitle}><span className={`dot ${gwState}`} />LiteLLM</a>
         <span className="conn" title={connected ? 'Receiving live data' : 'Reconnecting'}><span className={`dot ${connected ? 'on' : ''}`} />{connected ? 'Live' : 'Reconnecting'}</span>
         {canSignOut && <button className="ghost" onClick={onSignOut}>Sign out</button>}
       </header>

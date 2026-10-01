@@ -5,10 +5,12 @@ Newest first. Every commit adds its entry here.
 ## 0.1.2 (in progress)
 
 ### Added
+- **LiteLLM indicator** in the top bar next to Live: green when the gateway answers and accepts the key, red when it doesn't (hover for why). It opens Settings, Gateway.
 - **Traffic stats** on the home page next to the gauges, in six compact figures: tokens in and out, requests, decode and prefill speed now and on average, and requests running (with those waiting), summed over the running models. Totals count from when each model started.
 - **Extra LiteLLM settings editor** in Settings, Gateway: edit `litellm/extra.env` in the page (Save, or Save and apply, which restarts the gateway for a few seconds), see which lines are ignored and whether the saved file is live. No root editing needed.
 
 ### Changed
+- The gateway address and the **Open LiteLLM** link moved from the home page to Settings, Gateway; the home page's System card no longer has a gateway block or the "Serves" list.
 - The "Memory free" block is gone from the home page's System card (the memory map shows it).
 - **API documentation:** [docs/API.md](docs/API.md) describes every route, sign-in, errors, read-only mode and the model fields; `/docs` on the dashboard is the generated reference.
 - README now documents every file and folder in the settings and state folders, every `config.env` key, the other variables, the Docker objects and the `--user` equivalents.
