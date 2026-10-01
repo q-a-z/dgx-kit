@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api, fmtBytes, type Gateway, type Snapshot } from './api'
+import { api, type Gateway } from './api'
 import { useFleet, type Entry } from './fleet'
 import { alertsFor, type Alert } from './health'
 import { Login } from './Login'
@@ -54,7 +54,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
     <>
       <header>
         <a className="brand" href="#/"><b>DGX</b>-kit{version && <span className="ver" title="DGX-kit version">{/^\d/.test(version) ? `v${version}` : version}</span>}</a>
-        {route.page === 'home' && latest && <Health alerts={alerts} entries={fleet.entries} latest={latest} gateway={gateway.data ?? undefined} />}
+        {route.page === 'home' && latest && <Health alerts={alerts} entries={fleet.entries} />}
         <span className="grow" />
         {route.page !== 'home' && <a className="navlink" href="#/">Back to dashboard</a>}
         <a className={`navlink ${route.page === 'library' ? 'on' : ''}`} href={href({ page: 'library' })}>Models on disk</a>
@@ -75,11 +75,11 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
   )
 }
 
-/** One line that says whether anything needs you; each problem names its model and opens it. */
-function Health({ alerts, entries, latest, gateway }: { alerts: Alert[]; entries: Entry[]; latest: Snapshot; gateway?: Gateway }) {
+/** Shown only when something needs you; each problem names its model and opens it. */
+function Health({ alerts, entries }: { alerts: Alert[]; entries: Entry[] }) {
   const [open, setOpen] = useState(false)
   const serving = entries.filter((e) => e.state === 'running').length
-  const free = latest.system?.memory.available_bytes
+  if (!alerts.length) return null
   const level = alerts.some((a) => a.level === 'bad') ? 'bad' : alerts.length ? 'warn' : 'ok'
   const first = alerts[0]
   const pick = (a: Alert) => { setOpen(false); if (a.model) select(a.model) }
@@ -92,10 +92,7 @@ function Health({ alerts, entries, latest, gateway }: { alerts: Alert[]; entries
           {alerts.length > 1 && <button className="link muted" aria-expanded={open} onClick={() => setOpen(!open)}>and {alerts.length - 1} more</button>}
           <span className="muted">· {serving} serving</span>
         </>
-      ) : (
-        <span><b>{serving ? `${serving === entries.length ? 'All' : serving} model${serving === 1 ? '' : 's'} serving normally` : entries.length ? 'Nothing is running' : 'No models yet'}</b>
-          <span className="muted">{free != null && ` · ${fmtBytes(free)} free`}{gateway?.state === 'running' && ' · gateway OK'}</span></span>
-      )}
+      ) : null}
       {open && (
         <ul className="health-list">
           {alerts.map((a, i) => (

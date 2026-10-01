@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { fmtNum, type Live, type Snapshot } from '../api'
 import { Donut } from '../components/Donut'
 
@@ -20,24 +21,36 @@ function avgSpeed(xs: Live[], toks: string, speed: string): number | null {
   return secs > 0 ? t / secs : null
 }
 
+/** Speed now against the average: green up when at least as fast, amber level a little slower, red down when well below. Nothing while idle. */
+function pace(now: number, avg: number | null) {
+  if (!avg || now <= 0) return null
+  const r = now / avg
+  const [mark, cls, word] = r >= 0.95 ? ['▲', 'ok', 'fast'] : r >= 0.7 ? ['▶', 'warn', 'a little slow'] : ['▼', 'bad', 'slow']
+  return <span className={`pace ${cls}`} role="img" aria-label={`${word} against the average`}> {mark}</span>
+}
+
 /** Traffic through the running models: totals since each started, speeds now and on average. */
 function TrafficStats({ latest }: { latest: Snapshot }) {
   const up = Object.values(latest.models).filter((x) => x.up)
-  if (!up.length) return <div className="cell"><span className="muted small">No model running</span></div>
+  const caption = <span className="lbl">Stats</span>
+  if (!up.length) return <div className="cell stats">{caption}<span className="muted small">No model running</span></div>
   const dec = avgSpeed(up, 'gen_tokens_total', 'decode_tps_req')
   const pre = avgSpeed(up, 'prompt_tokens_total', 'prefill_tps_req')
   const waiting = sum(up, 'waiting')
-  const stat = (k: string, v: string, sub?: string, tip?: string) =>
-    <div title={tip}><dt>{k}</dt><dd><b className="n">{v}</b>{sub && <small className="muted"> {sub}</small>}</dd></div>
+  const stat = (k: string, v: string, sub?: string, tip?: string, arrow?: ReactNode) =>
+    <div title={tip}><dt>{k}</dt><dd><b className="n">{v}</b>{arrow}{sub && <small className="muted"> {sub}</small>}</dd></div>
   return (
-    <dl className="cell traffic">
-      {stat('In', compact(sum(up, 'prompt_tokens_total')), 'tokens', 'Prompt tokens since the models started')}
-      {stat('Out', compact(sum(up, 'gen_tokens_total')), 'tokens', 'Generated tokens since the models started')}
-      {stat('Requests', compact(sum(up, 'requests_total')), undefined, 'Finished requests since the models started')}
-      {stat('Decode', fmtNum(sum(up, 'decode_tps')), dec != null ? `/ avg ${fmtNum(dec)} t/s` : 't/s', 'Output tokens per second now, and the average per request')}
-      {stat('Prefill', fmtNum(sum(up, 'prefill_tps')), pre != null ? `/ avg ${fmtNum(pre)} t/s` : 't/s', 'Prompt tokens per second now, and the average per request')}
-      {stat('Busy', String(sum(up, 'running')), waiting ? `+${waiting} waiting` : undefined, 'Requests running now')}
-    </dl>
+    <div className="cell stats">
+      {caption}
+      <dl className="traffic">
+        {stat('In', compact(sum(up, 'prompt_tokens_total')), 'tokens', 'Prompt tokens since the models started')}
+        {stat('Out', compact(sum(up, 'gen_tokens_total')), 'tokens', 'Generated tokens since the models started')}
+        {stat('Requests', compact(sum(up, 'requests_total')), undefined, 'Finished requests since the models started')}
+        {stat('Decode', fmtNum(sum(up, 'decode_tps')), dec != null ? `/ avg ${fmtNum(dec)} t/s` : 't/s', 'Output tokens per second now, and the average per request. The arrow compares now with the average.', pace(sum(up, 'decode_tps'), dec))}
+        {stat('Prefill', fmtNum(sum(up, 'prefill_tps')), pre != null ? `/ avg ${fmtNum(pre)} t/s` : 't/s', 'Prompt tokens per second now, and the average per request. The arrow compares now with the average.', pace(sum(up, 'prefill_tps'), pre))}
+        {stat('Busy', String(sum(up, 'running')), waiting ? `+${waiting} waiting` : undefined, 'Requests running now')}
+      </dl>
+    </div>
   )
 }
 
