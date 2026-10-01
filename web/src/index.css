@@ -617,10 +617,9 @@ main { max-width: 1320px; }
 .list-view { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 16px; align-items: start; }
 .system { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
 .sys-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.sys-head .stats-title { margin-left: 24px; }
 .sys-head h2 { font-size: 15px; margin: 0; }
 .sys-head .muted { font-size: 12px; }
-.sys-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 32px; align-items: center; }
+.sys-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .sys-row .cell { display: grid; gap: 8px; align-content: center; min-width: 0; }
 .gauges { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; position: relative; }
 .donut { display: grid; justify-items: center; gap: 0; width: 120px; }
@@ -719,7 +718,7 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .settings .tabs { flex-wrap: wrap; margin-bottom: 16px; }
 .settings [role=tabpanel] > .lead { margin-top: 0; }
 
-.traffic { margin: 0; display: grid; grid-template-columns: repeat(3, auto); gap: 8px 18px; justify-content: start; }
+.traffic { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 32px; }
 .traffic > div { display: grid; gap: 0; min-width: 0; white-space: nowrap; }
 .traffic dt { font-size: 11px; color: var(--muted); }
 .traffic dd { margin: 0; font-variant-numeric: tabular-nums; }
@@ -727,9 +726,6 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .conn { text-decoration: none; }
 .dot.ok:not(.on), .conn .dot.ok { background: var(--ok); }
 .conn .dot.pending { background: var(--faint); }
-.sys-row .stats { justify-self: end; }
-.stats .traffic { justify-content: end; }
-.stats .traffic > div { text-align: right; }
 .pace { font-size: 11px; }
 .pace.ok { color: var(--ok); } .pace.warn { color: var(--warn); } .pace.bad { color: var(--bad); }
 
@@ -737,3 +733,6 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .core-gauge .core-grid { height: 112px; width: 112px; display: grid; gap: 3px; align-content: center; justify-content: center; }
 .core-gauge .core { height: 17px; border-radius: 2px; }
 .donut .dv-xs { font-size: 11px; }
+
+.stats-line { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.stats-line h2 { font-size: 15px; margin: 0; }
