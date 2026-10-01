@@ -5,6 +5,7 @@ Newest first. Every commit adds its entry here.
 ## 0.1.2 (in progress)
 
 ### Added
+- **Clock gauge** after GPU power: the GPU's clock (outer ring) and the CPU's average clock (inner ring), in MHz.
 - **CPU cores gauge** beside the ring gauges: one short bar per core in a near-square grid (5 by 4 on the GB10), its caption level with the other gauges, the same view as the CPU tile at the bottom (amber from 85%, red from 97%; hover a bar for its core and clock).
 - **Network and Disk gauges** next to Temperature, GPU power and Load: network in and out, disk read and write, in MB/s, in larger rings so four-digit readings fit. The rings use a square-root scale, so light traffic still shows.
 - **Speed arrows** on the Stats block: Decode and Prefill show a green ▲ when the speed now is at least the average, an amber ▶ when a little slower, a red ▼ when well below it, and nothing while idle.

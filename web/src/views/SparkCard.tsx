@@ -81,6 +81,13 @@ function CoreGauge({ latest }: { latest: Snapshot }) {
   )
 }
 
+const CLOCK_MAX_MHZ = 4000 // the GB10's fastest cores boost to about 3.9 GHz, its GPU to 3.0
+/** The CPU's clock: the average over its cores (they run at different speeds). */
+function cpuClock(latest: Snapshot): number | null {
+  const f = Object.values(latest.system?.cpu_freq_mhz ?? {}).filter((x) => x > 0)
+  return f.length ? f.reduce((a, b) => a + b, 0) / f.length : null
+}
+
 export const TINTS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)']
 
 /** The box itself, in one row: GPU heat, power, free memory and the gateway, each with what it means. */
@@ -98,6 +105,7 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
               zones={[{ upTo: 70, color: 'var(--ok)' }, { upTo: 85, color: 'var(--warn)' }, { upTo: 100, color: 'var(--bad)' }]} />
             <Donut label="GPU power" value={g.power_w} max={POWER_MAX} unit="W"
               zones={[{ upTo: 80, color: 'var(--ok)' }, { upTo: 100, color: 'var(--warn)' }, { upTo: POWER_MAX, color: 'var(--bad)' }]} />
+            <Donut label="Clock" value={g.sm_clock_mhz} tag="GPU" second={{ value: cpuClock(latest), tag: 'CPU' }} max={CLOCK_MAX_MHZ} unit="MHz" size={128} />
             <Donut label="Load" value={g.util_pct} tag="GPU" second={{ value: latest.system?.cpu_pct?.cpu, tag: 'CPU' }} max={100} unit="%"
               zones={[{ upTo: 75, color: 'var(--s1)' }, { upTo: 90, color: 'var(--warn)' }, { upTo: 100, color: 'var(--bad)' }]} />
             <Donut label="Network" value={mb(net(latest, 'net_rx_bps'))} tag="In" second={{ value: mb(net(latest, 'net_tx_bps')), tag: 'Out' }} max={NET_MAX_MB} unit="MB/s" curve fine size={128} />
