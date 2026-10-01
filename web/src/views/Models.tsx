@@ -10,7 +10,7 @@ function PlanLine({ plan }: { plan: Plan }) {
   return (
     <p className={plan.fits ? 'muted' : 'bad'}>
       {plan.fits
-        ? `Fits: ${fmtNum(plan.context_tokens)} context, ${fmtNum(plan.kv_pool_tokens)} KV tokens (${fmtBytes(plan.kv_bytes)}), about ${fmtNum(plan.concurrency, 1)} requests at once.`
+        ? `Fits: ${fmtNum(plan.context_tokens)} context, ${fmtNum(plan.kv_pool_tokens)} KV tokens (${fmtBytes(plan.kv_bytes)}), about ${fmtNum(plan.concurrency, 1)} requests at once. About ${fmtBytes(plan.total_bytes ?? 0)} of memory in all.`
         : `Doesn't fit: ${plan.reason}`}
     </p>
   )
@@ -166,6 +166,10 @@ export function Editor({ model, onDone }: { model: ModelRow; onDone: (msg: strin
       <label>Speculative tokens<input type="number" value={r.num_speculative_tokens} onChange={(e) => set('num_speculative_tokens', Number(e.target.value))} /></label>
       {r.engine === 'llamacpp' && <label>GGUF file<input value={r.gguf_file ?? ''} onChange={(e) => set('gguf_file', e.target.value || null)} /></label>}
       </>}
+      <label className="check full">
+        <input type="checkbox" checked={!!r.fill_memory} onChange={(e) => set('fill_memory', e.target.checked)} />
+        Use all free memory (longest context that fits, every free byte for the KV cache). Off: the model takes only what its context needs.
+      </label>
       <label className="check full">
         <input type="checkbox" checked={r.publish} onChange={(e) => set('publish', e.target.checked)} />
         Publish on the gateway while it runs

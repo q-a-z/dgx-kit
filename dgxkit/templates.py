@@ -13,17 +13,21 @@ import yaml
 
 from .recipes import Recipe
 
-FIELDS = ("kv_cache_dtype", "max_context", "min_context", "min_concurrency",
+FIELDS = ("kv_cache_dtype", "max_context", "min_context", "min_concurrency", "fill_memory",
           "num_speculative_tokens", "extra_args", "publish")
 NAME = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
 
 BUILTIN = {
-    "balanced": {"about": "Longest context that still serves two requests at once.",
-                 "settings": {"kv_cache_dtype": "auto", "max_context": None, "min_concurrency": 2.0}},
-    "long-context": {"about": "One user, as much context as memory allows; FP8 KV cache doubles it.",
-                     "settings": {"kv_cache_dtype": "fp8", "max_context": None, "min_concurrency": 1.0}},
+    "compact": {"about": "8K context for one user: the smallest memory use.",
+                "settings": {"kv_cache_dtype": "fp8", "max_context": 8192, "min_concurrency": 1.0, "fill_memory": False}},
+    "balanced": {"about": "32K context, two requests at once: takes only the memory that needs.",
+                 "settings": {"kv_cache_dtype": "auto", "max_context": None, "min_concurrency": 2.0, "fill_memory": False}},
+    "long-context": {"about": "One user, 128K context; FP8 KV cache halves its memory.",
+                     "settings": {"kv_cache_dtype": "fp8", "max_context": 131072, "min_concurrency": 1.0, "fill_memory": False}},
     "many-users": {"about": "32K context, sized for eight requests at once; FP8 KV cache.",
-                   "settings": {"kv_cache_dtype": "fp8", "max_context": 32768, "min_concurrency": 8.0}},
+                   "settings": {"kv_cache_dtype": "fp8", "max_context": 32768, "min_concurrency": 8.0, "fill_memory": False}},
+    "all-memory": {"about": "Dedicated box: the longest context that fits, with every free byte for the KV cache.",
+                   "settings": {"kv_cache_dtype": "auto", "max_context": None, "min_concurrency": 2.0, "fill_memory": True}},
 }
 
 

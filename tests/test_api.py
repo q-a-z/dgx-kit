@@ -186,7 +186,7 @@ def test_templates_apply_save_and_delete(env):
     client, s, _ = env
     client.post("/api/models", json=model_body())
     names = [t["name"] for t in client.get("/api/templates").json()]
-    assert names[:3] == ["balanced", "long-context", "many-users"]
+    assert names[:5] == ["compact", "balanced", "long-context", "many-users", "all-memory"]
     r = client.post("/api/models/llama/apply-template/many-users").json()
     assert r["recipe"]["max_context"] == 32768 and r["recipe"]["min_concurrency"] == 8.0
     assert r["recipe"]["repo"] == "org/Llama-8B"  # templates never touch the model itself
@@ -274,7 +274,7 @@ def test_plan_preview_for_unsaved_edits(env):
     saved = client.get("/api/models/llama/plan").json()
     half = client.post("/api/models/llama/plan", json={"max_context": saved["context_tokens"] // 2, "name": "ignored"}).json()
     assert half["context_tokens"] == saved["context_tokens"] // 2
-    assert half["concurrency"] > saved["concurrency"]
+    assert half["kv_bytes"] < saved["kv_bytes"] and half["total_bytes"] < saved["total_bytes"]  # a smaller context takes less memory
     more = client.post("/api/models/llama/plan?own_bytes=8589934592", json={}).json()
     assert more["kv_bytes"] > saved["kv_bytes"]
     assert client.get("/api/models/llama/plan").json() == saved

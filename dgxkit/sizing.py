@@ -52,6 +52,8 @@ class Plan:
     # Share of total memory to tell vLLM (--gpu-memory-utilization): weights, KV and headroom, never its 0.92
     # default, which fails whenever another model already holds memory on unified-memory boxes.
     gpu_fraction: float | None = None
+    # What the model should take in all: weights with headroom, the KV cache, and a little for the engine itself.
+    total_bytes: int = 0
 
 
 def plan(
@@ -67,19 +69,29 @@ def plan(
     headroom_fraction: float = 0.10,
     kv_cache_bytes: int | None = None,
     total_bytes: int | None = None,
+    cap_pool: bool = False,
 ) -> Plan:
     """Largest context (halving from max_context) that leaves min_concurrency in the pool.
 
     available_bytes is unified memory free right now (MemAvailable), so models
     already running are accounted for. reserve_bytes is kept back for the OS;
     headroom_fraction of the weights covers activations and CUDA graphs.
+
+    By default the KV pool takes every byte that is free, which is what a dedicated box wants. With cap_pool it is only
+    as big as the chosen context times min_concurrency needs (plus a little), so a model takes the memory it needs, not all of it.
     """
     c = text_config(config)
-    max_context = max_context or c.get("max_position_embeddings") or 32768
+    model_max = c.get("max_position_embeddings")
+    max_context = max_context or model_max or 32768
+    if model_max:
+        max_context = min(max_context, model_max)  # no point asking for more than the model was trained for
     per_token = kv_bytes_per_token(config, kv_dtype)
     kv_budget = available_bytes - reserve_bytes - int(weights_bytes * (1 + headroom_fraction))
     if kv_budget <= 0:
         return Plan(0, 0, 0, 0.0, False, "weights don't fit in free memory")
+
+    def total(kv: int) -> int:
+        return int(weights_bytes * (1 + headroom_fraction) + kv + 2 * GIB)
 
     def frac(kv: int) -> float | None:
         if not total_bytes:
@@ -92,14 +104,15 @@ def plan(
         ctx = max_context  # as the user wrote it; the engine checks it against its own pool
         ok = kv_cache_bytes <= kv_budget
         return Plan(ctx, pool, kv_cache_bytes, round(pool / ctx, 2) if ctx else 0.0, ok,
-                    "" if ok else "the fixed KV cache doesn't fit in free memory", frac(kv_cache_bytes))
+                    "" if ok else "the fixed KV cache doesn't fit in free memory", frac(kv_cache_bytes), total(kv_cache_bytes))
     pool = kv_budget // per_token
     ctx = max_context
     while ctx >= min_context:
         if pool / ctx >= min_concurrency:
-            return Plan(ctx, pool, pool * per_token, round(pool / ctx, 2), True, "", frac(pool * per_token))
+            used = min(pool, int(ctx * min_concurrency * 1.05) + 1) if cap_pool else pool
+            return Plan(ctx, used, used * per_token, round(used / ctx, 2), True, "", frac(used * per_token), total(used * per_token))
         ctx //= 2
     if pool >= min_context:
         return Plan(min_context, pool, pool * per_token, round(pool / min_context, 2), True,
-                    f"concurrency below {min_concurrency} even at the minimum context", frac(pool * per_token))
+                    f"concurrency below {min_concurrency} even at the minimum context", frac(pool * per_token), total(pool * per_token))
     return Plan(0, pool, pool * per_token, 0.0, False, "not enough memory for the minimum context")

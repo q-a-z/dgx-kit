@@ -30,6 +30,7 @@ class Recipe:
     max_context: int | None = None
     min_context: int = 4096
     min_concurrency: float = 2.0
+    fill_memory: bool = False  # take all free memory for the KV cache and the longest context it allows, instead of what the context needs
     extra_args: list[str] = field(default_factory=list)
     speculative_extra: dict = field(default_factory=dict)  # more --speculative-config keys, e.g. draft_sample_method
     env: dict = field(default_factory=dict)  # extra environment for the engine container

@@ -70,6 +70,7 @@ export type Recipe = {
   max_context: number | null
   min_context: number
   min_concurrency: number
+  fill_memory?: boolean
   extra_args: string[]
   quick?: { decode_mean_tps?: number | null; prefill_mean_tps?: number | null; skipped?: string; error?: string } | null  // the speed check taken when it started
   options?: string | null  // vLLM models: every engine setting as text, one flag per line
@@ -92,7 +93,7 @@ export type ModelRow = Recipe & {
   preparing?: { image: string; kind?: string; state?: string; error?: string | null; tail?: string[]; progress?: number | null } | null
 }
 
-export type Plan = { context_tokens: number; kv_pool_tokens: number; kv_bytes: number; concurrency: number; fits: boolean; reason: string }
+export type Plan = { context_tokens: number; kv_pool_tokens: number; kv_bytes: number; concurrency: number; fits: boolean; reason: string; total_bytes?: number }
 
 export class ApiError extends Error {
   problems: string[]

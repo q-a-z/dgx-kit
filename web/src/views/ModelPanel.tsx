@@ -130,7 +130,7 @@ function More({ entry, readonly, onChanged }: { entry: Entry; readonly: boolean;
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc) }
   }, [])
   const check = () => api<Plan>(`/api/models/${encodeURIComponent(entry.name)}/plan`).then((p) => setFit(p.fits
-    ? `Fits now: ${fmtNum(p.context_tokens)} context, KV cache ${fmtBytes(p.kv_bytes)}, about ${fmtNum(p.concurrency, 1)} full-length requests at once.`
+    ? `Fits now: ${fmtNum(p.context_tokens)} context, KV cache ${fmtBytes(p.kv_bytes)}, about ${fmtNum(p.concurrency, 1)} full-length requests at once. About ${fmtBytes(p.total_bytes ?? 0)} of memory in all.`
     : `Doesn’t fit right now: ${p.reason}`))
   return (
     <>
@@ -167,22 +167,23 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
   const q = encodeURIComponent(model.name)
   const own = entry.running ? entry.memBytes ?? 0 : 0
   const changed = FIELDS.filter((f) => r[f.key] !== model[f.key])
+  const fillChanged = !!r.fill_memory !== !!model.fill_memory
   const timer = useRef<number | undefined>(undefined)
-  const body = (x: Recipe) => ({ max_context: x.max_context, min_concurrency: x.min_concurrency, kv_cache_dtype: x.kv_cache_dtype })
+  const body = (x: Recipe) => ({ max_context: x.max_context, min_concurrency: x.min_concurrency, kv_cache_dtype: x.kv_cache_dtype, fill_memory: !!x.fill_memory })
 
   useEffect(() => {
     api<Plan>(`/api/models/${q}/plan?own_bytes=${own}`, { method: 'POST', json: body(model) }).then(setNow).catch(() => {})
   }, [q]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     window.clearTimeout(timer.current)
-    if (!changed.length) { setPlan(null); onPreview(null); return }
+    if (!changed.length && !fillChanged) { setPlan(null); onPreview(null); return }
     timer.current = window.setTimeout(() => {
       api<Plan>(`/api/models/${q}/plan?own_bytes=${own}`, { method: 'POST', json: body(r) }).then((p) => {
         setPlan(p)
         onPreview(p.fits ? { name: model.name, bytes: Math.round((model.weights_bytes + model.draft_weights_bytes) * 1.1) + p.kv_bytes } : null)
       }).catch(() => {})
     }, 250)
-  }, [r.max_context, r.min_concurrency, r.kv_cache_dtype, r.num_speculative_tokens]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [r.max_context, r.min_concurrency, r.kv_cache_dtype, r.num_speculative_tokens, r.fill_memory]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => onPreview(null), []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async (then: 'restart' | 'start' | null) => {
@@ -216,12 +217,16 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
               <span>{f.label}</span>
               {f.key === 'kv_cache_dtype'
                 ? <select value={String(is)} onChange={(e) => set(f.key, e.target.value)}><option>auto</option><option>fp8</option><option>bf16</option></select>
-                : <input type="number" step={f.key === 'min_concurrency' ? 0.5 : 1} value={is == null ? '' : String(is)} placeholder="from model" onChange={(e) => set(f.key, e.target.value)} />}
+                : <input type="number" step={f.key === 'min_concurrency' ? 0.5 : 1} value={is == null ? '' : String(is)} placeholder={f.key === 'max_context' ? (r.fill_memory ? 'longest that fits' : '32768 (default)') : 'from model'} onChange={(e) => set(f.key, e.target.value)} />}
               <small>{is !== was ? `was ${was == null ? 'from model' : typeof was === 'number' ? fmtNum(was) : was}` : f.hint}</small>
             </label>
           )
         })}
       </div>
+      <label className="check">
+        <input type="checkbox" checked={!!r.fill_memory} onChange={(e) => setR({ ...r, fill_memory: e.target.checked })} />
+        Use all free memory <small className="muted">(off: only what the context needs{(plan ?? now) ? `, about ${fmtBytes((plan ?? now)!.total_bytes ?? 0)} in all` : ''})</small>
+      </label>
       {plan && now && (
         <p className={`preview ${plan.fits ? '' : 'bad'}`}>
           {plan.fits ? <>
@@ -232,7 +237,7 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
         </p>
       )}
       <div className="row">
-        {verb && <button className="primary" disabled={!changed.length || a.locked || (plan != null && !plan.fits)} title={a.locked ? a.why ?? undefined : undefined}
+        {verb && <button className="primary" disabled={(!changed.length && !fillChanged) || a.locked || (plan != null && !plan.fits)} title={a.locked ? a.why ?? undefined : undefined}
           onClick={() => save(verb)}>{verb === 'restart' ? 'Restart' : 'Start'} with {changed.length || 'no'} change{changed.length === 1 ? '' : 's'}</button>}
         <button disabled={!changed.length} onClick={() => save(null)}>Save only</button>
         {changed.length > 0 && <button className="ghost" onClick={() => setR(model)}>Undo</button>}

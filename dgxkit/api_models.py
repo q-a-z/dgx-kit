@@ -61,11 +61,18 @@ def ensure_config(s, r: Recipe) -> None:
     r.config = read_config(f)
 
 
+DEFAULT_CONTEXT = 32768  # what a model gets when nobody asked for a context: enough for most work, and not all of the memory
+
+
 def plan_for(s, r: Recipe, extra_free: int = 0):
     ensure_config(s, r)
+    max_context = r.max_context
+    if not max_context and not r.fill_memory:
+        max_context = DEFAULT_CONTEXT
     return plan(r.config, r.weights_bytes + r.draft_weights_bytes, available_bytes(s) + max(0, extra_free),
-                kv_dtype=r.kv_cache_dtype, max_context=r.max_context, min_context=r.min_context,
-                min_concurrency=r.min_concurrency, kv_cache_bytes=r.kv_cache_bytes, total_bytes=total_bytes(s))
+                kv_dtype=r.kv_cache_dtype, max_context=max_context, min_context=r.min_context,
+                min_concurrency=r.min_concurrency, kv_cache_bytes=r.kv_cache_bytes, total_bytes=total_bytes(s),
+                cap_pool=not r.fill_memory)
 
 
 def _exists(s, name: str) -> bool:
@@ -304,7 +311,7 @@ async def preview_plan(name: str, request: Request):
     return asdict(plan_for(s, s.store.get(name)))
 
 
-PREVIEW_KEYS = {"max_context", "min_context", "min_concurrency", "kv_cache_dtype", "kv_cache_bytes"}
+PREVIEW_KEYS = {"max_context", "min_context", "min_concurrency", "kv_cache_dtype", "kv_cache_bytes", "fill_memory"}
 
 
 @router.post("/models/{name}/plan")

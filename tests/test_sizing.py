@@ -55,3 +55,25 @@ def test_nemotron_h_counts_attention_from_layers_block_type():
     from dgxkit.sizing import attention_layers
     cfg = {"layers_block_type": ["linear_attention", "moe", "full_attention", "moe", "full_attention"]}  # no num_hidden_layers
     assert attention_layers(cfg) == 2
+
+
+def test_a_model_takes_what_its_context_needs_not_all_free_memory():
+    """A 27B-class model on a 120 GB box used to be handed every free byte for its KV cache."""
+    from dgxkit.sizing import GIB, plan
+    cfg = {"num_hidden_layers": 64, "num_attention_heads": 32, "num_key_value_heads": 8, "hidden_size": 5120,
+           "max_position_embeddings": 262144}
+    weights, free, total = 54 * GIB, 110 * GIB, 121 * GIB
+    greedy = plan(cfg, weights, free, kv_dtype="auto", total_bytes=total)  # the old behaviour, still there for a dedicated box
+    modest = plan(cfg, weights, free, kv_dtype="auto", max_context=32768, total_bytes=total, cap_pool=True)
+    assert greedy.total_bytes > 95 * GIB                          # it filled the machine
+    assert modest.context_tokens == 32768 and modest.concurrency <= 2.2
+    assert modest.fits and modest.total_bytes < 85 * GIB            # 54 GB of weights, ~21 GB of KV, headroom
+    assert greedy.total_bytes - modest.total_bytes > 20 * GIB       # and 20+ GB stay free for others
+    assert modest.gpu_fraction < greedy.gpu_fraction              # vLLM is told to take less, too
+
+
+def test_a_context_beyond_what_the_model_was_trained_for_is_clipped():
+    from dgxkit.sizing import GIB, plan
+    cfg = {"num_hidden_layers": 32, "num_attention_heads": 32, "num_key_value_heads": 8, "hidden_size": 4096,
+           "max_position_embeddings": 8192}
+    assert plan(cfg, 8 * GIB, 60 * GIB, max_context=131072, cap_pool=True).context_tokens == 8192
