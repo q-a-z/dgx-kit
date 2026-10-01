@@ -1,4 +1,4 @@
-import { fmtBytes, fmtNum, type Gateway, type Live, type Snapshot } from '../api'
+import { fmtNum, type Gateway, type Live, type Snapshot } from '../api'
 import { Donut } from '../components/Donut'
 import type { Entry } from '../fleet'
 import { usePoll } from '../usePoll'
@@ -25,32 +25,31 @@ function avgSpeed(xs: Live[], toks: string, speed: string): number | null {
 /** Traffic through the running models: totals since each started, speeds now and on average. */
 function TrafficStats({ latest }: { latest: Snapshot }) {
   const up = Object.values(latest.models).filter((x) => x.up)
-  if (!up.length) return <div className="cell"><span className="lbl">Traffic</span><span className="muted small">No model running</span></div>
+  if (!up.length) return <div className="cell"><span className="muted small">No model running</span></div>
   const dec = avgSpeed(up, 'gen_tokens_total', 'decode_tps_req')
   const pre = avgSpeed(up, 'prompt_tokens_total', 'prefill_tps_req')
+  const waiting = sum(up, 'waiting')
+  const stat = (k: string, v: string, sub?: string, tip?: string) =>
+    <div title={tip}><dt>{k}</dt><dd><b className="n">{v}</b>{sub && <small className="muted"> {sub}</small>}</dd></div>
   return (
-    <div className="cell traffic">
-      <span className="lbl">Traffic <span className="muted small">since the models started</span></span>
-      <dl>
-        <div><dt>Tokens in</dt><dd><b className="n">{compact(sum(up, 'prompt_tokens_total'))}</b></dd></div>
-        <div><dt>Tokens out</dt><dd><b className="n">{compact(sum(up, 'gen_tokens_total'))}</b></dd></div>
-        <div><dt>Requests</dt><dd><b className="n">{compact(sum(up, 'requests_total'))}</b></dd></div>
-        <div><dt>Busy now</dt><dd><b className="n">{sum(up, 'running')}</b> <small className="muted">{sum(up, 'waiting')} waiting</small></dd></div>
-        <div><dt>Decode</dt><dd><b className="n">{fmtNum(sum(up, 'decode_tps'))}</b> <span className="muted small">tok/s</span><small className="muted">{dec != null ? `average ${fmtNum(dec)}` : 'no average yet'}</small></dd></div>
-        <div><dt>Prefill</dt><dd><b className="n">{fmtNum(sum(up, 'prefill_tps'))}</b> <span className="muted small">tok/s</span><small className="muted">{pre != null ? `average ${fmtNum(pre)}` : 'no average yet'}</small></dd></div>
-      </dl>
-    </div>
+    <dl className="cell traffic">
+      {stat('In', compact(sum(up, 'prompt_tokens_total')), 'tokens', 'Prompt tokens since the models started')}
+      {stat('Out', compact(sum(up, 'gen_tokens_total')), 'tokens', 'Generated tokens since the models started')}
+      {stat('Requests', compact(sum(up, 'requests_total')), undefined, 'Finished requests since the models started')}
+      {stat('Decode', fmtNum(sum(up, 'decode_tps')), dec != null ? `/ avg ${fmtNum(dec)} t/s` : 't/s', 'Output tokens per second now, and the average per request')}
+      {stat('Prefill', fmtNum(sum(up, 'prefill_tps')), pre != null ? `/ avg ${fmtNum(pre)} t/s` : 't/s', 'Prompt tokens per second now, and the average per request')}
+      {stat('Busy', String(sum(up, 'running')), waiting ? `+${waiting} waiting` : undefined, 'Requests running now')}
+    </dl>
   )
 }
 
 export const TINTS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)']
 
 /** The box itself, in one row: GPU heat, power, free memory and the gateway, each with what it means. */
-export function SparkCard({ latest, reserved, hwOpen, toggleHw }: {
+export function SparkCard({ latest, hwOpen, toggleHw }: {
   latest: Snapshot; history: Snapshot[]; entries: Entry[]; showMemory: boolean; reserved: number; hwOpen: boolean; toggleHw: () => void
 }) {
   const g = latest.gpu
-  const m = latest.system?.memory
   const throttled = !!g?.events.length
   return (
     <section className="system" aria-label="System">
@@ -70,13 +69,6 @@ export function SparkCard({ latest, reserved, hwOpen, toggleHw }: {
           </div>
         )}
         <TrafficStats latest={latest} />
-        {m && (
-          <div className="cell">
-            <span className="lbl">Memory free</span>
-            <span><b className="n">{fmtBytes(m.available_bytes)}</b> <span className="muted">of {fmtBytes(m.total_bytes)}</span></span>
-            <span className="muted small">{reserved > 0 ? `${fmtBytes(reserved)} wanted by downloads` : 'nothing waiting for room'}</span>
-          </div>
-        )}
         <GatewayLine />
       </div>
     </section>

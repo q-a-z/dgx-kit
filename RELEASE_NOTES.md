@@ -5,10 +5,11 @@ Newest first. Every commit adds its entry here.
 ## 0.1.2 (in progress)
 
 ### Added
-- **Traffic stats** on the home page next to the gauges: tokens in and out, requests, requests running and waiting, and decode and prefill speed now and on average, summed over the running models. Totals count from when each model started.
+- **Traffic stats** on the home page next to the gauges, in six compact figures: tokens in and out, requests, decode and prefill speed now and on average, and requests running (with those waiting), summed over the running models. Totals count from when each model started.
 - **Extra LiteLLM settings editor** in Settings, Gateway: edit `litellm/extra.env` in the page (Save, or Save and apply, which restarts the gateway for a few seconds), see which lines are ignored and whether the saved file is live. No root editing needed.
 
 ### Changed
+- The "Memory free" block is gone from the home page's System card (the memory map shows it).
 - **API documentation:** [docs/API.md](docs/API.md) describes every route, sign-in, errors, read-only mode and the model fields; `/docs` on the dashboard is the generated reference.
 - README now documents every file and folder in the settings and state folders, every `config.env` key, the other variables, the Docker objects and the `--user` equivalents.
 
