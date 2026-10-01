@@ -32,8 +32,7 @@ function pace(now: number, avg: number | null) {
 /** Traffic through the running models: totals since each started, speeds now and on average. */
 function TrafficStats({ latest }: { latest: Snapshot }) {
   const up = Object.values(latest.models).filter((x) => x.up)
-  const caption = <span className="lbl">Stats</span>
-  if (!up.length) return <div className="cell stats">{caption}<span className="muted small">No model running</span></div>
+  if (!up.length) return <div className="cell stats"><span className="muted small">No model running</span></div>
   const dec = avgSpeed(up, 'gen_tokens_total', 'decode_tps_req')
   const pre = avgSpeed(up, 'prompt_tokens_total', 'prefill_tps_req')
   const waiting = sum(up, 'waiting')
@@ -41,7 +40,6 @@ function TrafficStats({ latest }: { latest: Snapshot }) {
     <div title={tip}><dt>{k}</dt><dd><b className="n">{v}</b>{arrow}{sub && <small className="muted"> {sub}</small>}</dd></div>
   return (
     <div className="cell stats">
-      {caption}
       <dl className="traffic">
         {stat('In', compact(sum(up, 'prompt_tokens_total')), 'tokens', 'Prompt tokens since the models started')}
         {stat('Out', compact(sum(up, 'gen_tokens_total')), 'tokens', 'Generated tokens since the models started')}
@@ -62,7 +60,7 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
   const throttled = !!g?.events.length
   return (
     <section className="system" aria-label="System">
-      <div className="sys-head"><h2>System</h2>{g?.name && <span className="muted">{g.name}</span>}<span className="grow" />
+      <div className="sys-head"><h2>System</h2>{g?.name && <span className="muted">{g.name}</span>}<span className="grow" /><h2 className="stats-title">Stats</h2>
       </div>
       <div className="sys-row">
         {g && (

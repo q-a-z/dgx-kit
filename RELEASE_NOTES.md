@@ -11,7 +11,7 @@ Newest first. Every commit adds its entry here.
 - **Extra LiteLLM settings editor** in Settings, Gateway: edit `litellm/extra.env` in the page (Save, or Save and apply, which restarts the gateway for a few seconds), see which lines are ignored and whether the saved file is live. No root editing needed.
 
 ### Changed
-- The traffic figures sit at the right of the System card under a **Stats** caption.
+- The traffic figures sit at the right of the System card under a **Stats** heading in the same style as **System**.
 - The "serving normally · free memory · gateway OK" line next to the logo is gone; the top bar shows a status there only when something needs attention.
 - **CPU, disk, network** is always open at the bottom of the home page; the fold/unfold button in the System card is gone.
 - The gateway address and the **Open LiteLLM** link moved from the home page to Settings, Gateway; the home page's System card no longer has a gateway block or the "Serves" list.
