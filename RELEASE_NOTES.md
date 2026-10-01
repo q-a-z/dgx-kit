@@ -2,7 +2,12 @@
 
 Newest first. Every commit adds its entry here.
 
-## 0.1.4 (in progress)
+## 0.1.5 (in progress)
+
+### Changed
+- Version bump. Everything in 0.1.4 below is released; new changes are listed here from now on.
+
+## 0.1.4
 
 ### Added
 - **Memory autotuning: a model takes what its context needs, not all free memory.** Until now a model without a fixed KV cache was handed every free byte for it, so a 27B model could take 112 GB on a quiet machine. Now, unless you ask otherwise, the context defaults to 32K tokens (never more than the model supports) and the KV cache is sized for that context and the "min requests at once" setting, plus 5%. Settings show how much memory the model will use in all ("About 82 GB of memory in all"). **Use all free memory** (model settings) brings back the old behaviour for a dedicated box; models with a fixed KV cache size are not affected. New built-in templates: **compact** (8K context, one user), **long-context** (128K) and **all-memory**.

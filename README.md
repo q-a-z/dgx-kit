@@ -11,8 +11,9 @@ Release notes: [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 ## What it does
 
-- **Watch the machine:** GPU temperature, power and load, CPU, memory, storage and network, with the models laid out in unified memory.
-- **Run models:** start and stop them with sizing from the memory that is free, edit their engine options as one block of text, and see speed and cache numbers live.
+- **Watch the machine:** gauges for temperature, power, clock, load, network, disk and every CPU core, a stats line (tokens in and out, requests, decode and prefill speed against their averages), and the models laid out in unified memory. The logo carries the box's real model, read from its firmware (for example ASUS GX10).
+- **Keep track of firmware:** Settings → System lists the BIOS, GPU VBIOS, kernel, driver and every firmware device fwupd manages, says when an update is available, and remembers when any version changed.
+- **Run models:** start and stop them, edit their engine options as one block of text, and see speed and cache numbers live. A model takes the memory its context needs, not all that is free (it says how much), and Start fetches a missing engine image by itself. GGUF models run on llama.cpp with nothing to build.
 - **One gateway:** every running model is published on one OpenAI-compatible address through a built-in LiteLLM, and you can publish or unpublish each one.
 - **Bring your setup over:** import llmctl `.conf` files, including models whose weights are already on disk.
 - **Measure:** a ten-second speed check after each start, and a full benchmark when you ask for it.
@@ -21,9 +22,9 @@ Release notes: [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 ## Screenshots
 
-![The dashboard: GPU temperature, power and load, free memory, the LiteLLM gateway and the memory map](docs/screenshots/dashboard.png)
+![The dashboard: gauges for temperature, power, clock, load, network, disk and CPU cores, the stats line and the memory map](docs/screenshots/dashboard.png)
 
-The dashboard shows the machine at a glance and every model as a block in unified memory.
+The dashboard shows the machine at a glance, a stats line for the models' traffic, and every model as a block in unified memory.
 
 ![A model's settings as one block of engine options](docs/screenshots/model-settings.png)
 
@@ -48,8 +49,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 1. Get the package onto the Spark and unpack it:
 
    ```
-   tar xzf dgx-kit-0.1.4.tar.gz
-   cd dgx-kit-0.1.4
+   tar xzf dgx-kit-0.1.5.tar.gz
+   cd dgx-kit-0.1.5
    ```
 
 2. Look before you leap (changes nothing):
@@ -92,7 +93,7 @@ The install leaves a `dgx-kit` command. Updating is one line:
 ```
 dgx-kit update                      # fetch the latest from git and update
 dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
-dgx-kit update dgx-kit-0.1.4.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit update dgx-kit-0.1.5.tar.gz # from a package, a .tgz, or a GitHub .zip
 dgx-kit version                     # what is running
 ```
 
@@ -179,7 +180,9 @@ Every question can be answered ahead of time with `DGXKIT_INSTALL_<NAME>` (see *
 **Each model has a panel** with four tabs: **Live** (speed, queue, KV cache, draft acceptance), **Settings**, **Logs** and **Benchmark**.
 
 - **Publish / Unpublish.** The button in a model's panel lists it on the gateway or takes it off, right away, without restarting the model. Unpublish asks first, because clients lose access. The panel says whether the model is *published*. A stopped model publishes as soon as it runs.
-- **Settings of a model.** One text box of engine options, the same lines an llmctl `.conf` holds (`--max-model-len 393216`, `--moe-backend marlin`, and so on). Remove a line to clear it. If you don't fix the context or KV cache, DGX-kit sizes them from the memory that is free.
+- **Settings of a model.** One text box of engine options, the same lines an llmctl `.conf` holds (`--max-model-len 393216`, `--moe-backend marlin`, and so on). Remove a line to clear it. Unless you fix the context or the KV cache, DGX-kit picks a 32K context (never more than the model supports) and sizes the KV cache for it and for the requests at once, so a model takes what it needs and not all the free memory. The settings show the total ("about 82 GB in all"); **Use all free memory** gives the longest context that fits to a box that runs one model. The templates **compact**, **balanced**, **long-context**, **many-users** and **all-memory** set these in one click.
+- **Images are fetched for you.** Press Start on a model whose engine image isn't on the box and DGX-kit pulls it, with a progress bar, and starts the model by itself when it is there (Stop cancels). llama.cpp models use the upstream CUDA 13 image, which runs on the GB10 as it is. Images built from DGX-kit's own recipes (the GB10 vLLM images) are optional extras; a model that names one nobody built uses the engine's own image.
+- **"Saved" messages.** Saving settings, templates, the gateway, the Hugging Face token, folders, an image or the password shows a short message in the corner.
 - **Start, Stop and Restart.** Stop and Restart always ask first. A model you stopped shows **Stopped**; one that died shows **Crashed** with its exit code.
 - **Speed check.** When a model you started first answers, DGX-kit takes a ten-second check (two short decodes, two prefills) and shows it on the model. It is skipped when other models are busy.
 - **Benchmark.** The **Benchmark** tab runs the full battery or a quick run, only when you press the button. It refuses to run while other models are busy, because that would spoil the numbers.
@@ -189,13 +192,14 @@ Every question can be answered ahead of time with `DGXKIT_INSTALL_<NAME>` (see *
 
 ## Settings
 
-Settings has one tab per topic, and the tab is in the address (`#/settings/images`), so a link opens the same one.
+Settings has one tab per topic (**System** is the first), and the tab is in the address (`#/settings/images`), so a link opens the same one.
 
 | Tab | What it is for |
 |---|---|
+| System | The box's model, BIOS, GPU VBIOS, kernel, driver, CUDA, Docker and DGX-kit versions; firmware devices and updates from fwupd (a check once a day, or **Check for updates**); and a list of when any version changed. It only reports: install updates with `sudo fwupdmgr update`. |
 | Gateway | The LiteLLM address and key, the **Set up LiteLLM** button, what the gateway serves, and an editor for its extra LiteLLM settings. |
 | Hugging Face | A token for gated or private models. Checked when you save. |
-| Engine images | The Docker images models run in; pull, change a tag, or build the GB10 vLLM images (patches, FlashInfer 0.7.0). |
+| Engine images | The Docker images models run in; pull, change a tag (a tag the box doesn't have is pulled at once, with a progress bar), or build the optional GB10 vLLM images (patches, FlashInfer 0.7.0). |
 | Model folders | Where DGX-kit looks for models. |
 | Import | Turn llmctl `.conf` files into models. |
 | Delete from disk | The only place model files can be deleted (four confirmations). |

@@ -54,9 +54,10 @@ A model is a **recipe**: the engine, the weights, and its options. Fields (all o
 | `gguf_file` | The file to load, for llama.cpp |
 | `draft_repo`, `draft_method`, `num_speculative_tokens` | A speculative-decoding draft: `eagle3`, `dflash`, `mtp`, `draft_model` or `auto` |
 | `speculative_extra` | More `--speculative-config` keys |
-| `kv_cache_dtype`, `kv_cache_bytes` | KV cache type, and a fixed size (empty lets DGX-kit size it from free memory) |
+| `kv_cache_dtype`, `kv_cache_bytes` | KV cache type, and a fixed size (empty: sized for the context) |
+| `fill_memory` | `true` takes every free byte for the KV cache and the longest context that fits (the old behaviour); default `false` sizes the KV cache for the context and `min_concurrency` only |
 | `gpu_memory_utilization` | A fixed share of GPU memory (empty: worked out) |
-| `max_context`, `min_context`, `min_concurrency` | Sizing targets |
+| `max_context`, `min_context`, `min_concurrency` | Sizing targets. An empty `max_context` means 32768 (or the model's maximum if smaller) unless `fill_memory` is set |
 | `extra_args` | Extra engine command-line arguments |
 | `env` | Extra environment for the engine container |
 | `docker` | Container settings: `mem_limit`, `shm_size`, `volumes` (`["src:dst[:mode]"]`) |
@@ -72,9 +73,9 @@ A model is a **recipe**: the engine, the weights, and its options. Fields (all o
 | `DELETE /api/models/{name}` | Forget the model. Its files on disk are never touched |
 | `GET /api/models/{name}/versions` | Saved earlier versions of the recipe |
 | `POST /api/models/{name}/restore/{version}` | Go back to one of them |
-| `GET /api/models/{name}/plan` | The memory plan for the saved recipe: context tokens, KV pool, concurrency |
+| `GET /api/models/{name}/plan` | The memory plan for the saved recipe: `context_tokens`, `kv_pool_tokens`, `kv_bytes`, `concurrency`, `fits`, `reason`, and `total_bytes` (weights, KV cache and headroom: what the model should take in all). A GGUF model is sized from its file's header |
 | `POST /api/models/{name}/plan?own_bytes=N` | The same for unsaved edits in the body. `own_bytes` is memory the model holds now and would give back on restart |
-| `POST /api/models/{name}/start` | Start it. Answers `{"port", "plan", "command"}`; `409` with `problems` when it can't start (not downloaded, image missing, not enough memory). The gateway is updated and a ten-second speed check runs once it answers |
+| `POST /api/models/{name}/start` | Start it. Answers `{"port", "plan", "command"}`; `409` with `problems` when it can't start (not downloaded, GGUF file missing, not enough memory). When its engine image isn't on the box it answers `202 {"preparing": {image, state, progress, tail}}`: the image is pulled (or built, for a local build with no other option) and the model starts by itself afterwards; the model's row shows `preparing` meanwhile, and `stop` cancels. A local build nobody built is replaced by the engine's own image. The gateway is updated and a ten-second speed check runs once it answers |
 | `POST /api/models/{name}/stop` | Stop it. `409` when requests are running or waiting, unless `?force=1` |
 | `GET /api/models/{name}/logs?tail=200` | Container log tail (text) |
 | `POST /api/models/{name}/publish` | Body `{"publish": true|false}`: list it on the gateway or not, without restarting it |
@@ -83,7 +84,7 @@ A model is a **recipe**: the engine, the weights, and its options. Fields (all o
 
 ### Templates
 
-Ready-made sets of sizing settings (`balanced`, `long-context`, `many-users`, and your own).
+Ready-made sets of sizing settings (`compact`, `balanced`, `long-context`, `many-users`, `all-memory`, and your own).
 
 | Method and path | What it does |
 |---|---|
@@ -150,11 +151,20 @@ Clients use the gateway directly at `http://<host>:4000/v1` with the key (OpenAI
 | `GET /api/images` | Per engine: `image`, `default`, `ready`, `source`, and the local `builds` (`id`, `image`, `about`, `ready`, `patches`, `job`) |
 | `PUT /api/images/{engine}` | Body `{"image": "tag" | null}`: point an engine at another tag; `null` returns to the pinned default. Applies at the next start |
 | `GET /api/images/choices/{engine}` | Tags one model can be set to |
-| `POST /api/images/{engine}/pull` | Pull the image. `202` |
+| `POST /api/images/{engine}/pull` | Pull the engine's image (builds it instead when it is a local build). `202` |
+| `POST /api/images/pull` | Body `{"image": "registry/name:tag"}`: pull any tag, for example one picked in a model's settings. `202`; `422` for a local build tag, which has to be built |
+| `GET /api/images/status?image=` | `{image, ready, build, job}`: whether the tag is on the box, the local build that makes it (if it is one), and the progress of a pull or build of it (`state`, `progress` 0..1, `tail`) |
 | `POST /api/images/builds/{build}?make_default=false` | Build a local image (the GB10 vLLM images, llama.cpp). `202`. With `make_default=true` the engine switches to it |
 | `POST /api/images/clean` | Remove engine images nothing uses |
 
 `{engine}` is `vllm`, `sglang`, `llamacpp` or `litellm`.
+
+## System
+
+| Method and path | What it does |
+|---|---|
+| `GET /api/system` | `items` (model, vendor, BIOS, GPU VBIOS, kernel, driver, CUDA, Docker, DGX-kit, each with `group`, `label`, `value`), `firmware` (`checked`, `error`, `updates`, `devices` from fwupd with their `updates`), `changes` (what changed and when) and `since` |
+| `POST /api/system/firmware/check` | Ask fwupd for devices and updates now (a short-lived container with the system D-Bus). Reports only; installs nothing. `403` in read-only mode |
 
 ## Settings
 
