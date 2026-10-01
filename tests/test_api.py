@@ -61,6 +61,12 @@ class FakeImages:
 
     defaults = {"vllm": "dgx-kit/vllm:test"}
 
+    def build_for(self, image):
+        return "llamacpp-gb10" if image == "dgx-kit/llamacpp:gb10" else None
+
+    def start_build(self, build, make_default=False):
+        raise AssertionError("starting a model must not need a build when another image will do")
+
     def start_pull_image(self, image):
         from dgxkit.images import Job
         self.ready = True
@@ -501,7 +507,7 @@ def test_gguf_model_without_config_is_sized_from_the_files_header(env):
     # a config that says nothing useful is a clear refusal, not a crash
     client.post("/api/models", json={**body, "name": "blank", "gguf_file": "missing.gguf"})
     miss = client.get("/api/models/blank/plan")
-    assert miss.status_code == 422 and "GGUF file not found" in miss.json()["detail"] and "relative to the model folder" in miss.json()["detail"]
+    assert miss.status_code == 422 and "GGUF file not found" in miss.json()["detail"] and "relative to its folder" in miss.json()["detail"]
 
 
 def test_pulling_a_tag_picked_in_a_models_settings_can_be_followed(env):
@@ -511,3 +517,28 @@ def test_pulling_a_tag_picked_in_a_models_settings_can_be_followed(env):
     assert client.post("/api/images/pull", json={"image": "org/engine:1"}).status_code == 202
     assert client.get("/api/images/status", params={"image": "org/engine:1"}).json()["ready"] is True
     assert client.post("/api/images/pull", json={"image": "two words"}).status_code == 422
+
+
+def test_start_fetches_a_missing_image_itself_and_then_starts(env):
+    import time
+    client, s, models = env
+    client.post("/api/models", json=model_body())
+    (models / "org--Llama-8B").mkdir()
+    s.images.ready = False
+    r = client.post("/api/models/llama/start")
+    assert r.status_code == 202 and r.json()["preparing"]["image"] == "dgx-kit/vllm:test"
+    for _ in range(100):
+        if s.runner.started:
+            break
+        time.sleep(0.05)
+    assert s.runner.started, "the model should start by itself once its image is there"
+    assert client.get("/api/models").json()[0]["preparing"] is None
+
+
+def test_an_unbuilt_local_image_falls_back_to_the_engines_own(env):
+    client, s, models = env
+    s.images.ready = False
+    from dgxkit.api_models import image_to_use
+    from dgxkit.recipes import Recipe
+    r = Recipe(name="g", repo="org/g", engine="vllm", image="dgx-kit/llamacpp:gb10")
+    assert image_to_use(s, r) == "dgx-kit/vllm:test"  # not the build, which would have to be compiled first

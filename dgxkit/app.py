@@ -48,6 +48,7 @@ class Services:
     settings: Settings | None = None
     external: dict = field(default_factory=dict)  # running model servers DGX-kit didn't start
     actions: deque = field(default_factory=lambda: deque(maxlen=1000))
+    preparing: dict = field(default_factory=dict)  # model name -> the image it waits for before starting
     firmware_probe: object = None  # tests give a fake; normally fwupd is asked through system_info.probe_firmware
     quick_pending: set = field(default_factory=set)  # models DGX-kit just started, waiting for their first answer
 

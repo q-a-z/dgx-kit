@@ -28,6 +28,17 @@ def weights_path(r: Recipe, models_root: str) -> str:
     return r.path or model_dir(models_root, r.repo)
 
 
+def gguf_path(r: Recipe, models_root: str) -> Path:
+    """The GGUF file of a llama.cpp model. The name in the recipe is meant relative to the model folder, but people also
+    write it relative to the models folder (gguf/model.gguf), so try that too, then look for the file by name in the folder."""
+    base, name = Path(weights_path(r, models_root)), r.gguf_file or ""
+    for c in (base / name, Path(models_root) / name):
+        if c.is_file():
+            return c
+    hit = next(base.rglob(Path(name).name), None) if name and base.is_dir() else None
+    return hit or base / name
+
+
 def draft_path(r: Recipe, models_root: str) -> str | None:
     if r.draft_path:
         return r.draft_path
@@ -122,7 +133,7 @@ def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]
             raise ValueError("pick a GGUF file first")
         slots = max(1, int(p.concurrency))
         # /app/llama-server is where both the upstream server-cuda image and our GB10 build keep it.
-        cmd = ["/app/llama-server", "-m", str(Path(path) / r.gguf_file), "--alias", r.name,
+        cmd = ["/app/llama-server", "-m", str(gguf_path(r, models_root)), "--alias", r.name,
                "--host", "0.0.0.0", "--port", str(port),
                # llama.cpp splits -c across slots, so ask for context x slots.
                "-c", str(p.context_tokens * slots), "--parallel", str(slots),
@@ -167,6 +178,8 @@ def check_start(r: Recipe, p: Plan, models_root: str, image_ready: bool) -> Star
     d = draft_path(r, models_root)
     if d and not Path(d).exists():
         problems.append("draft isn't downloaded")
+    if r.engine == "llamacpp" and r.gguf_file and path.exists() and not gguf_path(r, models_root).is_file():
+        problems.append(f"GGUF file not found: {gguf_path(r, models_root)}")
     if not p.fits:
         problems.append(p.reason or "doesn't fit in free memory")
     return StartCheck(not problems, problems)

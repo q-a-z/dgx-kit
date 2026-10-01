@@ -22,7 +22,7 @@ BUILD_DIR = Path(__file__).resolve().parent.parent / "images"
 DEFAULTS = {
     "vllm": os.environ.get("DGXKIT_IMAGE_VLLM", "vllm/vllm-openai:v0.30.0"),
     "sglang": os.environ.get("DGXKIT_IMAGE_SGLANG", "lmsysorg/sglang:v0.5.20-cu130"),
-    "llamacpp": os.environ.get("DGXKIT_IMAGE_LLAMACPP", "ghcr.io/ggml-org/llama.cpp:server-cuda"),
+    "llamacpp": os.environ.get("DGXKIT_IMAGE_LLAMACPP", "ghcr.io/ggml-org/llama.cpp:server-cuda13"),  # CUDA 13 build, which has kernels for the GB10 (12.1); arm64 is published
     "litellm": os.environ.get("DGXKIT_IMAGE_LITELLM", "ghcr.io/berriai/litellm:main-stable"),
 }
 CATALOG = DEFAULTS  # kept for callers that only need the default names

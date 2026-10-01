@@ -11,6 +11,7 @@ from dataclasses import asdict, fields
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .collectors.system import parse_meminfo
@@ -18,7 +19,7 @@ from . import quickcheck
 from .benchmarks import TESTS as _ALL
 from .options import apply_text, to_text
 from .paths import expand_home
-from .control import check_start, engine_command, model_dir, pick_port, weights_path
+from .control import check_start, engine_command, gguf_path, model_dir, pick_port, weights_path
 from .engines import adapter_for
 from .recipes import Recipe, inspect_repo
 from .sizing import plan
@@ -54,10 +55,9 @@ def ensure_config(s, r: Recipe) -> None:
     if r.config or not r.gguf_file:
         return
     from .gguf import read_config
-    folder = weights_path(r, s.models_root)
-    f = Path(folder) / r.gguf_file
+    f = gguf_path(r, s.models_root)
     if not f.is_file():
-        raise ValueError(f"GGUF file not found: {f}. In the model's settings the GGUF file name is relative to the model folder ({folder}).")
+        raise ValueError(f"GGUF file not found: {f}. Put the file's name in the model's settings, relative to its folder ({weights_path(r, s.models_root)}).")
     r.config = read_config(f)
 
 
@@ -242,6 +242,8 @@ async def list_models(request: Request):
                                               or await asyncio.to_thread(shut_down_cleanly, s, r.name, c.get("id"))):
             d["container"] = {**c, "stopped_cleanly": True}
         d["live"] = live.get(r.name)
+        img = s.preparing.get(r.name)  # waiting for its image to be pulled or built, then it starts by itself
+        d["preparing"] = {"image": img, **(s.images.image_status(img)["job"] or {})} if img else None
         d["downloaded"] = Path(weights_path(r, s.models_root)).exists()
         out.append(d)
     return out
@@ -317,13 +319,20 @@ async def preview_edit(name: str, body: dict, request: Request, own_bytes: int =
     return asdict(plan_for(s, r, own_bytes))
 
 
-@router.post("/models/{name}/start")
-async def start(name: str, request: Request):
-    s = svc(request)
-    if not _exists(s, name):
-        raise HTTPException(404)
+def image_to_use(s, r: Recipe) -> str:
+    """The image a start runs on. A local build nobody has built here (dgx-kit/llamacpp:gb10) is not worth waiting on:
+    the engine's own image does the job, so use that instead."""
+    image = r.image or s.images.image_for(r.engine)
+    if not s.images.is_ready(image) and s.images.build_for(image):
+        fallback = s.images.image_for(r.engine)
+        if fallback != image and not s.images.build_for(fallback):
+            return fallback
+    return image
+
+
+async def _start_model(s, name: str) -> dict:
     r = s.store.get(name)
-    r.image = r.image or s.images.image_for(r.engine)
+    r.image = image_to_use(s, r)
     p = plan_for(s, r)
     check = check_start(r, p, s.models_root, s.images.is_ready(r.image))
     if not check.ok:
@@ -338,6 +347,55 @@ async def start(name: str, request: Request):
     s.log("start", f"{name} on port {port}")
     await sync_gateway(s)
     return {"port": port, "plan": asdict(p), "command": cmd}
+
+
+async def _start_when_image_is_ready(s, name: str, image: str) -> None:
+    """Follow the pull (or build) of a missing image, then start the model; a stop in the meantime cancels the start."""
+    try:
+        for _ in range(3600):  # two hours
+            if s.preparing.get(name) != image:
+                return  # cancelled
+            job = (await asyncio.to_thread(s.images.image_status, image))["job"]
+            if job and job["state"] == "running":
+                await asyncio.sleep(2)
+                continue
+            if job and job["state"] == "failed":
+                s.log("start", f"{name}: the image {image} couldn't be fetched: {job['error']}"[:300])
+                return
+            break
+        if s.preparing.get(name) == image:
+            await _start_model(s, name)
+    except HTTPException as e:
+        s.log("start", f"{name}: {e.detail}"[:300])
+    except Exception as e:
+        s.log("start", f"{name}: {e}"[:300])
+    finally:
+        if s.preparing.get(name) == image:
+            s.preparing.pop(name, None)
+
+
+@router.post("/models/{name}/start")
+async def start(name: str, request: Request):
+    """Start a model. When its image isn't on the box, fetch it first (a pull, or a build for a local image with no other
+    option) and start the model by itself when that is done: answers 202 with the job to follow."""
+    s = svc(request)
+    if not _exists(s, name):
+        raise HTTPException(404)
+    r = s.store.get(name)
+    image = image_to_use(s, r)
+    if not s.images.is_ready(image) and name not in s.preparing:
+        plan_for(s, r)  # a model that can't be sized is refused before anything is downloaded
+        status = await asyncio.to_thread(s.images.image_status, image)
+        if not (status["job"] and status["job"]["state"] == "running"):
+            build = s.images.build_for(image)
+            job = s.images.start_build(build) if build else s.images.start_pull_image(image)
+            s.log("pull" if not build else "build", f"{image} for {name}")
+        s.preparing[name] = image
+        asyncio.create_task(_start_when_image_is_ready(s, name, image))
+        return JSONResponse(status_code=202, content={"preparing": {"image": image, **((await asyncio.to_thread(s.images.image_status, image))["job"] or {})}})
+    if name in s.preparing:
+        return JSONResponse(status_code=202, content={"preparing": {"image": s.preparing[name], **((await asyncio.to_thread(s.images.image_status, s.preparing[name]))["job"] or {})}})
+    return await _start_model(s, name)
 
 
 TEST_ORDER = _ALL.split(",")
@@ -451,6 +509,7 @@ async def stop(name: str, request: Request):
     busy = (live.get("running") or 0) + (live.get("waiting") or 0)
     if busy and request.query_params.get("force") != "1":
         raise HTTPException(409, {"problems": [f"{int(busy)} requests running or waiting"], "force": "?force=1"})
+    s.preparing.pop(name, None)  # stopping also cancels a start that was waiting for its image
     before = (await asyncio.to_thread(s.runner.status)).get(name)
     s.runner.stop(name)
     if before and before.get("id"):

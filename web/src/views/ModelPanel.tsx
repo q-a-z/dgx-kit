@@ -2,6 +2,7 @@ import { usePoll } from '../usePoll'
 import { useEffect, useRef, useState } from 'react'
 import { useModelActions } from '../actions'
 import { toast } from '../toast'
+import { PullProgress } from './Other'
 import { api, copyText, fmtBytes, fmtNum, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
 import type { Mark } from '../components/Chart'
 import { Icon } from '../components/Icon'
@@ -239,6 +240,12 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
         <button className="ghost" aria-expanded={all} onClick={() => setAll(!all)}>{all ? 'Hide all settings' : 'All settings and flags'}</button>
       </div>
       {msg && <p className={msg.bad ? 'bad' : 'muted'}>{msg.text}</p>}
+      {model.preparing && (
+        <div>
+          <p className="muted">Fetching <code>{model.preparing.image}</code>; the model starts by itself when it is here.</p>
+          <PullProgress job={{ kind: model.preparing.kind ?? 'pull', state: model.preparing.state ?? 'running', error: model.preparing.error ?? null, tail: model.preparing.tail ?? [], progress: model.preparing.progress }} />
+        </div>
+      )}
       {all && <Editor model={model} onDone={(t) => { setMsg({ text: t }); toast(t); onChanged() }} />}
     </div>
   )

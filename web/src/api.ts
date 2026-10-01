@@ -88,6 +88,8 @@ export type ModelRow = Recipe & {
   container: { state: string; port: number; exit_code?: number | null; stopped_cleanly?: boolean } | null
   live: Live | null
   downloaded: boolean
+  /** Waiting for its image to be pulled or built; it starts by itself afterwards. */
+  preparing?: { image: string; kind?: string; state?: string; error?: string | null; tail?: string[]; progress?: number | null } | null
 }
 
 export type Plan = { context_tokens: number; kv_pool_tokens: number; kv_bytes: number; concurrency: number; fits: boolean; reason: string }
