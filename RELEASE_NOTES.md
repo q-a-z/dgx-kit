@@ -5,7 +5,7 @@ Newest first. Every commit adds its entry here.
 ## 0.1.2 (in progress)
 
 ### Added
-- **CPU cores gauge** beside the ring gauges: one small bar per core, the same view as the CPU tile at the bottom (amber from 85%, red from 97%; hover a bar for its core and clock).
+- **CPU cores gauge** beside the ring gauges: one short bar per core, the same view as the CPU tile at the bottom (amber from 85%, red from 97%; hover a bar for its core and clock).
 - **Network and Disk gauges** next to Temperature, GPU power and Load: network in and out, disk read and write, in MB/s. The rings use a square-root scale, so light traffic still shows.
 - **Speed arrows** on the Stats block: Decode and Prefill show a green ▲ when the speed now is at least the average, an amber ▶ when a little slower, a red ▼ when well below it, and nothing while idle.
 - **LiteLLM indicator** in the top bar next to Live: green when the gateway answers and accepts the key, red when it doesn't (hover for why). It opens Settings, Gateway.
