@@ -40,4 +40,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:  # say why on stdout, so the caller can show it (a container's error output is lost)
+        print(json.dumps({"error": f"{type(e).__name__}: {e}"[:300]}))

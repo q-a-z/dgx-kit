@@ -102,21 +102,26 @@ def probe_firmware(s) -> list[dict]:
     probe = getattr(s, "firmware_probe", None)
     if probe:
         return probe()
-    if not os.path.exists(DBUS):
-        raise RuntimeError("fwupd isn't reachable: no system D-Bus socket on this machine")
+    from docker.types import Mount
     client = s.runner.docker
     try:
         image = client.containers.get(os.environ.get("DGXKIT_SERVICE", "dgx-kit")).image.id
     except Exception:
         image = None
     if image is None:  # not running in a container: ask from here
+        if not os.path.exists(DBUS):
+            raise RuntimeError("fwupd isn't reachable: no system D-Bus socket on this machine")
         out = subprocess.run([sys.executable, "-m", "dgxkit.fwupd_probe"], capture_output=True, text=True, timeout=90, check=True).stdout
     else:
         out = client.containers.run(
             image, ["python", "-m", "dgxkit.fwupd_probe"], remove=True, network_mode="none",
             security_opt=["apparmor=unconfined"],  # the stock Docker profile may not talk to the system bus
-            volumes={DBUS: {"bind": DBUS, "mode": "rw"}}, stdout=True, stderr=False).decode()
-    return json.loads(out)
+            # A mount (not a volume) so Docker refuses when the host has no such socket, rather than making a folder there.
+            mounts=[Mount(target=DBUS, source=DBUS, type="bind")], stdout=True, stderr=False).decode()
+    result = json.loads(out)
+    if isinstance(result, dict):
+        raise RuntimeError(f"fwupd isn't reachable ({result.get('error')})")
+    return result
 
 
 def report(s, data: dict) -> dict:
