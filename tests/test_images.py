@@ -153,7 +153,7 @@ def test_an_image_from_another_machine_maps_to_the_local_build_of_the_same_relea
 
 def test_any_tag_can_be_pulled_and_followed_by_its_name(tmp_path):
     m = ImageManager(FakeDocker(), CAT, str(tmp_path))
-    assert m.image_status("org/engine:1") == {"image": "org/engine:1", "ready": False, "job": None}
+    assert m.image_status("org/engine:1") == {"image": "org/engine:1", "ready": False, "build": None, "job": None}
     m.start_pull_image("org/engine:1")
     wait(m, "image:org/engine:1")
     st = m.image_status("org/engine:1")
@@ -181,3 +181,15 @@ def test_a_pull_reports_bytes_and_progress(tmp_path):
     wait(m, "vllm")
     assert seen[0] == (0.25, ["0.5 GB of 2.0 GB downloaded · 0 of 2 layers"])
     assert job.state == "done" and job.progress == 1.0
+
+
+def test_a_local_build_is_built_not_pulled(tmp_path):
+    from dgxkit.images import BUILDS
+    build, d = next(iter(BUILDS.items()))
+    m = ImageManager(FakeDocker(), CAT, str(tmp_path))
+    st = m.image_status(d["tag"])
+    assert st["build"] == build and st["ready"] is False
+    with pytest.raises(ValueError, match="Build"):
+        m.start_pull_image(d["tag"])
+    m.set_image(d["engine"], d["tag"])
+    assert m.start_pull(d["engine"]).kind == "build"  # the engine's own Pull button builds it instead

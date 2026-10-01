@@ -67,7 +67,7 @@ class FakeImages:
         return Job("", "pull", image, state="done")
 
     def image_status(self, image):
-        return {"image": image, "ready": self.ready, "job": None}
+        return {"image": image, "ready": self.ready, "build": None, "job": None}
 
     def list(self):
         return []
@@ -506,7 +506,7 @@ def test_gguf_model_without_config_is_sized_from_the_files_header(env):
 def test_pulling_a_tag_picked_in_a_models_settings_can_be_followed(env):
     client, s, _ = env
     s.images.ready = False
-    assert client.get("/api/images/status", params={"image": "org/engine:1"}).json() == {"image": "org/engine:1", "ready": False, "job": None}
+    assert client.get("/api/images/status", params={"image": "org/engine:1"}).json() == {"image": "org/engine:1", "ready": False, "build": None, "job": None}
     assert client.post("/api/images/pull", json={"image": "org/engine:1"}).status_code == 202
     assert client.get("/api/images/status", params={"image": "org/engine:1"}).json()["ready"] is True
     assert client.post("/api/images/pull", json={"image": "two words"}).status_code == 422

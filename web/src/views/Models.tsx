@@ -79,9 +79,9 @@ function ImagePicker({ engine, value, onChange }: { engine: string; value: strin
   const { data } = usePoll<{ default: string; choices: string[] }>(`/api/images/choices/${engine}`, 15000)
   const listed = !value || !!data?.choices.includes(value)
   const [other, setOther] = useState(false)
-  const status = usePoll<{ ready: boolean; job: { kind: string; state: string; error: string | null; tail: string[]; progress?: number | null } | null }>(`/api/images/status?image=${encodeURIComponent(value ?? '')}`, 2000, !!value)
+  const status = usePoll<{ ready: boolean; build: string | null; job: { kind: string; state: string; error: string | null; tail: string[]; progress?: number | null } | null }>(`/api/images/status?image=${encodeURIComponent(value ?? '')}`, 2000, !!value)
   const [pullErr, setPullErr] = useState<string | null>(null)
-  const pull = () => { setPullErr(null); api('/api/images/pull', { method: 'POST', json: { image: value } }).then(status.reload).catch((e: Error) => setPullErr(e.message)) }
+  const pull = () => { setPullErr(null); (st?.build ? api(`/api/images/builds/${st.build}`, { method: 'POST' }) : api('/api/images/pull', { method: 'POST', json: { image: value } })).then(status.reload).catch((e: Error) => setPullErr(e.message)) }
   const st = status.data
   const pulling = st?.job?.state === 'running'
   return (
@@ -101,10 +101,10 @@ function ImagePicker({ engine, value, onChange }: { engine: string; value: strin
       )}
       {value && st && (
         <small className={pulling || st.ready ? 'muted' : 'warn'}>
-          {pulling ? 'Pulling…'
+          {pulling ? (st.job!.kind === 'build' ? 'Building…' : 'Pulling…')
             : st.ready ? 'On this box.'
-            : st.job?.state === 'failed' ? `Pull failed: ${st.job.error ?? ''}` : 'Not on this box yet; the model can’t start until it is pulled.'}
-          {!pulling && !st.ready && <> <button type="button" onClick={pull}>{st.job?.state === 'failed' ? 'Try again' : 'Pull'}</button></>}
+            : st.job?.state === 'failed' ? `${st.build ? 'Build' : 'Pull'} failed: ${st.job.error ?? ''}` : st.build ? 'Not built on this box yet; the model can’t start until it is built.' : 'Not on this box yet; the model can’t start until it is pulled.'}
+          {!pulling && !st.ready && <> <button type="button" onClick={pull}>{st.job?.state === 'failed' ? 'Try again' : st.build ? 'Build' : 'Pull'}</button></>}
           {pullErr && <span className="bad"> {pullErr}</span>}
         </small>
       )}

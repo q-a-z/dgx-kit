@@ -237,17 +237,29 @@ class ImageManager:
         self.docker.images.pull(repo, tag=tag or "latest")
         self.forget()
 
+    def build_for(self, image: str) -> str | None:
+        """The local build that makes this tag, if it is one (such as dgx-kit/llamacpp:gb10): those exist only once built here."""
+        return next((b for b, d in BUILDS.items() if d["tag"] == image), None)
+
     def start_pull(self, engine: str) -> Job:
+        build = self.build_for(self.image_for(engine))
+        if build:  # not in any registry: building is how it gets here
+            return self.start_build(build)
         return self._spawn(Job(engine, "pull", self.image_for(engine)), self._pull_job)
 
     def start_pull_image(self, image: str) -> Job:
         """Pull any tag, such as the one picked in a model's settings; tracked by the tag."""
+        if self.build_for(image):
+            raise ValueError(f"{image} is built on this box, not pulled from a registry: use Build")
         return self._spawn(Job("", "pull", image), self._pull_job, key=f"image:{image}")
 
     def image_status(self, image: str) -> dict:
-        """Is this tag on the box, and is it being pulled (by the model picker or as an engine's image) right now."""
-        job = self.jobs.get(f"image:{image}") or next((j for j in self.jobs.values() if j.kind == "pull" and j.image == image), None)
-        return {"image": image, "ready": self.is_ready(image), "job": job.view() if job else None}
+        """Is this tag on the box, and is it being pulled or built (from the model picker or as an engine's image) right now.
+        `build` is set when the tag is a local build, which has to be built here rather than pulled."""
+        build = self.build_for(image)
+        job = self.jobs.get(f"image:{image}") or (self.jobs.get(build) if build else None) \
+            or next((j for j in self.jobs.values() if j.image == image), None)
+        return {"image": image, "ready": self.is_ready(image), "build": build, "job": job.view() if job else None}
 
     def start_build(self, build: str, make_default: bool = False) -> Job:
         """Build a local image in the background; make_default also switches its engine to it."""
