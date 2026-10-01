@@ -13,7 +13,7 @@ Newest first. Every commit adds its entry here.
 - **Extra LiteLLM settings editor** in Settings, Gateway: edit `litellm/extra.env` in the page (Save, or Save and apply, which restarts the gateway for a few seconds), see which lines are ignored and whether the saved file is live. No root editing needed.
 
 ### Changed
-- The bottom tiles that repeated the top gauges (GPU load, temperature, power, CPU, Disk, Network) are removed; the section is now **Hardware details** with GPU clock, what is on the GPU, and unified memory. Saved layouts keep working.
+- The bottom tiles that repeated the top gauges (GPU load, temperature, power, CPU, Disk, Network) are removed; the GPU clock and Unified memory tiles are gone too. **Hardware details** now holds what is on the GPU (and the Sensors tile, hidden until you add it with Arrange). Saved layouts keep working.
 - The traffic figures sit at the right of the System card under a **Stats** heading in the same style as **System**, in the card's top right corner. The gauges wrap onto a second line when the window is narrow.
 - The "serving normally · free memory · gateway OK" line next to the logo is gone; the top bar shows a status there only when something needs attention.
 - **CPU, disk, network** is always open at the bottom of the home page; the fold/unfold button in the System card is gone.
