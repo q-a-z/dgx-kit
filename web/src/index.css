@@ -736,3 +736,4 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 
 .stats-line { display: flex; align-items: center; justify-content: center; gap: 28px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .stats-line h2 { font-size: 15px; margin: 0; }
+.brand-gpu { margin-left: 10px; font-weight: 500; color: var(--text); opacity: .75; }

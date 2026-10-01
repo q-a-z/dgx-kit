@@ -5,6 +5,7 @@ Newest first. Every commit adds its entry here.
 ## 0.1.3 (in progress)
 
 ### Changed
+- The GPU name (for example NVIDIA GB10) is part of the logo in the top bar, in the logo's type, ahead of the version.
 - Version bump. Everything in 0.1.2 below is released; new changes are listed here from now on.
 
 ## 0.1.2
