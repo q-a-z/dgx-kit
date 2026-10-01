@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Action, Download, Snapshot } from '../api'
 import type { Mark } from '../components/Chart'
 import type { Tab } from '../components/ModelActions'
-import { fetching, type Entry } from '../fleet'
+import type { Entry } from '../fleet'
 import type { Alert } from '../health'
 import { RUN, select } from '../nav'
 import { HW_TILES } from '../tiles/hardwareTiles'
@@ -10,7 +10,7 @@ import type { Layout } from '../tiles/layout'
 import type { Slo } from '../tiles/modelTiles'
 import { TileGrid } from '../tiles/TileGrid'
 import { usePoll } from '../usePoll'
-import { MemoryMap, wants } from './MemoryMap'
+import { MemoryMap } from './MemoryMap'
 import { ModelList } from './ModelList'
 import { ModelPanel, type Preview } from './ModelPanel'
 import { RunPanel, type Ghost } from './RunPanel'
@@ -44,7 +44,6 @@ export function Home({ view, setView, latest, history, entries, orphans, alerts,
   const entry = entries.find((e) => e.name === shown)
   const onOpen = (name: string, t: Tab) => { select(name); setTimeout(() => setTab(t)) }
   const free = latest.system?.memory.available_bytes ?? 0
-  const reserved = [...entries.map((e) => fetching(e.state) ? e.download : undefined), ...orphans].reduce((a, d) => a + (d ? wants(d) : 0), 0)
 
   const panel = sel === RUN
     ? <RunPanel readonly={readonly} onGhost={setGhost} onChanged={onChanged} />
@@ -69,44 +68,42 @@ export function Home({ view, setView, latest, history, entries, orphans, alerts,
       <button className={view === 'list' ? 'active' : ''} aria-pressed={view === 'list'} onClick={() => setView('list')} title="Models in a list with details beside it">Model list</button>
     </div>
   )
-  const spark = <SparkCard latest={latest} history={history} entries={entries} showMemory={view === 'list'} reserved={reserved}
-    hwOpen={!!layout.hw_open} toggleHw={() => update({ hw_open: !layout.hw_open })} />
+  const spark = <SparkCard latest={latest} />
 
   return (
     <>
       {view === 'map' ? (
         <div className="home">
           {spark}
-          {layout.hw_open && <HardwareDetails latest={latest} history={history} layout={layout} update={update} />}
           <MemoryMap switcher={switcher} latest={latest} history={history} entries={entries} orphans={orphans} alerts={alerts} readonly={readonly}
             selected={sel === RUN ? RUN : shown} preview={preview} ghost={sel === RUN ? ghost : null}
             table={!!layout.map_table} setTable={(v) => update({ map_table: v })} onOpen={onOpen} onChanged={onChanged} />
           {panel}
+          <HardwareDetails latest={latest} history={history} layout={layout} update={update} />
         </div>
       ) : (
         <div className="home">
           {spark}
-          {layout.hw_open && <HardwareDetails latest={latest} history={history} layout={layout} update={update} />}
           <div className="list-view">
           <ModelList switcher={switcher} history={history} entries={entries} orphans={orphans} alerts={alerts} readonly={readonly}
             selected={sel === RUN ? RUN : shown} free={free} onOpen={onOpen} onChanged={onChanged} />
           {panel}
           </div>
+          <HardwareDetails latest={latest} history={history} layout={layout} update={update} />
         </div>
       )}
     </>
   )
 }
 
-/** Clocks, cores, disk and network explain problems; they open on request below the rest. */
+/** Clocks, cores, disk and network, always open at the bottom of the page. */
 function HardwareDetails({ latest, history, layout, update }: { latest: Snapshot; history: Snapshot[]; layout: Layout; update: (p: Partial<Layout>) => void }) {
   const [arrange, setArrange] = useState(false)
   return (
     <section className="hwdetails" aria-label="Hardware details">
       <div className="section-title">
-        <span className="grow">Hardware details</span>
+        <span className="grow">CPU, disk, network</span>
         <button className="ghost" aria-pressed={arrange} onClick={() => setArrange(!arrange)}>{arrange ? 'Done' : 'Arrange'}</button>
-        <button className="ghost" onClick={() => update({ hw_open: false })}>Hide</button>
       </div>
       <TileGrid defs={HW_TILES} tiles={layout.hardware} editing={arrange} onChange={(hardware) => update({ hardware })} ctx={{ latest, history }} />
     </section>

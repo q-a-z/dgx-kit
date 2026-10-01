@@ -10,6 +10,7 @@ Newest first. Every commit adds its entry here.
 - **Extra LiteLLM settings editor** in Settings, Gateway: edit `litellm/extra.env` in the page (Save, or Save and apply, which restarts the gateway for a few seconds), see which lines are ignored and whether the saved file is live. No root editing needed.
 
 ### Changed
+- **CPU, disk, network** is always open at the bottom of the home page; the fold/unfold button in the System card is gone.
 - The gateway address and the **Open LiteLLM** link moved from the home page to Settings, Gateway; the home page's System card no longer has a gateway block or the "Serves" list.
 - The "Memory free" block is gone from the home page's System card (the memory map shows it).
 - **API documentation:** [docs/API.md](docs/API.md) describes every route, sign-in, errors, read-only mode and the model fields; `/docs` on the dashboard is the generated reference.

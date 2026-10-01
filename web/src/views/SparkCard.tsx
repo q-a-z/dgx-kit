@@ -1,6 +1,5 @@
 import { fmtNum, type Live, type Snapshot } from '../api'
 import { Donut } from '../components/Donut'
-import type { Entry } from '../fleet'
 
 // GB10 GPU power scale; the zones above 80 W are where the box runs hot and loud.
 const POWER_MAX = 120
@@ -45,15 +44,12 @@ function TrafficStats({ latest }: { latest: Snapshot }) {
 export const TINTS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)']
 
 /** The box itself, in one row: GPU heat, power, free memory and the gateway, each with what it means. */
-export function SparkCard({ latest, hwOpen, toggleHw }: {
-  latest: Snapshot; history: Snapshot[]; entries: Entry[]; showMemory: boolean; reserved: number; hwOpen: boolean; toggleHw: () => void
-}) {
+export function SparkCard({ latest }: { latest: Snapshot }) {
   const g = latest.gpu
   const throttled = !!g?.events.length
   return (
     <section className="system" aria-label="System">
       <div className="sys-head"><h2>System</h2>{g?.name && <span className="muted">{g.name}</span>}<span className="grow" />
-        <button className="ghost" aria-expanded={hwOpen} onClick={toggleHw}>{hwOpen ? 'Hide details' : 'CPU, disk, network'}</button>
       </div>
       <div className="sys-row">
         {g && (
