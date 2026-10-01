@@ -6,6 +6,8 @@ edit anything afterwards.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import json
 from dataclasses import asdict, dataclass, field
 
@@ -80,6 +82,10 @@ def pick_engine(quantization: str | None) -> str:
 
 def weight_bytes(siblings: list[tuple[str, int | None]], gguf_file: str | None = None) -> int:
     if gguf_file:
+        from .gguf import shard_of
+        sh = shard_of(Path(gguf_file).name)
+        if sh:  # a split GGUF is all of its pieces
+            return sum(size or 0 for name, size in siblings if (o := shard_of(Path(name).name)) and o[0] == sh[0] and o[2] == sh[2])
         return sum(size or 0 for name, size in siblings if name == gguf_file)
     return sum(size or 0 for name, size in siblings if name.endswith(WEIGHT_SUFFIXES))
 
@@ -91,7 +97,8 @@ def build_recipe(repo: str, config: dict, siblings: list[tuple[str, int | None]]
     """Pure part of inspect_repo(), so it can be tested without the network."""
     files = [n for n, _ in siblings]
     quant = detect_quantization(config, files)
-    ggufs = sorted(f for f in files if f.endswith(".gguf"))
+    from .gguf import first_shards
+    ggufs = first_shards(sorted(f for f in files if f.endswith(".gguf")))
     if quant == "gguf" and not gguf_file:
         gguf_file = ggufs[0] if len(ggufs) == 1 else None  # several quants: the user picks
     r = Recipe(

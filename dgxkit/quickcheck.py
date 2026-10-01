@@ -15,6 +15,7 @@ import httpx
 BUDGET_S = 10.0
 DECODE_PROMPTS = ["Write a Python function that merges two sorted lists, with a short docstring.",
                   "Explain in three sentences how a hash table handles collisions."]
+POLL_S = 2.0  # how often to ask a loading model whether it is ready
 PREFILL_SENTENCES = (800, 2400)  # the filler is ~9 tokens a sentence
 
 
@@ -44,11 +45,27 @@ def _stream(c: httpx.Client, base: str, model: str, prompt: str, max_tokens: int
     return out
 
 
+def wait_ready(base: str, client: httpx.Client, timeout: float = 300.0) -> bool:
+    """llama.cpp answers its metrics while the model is still loading, and refuses completions (503) until it is done:
+    wait for /health to say ok, so the check doesn't fail on a model that is only loading."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        try:
+            if client.get(f"{base}/health", timeout=5).status_code == 200:
+                return True
+        except httpx.HTTPError:
+            pass
+        time.sleep(POLL_S)
+    return False
+
+
 def run(port: int, model: str, budget: float = BUDGET_S, client: httpx.Client | None = None) -> dict:
     base = f"http://127.0.0.1:{port}"
-    deadline = time.monotonic() + budget
-    out: dict = {"ts": time.time(), "decode_tps": [], "prefill": []}
     with (client or httpx.Client()) as c:
+        if not wait_ready(base, c):
+            return {"ts": time.time(), "skipped": "the model didn't report ready within five minutes"}
+        deadline = time.monotonic() + budget  # the ten seconds start once it is ready
+        out: dict = {"ts": time.time(), "decode_tps": [], "prefill": []}
         for p in DECODE_PROMPTS:
             if time.monotonic() < deadline:
                 r = _stream(c, base, model, p, 96, deadline)

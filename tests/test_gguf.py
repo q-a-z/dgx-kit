@@ -42,3 +42,17 @@ def test_a_ggufs_header_gives_the_models_shape(tmp_path):
     assert read_config(tmp_path / "missing.gguf") == {}
     (tmp_path / "bad.gguf").write_bytes(b"nope")
     assert read_config(tmp_path / "bad.gguf") == {}
+
+
+def test_a_split_gguf_is_one_model_of_all_its_pieces(tmp_path):
+    from dgxkit.gguf import first_shards, split_files, total_size
+    from dgxkit.recipes import weight_bytes
+    (tmp_path / "m-00001-of-00002.gguf").write_bytes(b"a" * 100)
+    (tmp_path / "m-00002-of-00002.gguf").write_bytes(b"b" * 60)
+    (tmp_path / "other-Q4.gguf").write_bytes(b"c" * 10)
+    names = sorted(p.name for p in tmp_path.iterdir())
+    assert first_shards(names) == ["m-00001-of-00002.gguf", "other-Q4.gguf"]  # the second piece isn't offered as a model
+    assert [p.name for p in split_files(tmp_path / "m-00001-of-00002.gguf")] == ["m-00001-of-00002.gguf", "m-00002-of-00002.gguf"]
+    assert total_size(tmp_path / "m-00001-of-00002.gguf") == 160 and total_size(tmp_path / "other-Q4.gguf") == 10
+    sib = [(p.name, p.stat().st_size) for p in tmp_path.iterdir()]
+    assert weight_bytes(sib, "m-00001-of-00002.gguf") == 160 and weight_bytes(sib, "other-Q4.gguf") == 10

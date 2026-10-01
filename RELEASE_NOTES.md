@@ -4,6 +4,10 @@ Newest first. Every commit adds its entry here.
 
 ## 0.1.5 (in progress)
 
+### Fixed
+- **Split GGUF models (`…-00001-of-00002.gguf`, `…-00002-of-00002.gguf`).** DGX-kit counted only one piece: the memory plan and "Check if it fits" were too small by the size of the other pieces, and each piece was offered as a separate model. A split GGUF is now one model: its pieces are added up for the plan, and only the first piece is offered (llama.cpp loads the others from it).
+- **"start check failed … 503 Service Unavailable" after starting a llama.cpp model.** The ten-second speed check began as soon as llama.cpp answered its metrics, which it does while the model is still loading, and failed because completions are refused until loading ends. The check now waits for the model to report ready (up to five minutes) and starts its ten seconds then.
+
 ### Changed
 - Version bump. Everything in 0.1.4 below is released; new changes are listed here from now on.
 

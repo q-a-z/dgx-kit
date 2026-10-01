@@ -6,11 +6,42 @@ the tokenizer tables that follow are skipped.
 """
 from __future__ import annotations
 
+import re
 import struct
 from pathlib import Path
 
 _SCALARS = {0: "<B", 1: "<b", 2: "<H", 3: "<h", 4: "<I", 5: "<i", 6: "<f", 7: "<?", 10: "<Q", 11: "<q", 12: "<d"}
 _STRING, _ARRAY = 8, 9
+
+
+_SHARD = re.compile(r"^(?P<stem>.+)-(?P<n>\d{5})-of-(?P<total>\d{5})\.gguf$")
+
+
+def shard_of(name: str) -> tuple[str, int, str] | None:
+    """(stem, shard number, total) when the name is one piece of a split GGUF (model-00001-of-00002.gguf)."""
+    m = _SHARD.match(name)
+    return (m["stem"], int(m["n"]), m["total"]) if m else None
+
+
+def first_shards(names: list[str]) -> list[str]:
+    """The model files to offer: of a split GGUF only the first piece, since llama.cpp loads the others from it."""
+    return [n for n in names if not (shard_of(Path(n).name) and shard_of(Path(n).name)[1] != 1)]
+
+
+def split_files(first: Path) -> list[Path]:
+    """Every piece of the GGUF that `first` belongs to (just itself when it is not split)."""
+    sh = shard_of(first.name)
+    if not sh or not first.parent.is_dir():
+        return [first]
+    stem, _, total = sh
+    pieces = sorted(p for p in first.parent.iterdir()
+                    if (s := shard_of(p.name)) and s[0] == stem and s[2] == total)
+    return pieces or [first]
+
+
+def total_size(first: Path) -> int:
+    """Bytes of all the pieces of a (possibly split) GGUF."""
+    return sum(p.stat().st_size for p in split_files(first) if p.exists())
 
 
 def _read(f, fmt: str):

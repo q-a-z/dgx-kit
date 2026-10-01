@@ -174,7 +174,9 @@ def _hf_name(path: Path) -> str | None:
 def describe(path: Path, files: list[str]) -> dict | None:
     weights = [f for f in files if f.endswith((".safetensors", ".bin", ".pt", ".pth"))
                and not f.startswith(("training_args", "optimizer", "scheduler", "rng_state"))]
-    ggufs = sorted(f for f in files if f.endswith(".gguf"))
+    all_ggufs = sorted(f for f in files if f.endswith(".gguf"))
+    from .gguf import first_shards
+    ggufs = first_shards(all_ggufs)  # of a split GGUF, the first piece stands for the model
     config = {}
     if "config.json" in files:
         try:
@@ -196,7 +198,7 @@ def describe(path: Path, files: list[str]) -> dict | None:
         "gguf_files": ggufs,
         "architecture": arch,
         "quantization": quant or ("gguf" if ggufs else None),
-        "size_bytes": _size(path, ggufs or weights),
+        "size_bytes": _size(path, all_ggufs or weights),
         "kind": "draft" if is_draft(config, arch, name) else "model",
     }
 

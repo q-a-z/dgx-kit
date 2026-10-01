@@ -66,6 +66,12 @@ DEFAULT_CONTEXT = 32768  # what a model gets when nobody asked for a context: en
 
 def plan_for(s, r: Recipe, extra_free: int = 0):
     ensure_config(s, r)
+    if r.engine == "llamacpp" and r.gguf_file:  # a split GGUF takes the memory of all its pieces, whatever the recipe was saved with
+        from .gguf import total_size
+        try:
+            r.weights_bytes = max(r.weights_bytes, total_size(gguf_path(r, s.models_root)))
+        except OSError:
+            pass
     max_context = r.max_context
     if not max_context and not r.fill_memory:
         max_context = DEFAULT_CONTEXT
