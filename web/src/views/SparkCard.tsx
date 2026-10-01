@@ -105,7 +105,7 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
               zones={[{ upTo: 70, color: 'var(--ok)' }, { upTo: 85, color: 'var(--warn)' }, { upTo: 100, color: 'var(--bad)' }]} />
             <Donut label="GPU power" value={g.power_w} max={POWER_MAX} unit="W"
               zones={[{ upTo: 80, color: 'var(--ok)' }, { upTo: 100, color: 'var(--warn)' }, { upTo: POWER_MAX, color: 'var(--bad)' }]} />
-            <Donut label="Clock" value={g.sm_clock_mhz} tag="GPU" second={{ value: cpuClock(latest), tag: 'CPU' }} max={CLOCK_MAX_MHZ} unit="MHz" size={128} />
+            <Donut label="Clock" value={g.sm_clock_mhz} tag="GPU" second={{ value: cpuClock(latest), tag: 'CPU' }} max={CLOCK_MAX_MHZ} unit="MHz" />
             <Donut label="Load" value={g.util_pct} tag="GPU" second={{ value: latest.system?.cpu_pct?.cpu, tag: 'CPU' }} max={100} unit="%"
               zones={[{ upTo: 75, color: 'var(--s1)' }, { upTo: 90, color: 'var(--warn)' }, { upTo: 100, color: 'var(--bad)' }]} />
             <Donut label="Network" value={mb(net(latest, 'net_rx_bps'))} tag="In" second={{ value: mb(net(latest, 'net_tx_bps')), tag: 'Out' }} max={NET_MAX_MB} unit="MB/s" curve fine size={128} />
