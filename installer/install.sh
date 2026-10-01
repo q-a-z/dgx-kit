@@ -30,7 +30,7 @@ SCOPE=system
 ACTION=install
 UPDATE_FILE=""
 UPDATE_REPO=""
-DEFAULT_UPDATE_REPO=${DGXKIT_UPDATE_REPO:-https://github.com/AIPossum/dgx-kit.git}  # where "dgx-kit update" fetches from
+DEFAULT_UPDATE_REPO=${DGXKIT_UPDATE_REPO:-https://github.com/q-a-z/dgx-kit.git}  # where "dgx-kit update" fetches from
 usage() { echo "usage: $0 [--user] [--check|--dry-run] [--uninstall | --update | --updatepath PATH | --updaterepo URL]" >&2; exit 2; }
 while (( $# )); do
   case $1 in

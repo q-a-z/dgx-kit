@@ -5,6 +5,7 @@ Newest first. Every commit adds its entry here.
 ## 0.1.6 (in progress)
 
 ### Changed
+- **The repository moved to https://github.com/q-a-z/dgx-kit**, and `dgx-kit update` fetches from there. Installs that still point at the old address keep working until you run an update from a package or a clone once (`dgx-kit update PATH`), which refreshes the command.
 - Version bump. Everything in 0.1.5 below is released; new changes are listed here from now on.
 
 ## 0.1.5
