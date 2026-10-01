@@ -14,6 +14,7 @@ Newest first. Every commit adds its entry here.
 - **Extra LiteLLM settings editor** in Settings, Gateway: edit `litellm/extra.env` in the page (Save, or Save and apply, which restarts the gateway for a few seconds), see which lines are ignored and whether the saved file is live. No root editing needed.
 
 ### Changed
+- The GPU name (for example NVIDIA GB10) is shown next to the logo and version in the top bar, and the "System" heading is gone from the gauges card.
 - The gauges and the stats line are centered in the System card.
 - The bottom tiles that repeated the top gauges (GPU load, temperature, power, CPU, Disk, Network) are removed; the GPU clock and Unified memory tiles are gone too. **Hardware details** now holds what is on the GPU (and the Sensors tile, hidden until you add it with Arrange). Saved layouts keep working.
 - The traffic figures sit in the System card in their own centered line under the gauges, behind a divider, without a caption. The gauges wrap onto a second line when the window is narrow.

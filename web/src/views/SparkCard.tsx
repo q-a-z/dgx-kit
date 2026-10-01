@@ -96,7 +96,6 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
   const throttled = !!g?.events.length
   return (
     <section className="system" aria-label="System">
-      <div className="sys-head"><h2>System</h2>{g?.name && <span className="muted">{g.name}</span>}</div>
       <div className="sys-row">
         {g && (
           <div className="gauges">

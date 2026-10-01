@@ -54,6 +54,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
     <>
       <header>
         <a className="brand" href="#/"><b>DGX</b>-kit{version && <span className="ver" title="DGX-kit version">{/^\d/.test(version) ? `v${version}` : version}</span>}</a>
+        {latest?.gpu?.name && <span className="muted small gpu-name" title="GPU">{latest.gpu.name}</span>}
         {route.page === 'home' && latest && <Health alerts={alerts} entries={fleet.entries} />}
         <span className="grow" />
         {route.page !== 'home' && <a className="navlink" href="#/">Back to dashboard</a>}
