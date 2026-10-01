@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { fmtNum, type Live, type Snapshot } from '../api'
+import { fmtNum, sum as rateSum, type Live, type Snapshot } from '../api'
 import { Donut } from '../components/Donut'
 
 // GB10 GPU power scale; the zones above 80 W are where the box runs hot and loud.
@@ -52,6 +52,16 @@ function TrafficStats({ latest }: { latest: Snapshot }) {
   )
 }
 
+// Where the rings top out; the scale is square-root, so light traffic still shows.
+const NET_MAX_MB = 1000
+const DISK_MAX_MB = 3000
+const mb = (bps: number | null | undefined) => (bps == null ? null : bps / 1e6)
+/** The main interface's rate, else the sum over all of them (as the Network tile does). */
+function net(latest: Snapshot, key: 'net_rx_bps' | 'net_tx_bps'): number | undefined {
+  const r = latest.system?.[key], iface = latest.system?.net_iface
+  return r ? (iface && iface in r ? r[iface] : rateSum(r)) : undefined
+}
+
 export const TINTS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)']
 
 /** The box itself, in one row: GPU heat, power, free memory and the gateway, each with what it means. */
@@ -71,6 +81,8 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
               zones={[{ upTo: 80, color: 'var(--ok)' }, { upTo: 100, color: 'var(--warn)' }, { upTo: POWER_MAX, color: 'var(--bad)' }]} />
             <Donut label="Load" value={g.util_pct} tag="GPU" second={{ value: latest.system?.cpu_pct?.cpu, tag: 'CPU' }} max={100} unit="%"
               zones={[{ upTo: 75, color: 'var(--s1)' }, { upTo: 90, color: 'var(--warn)' }, { upTo: 100, color: 'var(--bad)' }]} />
+            <Donut label="Network" value={mb(net(latest, 'net_rx_bps'))} tag="In" second={{ value: mb(net(latest, 'net_tx_bps')), tag: 'Out' }} max={NET_MAX_MB} unit="MB/s" curve fine />
+            <Donut label="Disk" value={mb(rateSum(latest.system?.disk_read_bps))} tag="Read" second={{ value: mb(rateSum(latest.system?.disk_write_bps)), tag: 'Write' }} max={DISK_MAX_MB} unit="MB/s" curve fine />
             {throttled && <span className="warn small throttle">▲ throttling</span>}
           </div>
         )}

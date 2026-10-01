@@ -5,6 +5,7 @@ Newest first. Every commit adds its entry here.
 ## 0.1.2 (in progress)
 
 ### Added
+- **Network and Disk gauges** next to Temperature, GPU power and Load: network in and out, disk read and write, in MB/s. The rings use a square-root scale, so light traffic still shows.
 - **Speed arrows** on the Stats block: Decode and Prefill show a green ▲ when the speed now is at least the average, an amber ▶ when a little slower, a red ▼ when well below it, and nothing while idle.
 - **LiteLLM indicator** in the top bar next to Live: green when the gateway answers and accepts the key, red when it doesn't (hover for why). It opens Settings, Gateway.
 - **Traffic stats** on the home page next to the gauges, in six compact figures: tokens in and out, requests, decode and prefill speed now and on average, and requests running (with those waiting), summed over the running models. Totals count from when each model started.

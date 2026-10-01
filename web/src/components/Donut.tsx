@@ -9,11 +9,15 @@ const R_SHARED = 38, R2 = 29 // outer and inner ring of a shared gauge; the midd
 const C = 2 * Math.PI * R
 const SWEEP = 0.75 // of the circle
 
-export function Donut({ value, min = 0, max, unit, label, zones, color = 'var(--s1)', size = 112, tag, second }: {
+export function Donut({ value, min = 0, max, unit, label, zones, color = 'var(--s1)', size = 112, tag, second, curve, fine }: {
   value: number | null | undefined; min?: number; max: number; unit: string; label: string; zones?: Zone[]; color?: string; size?: number
   tag?: string; second?: { value: number | null | undefined; tag: string }
+  /** Square-root scale, so a trickle still moves the ring on a gauge that goes up to a flood. */
+  curve?: boolean
+  /** One decimal under 10, for small rates. */
+  fine?: boolean
 }) {
-  const frac = (v: number) => Math.min(1, Math.max(0, (v - min) / (max - min)))
+  const frac = (v: number) => { const f = Math.min(1, Math.max(0, (v - min) / (max - min))); return curve ? Math.sqrt(f) : f }
   const zoneOf = (v: number) => zones?.find((z) => v <= z.upTo)?.color ?? zones?.[zones.length - 1]?.color ?? color
   const arc = (from: number, to: number) => ({ strokeDasharray: `${(to - from) * SWEEP * C} ${C}`, strokeDashoffset: -from * SWEEP * C })
   let prev = min
@@ -23,7 +27,7 @@ export function Donut({ value, min = 0, max, unit, label, zones, color = 'var(--
       {v != null && <circle cx="48" cy="48" r={r} stroke={zoneOf(v)} strokeWidth={w} strokeLinecap="round" style={{ ...arc(0, Math.max(frac(v), 0.005)), transition: 'stroke-dasharray .5s ease' }} />}
     </>
   )
-  const num = (v: number | null | undefined) => (v == null ? '–' : Math.round(v))
+  const num = (v: number | null | undefined) => (v == null ? '–' : fine && v < 10 ? v.toFixed(1) : Math.round(v))
   return (
     <div className="donut" role="meter" aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value ?? undefined} aria-valuetext={second ? `${tag} ${num(value)}${unit}, ${second.tag} ${num(second.value)}${unit}` : undefined}>
       <svg viewBox="0 0 96 96" width={size} height={size}>
