@@ -61,6 +61,14 @@ class FakeImages:
 
     defaults = {"vllm": "dgx-kit/vllm:test"}
 
+    def start_pull_image(self, image):
+        from dgxkit.images import Job
+        self.ready = True
+        return Job("", "pull", image, state="done")
+
+    def image_status(self, image):
+        return {"image": image, "ready": self.ready, "job": None}
+
     def list(self):
         return []
 
@@ -493,3 +501,12 @@ def test_gguf_model_without_config_is_sized_from_the_files_header(env):
     # a config that says nothing useful is a clear refusal, not a crash
     client.post("/api/models", json={**body, "name": "blank", "gguf_file": "missing.gguf"})
     assert client.get("/api/models/blank/plan").status_code == 422
+
+
+def test_pulling_a_tag_picked_in_a_models_settings_can_be_followed(env):
+    client, s, _ = env
+    s.images.ready = False
+    assert client.get("/api/images/status", params={"image": "org/engine:1"}).json() == {"image": "org/engine:1", "ready": False, "job": None}
+    assert client.post("/api/images/pull", json={"image": "org/engine:1"}).status_code == 202
+    assert client.get("/api/images/status", params={"image": "org/engine:1"}).json()["ready"] is True
+    assert client.post("/api/images/pull", json={"image": "two words"}).status_code == 422

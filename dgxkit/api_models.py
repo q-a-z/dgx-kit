@@ -742,6 +742,28 @@ def _engine(s, engine: str) -> None:
         raise HTTPException(404, f"unknown engine {engine}")
 
 
+class PullBody(BaseModel):
+    image: str
+
+
+@router.post("/images/pull", status_code=202)
+async def pull_any_image(body: PullBody, request: Request):
+    """Pull one tag, for a model that picked an image the box doesn't have yet. Poll /images/status to follow it."""
+    s = svc(request)
+    image = body.image.strip()
+    if not image or any(c.isspace() for c in image):
+        raise HTTPException(422, "that isn't an image name")
+    job = s.images.start_pull_image(image)
+    s.log("pull", image)
+    return job.view()
+
+
+@router.get("/images/status")
+async def image_status(image: str, request: Request):
+    """Whether a tag is on the box, and the progress of a pull of it."""
+    return await asyncio.to_thread(svc(request).images.image_status, image)
+
+
 @router.post("/images/{engine}/pull", status_code=202)
 async def pull_image(engine: str, request: Request):
     s = svc(request)

@@ -149,3 +149,15 @@ def test_an_image_from_another_machine_maps_to_the_local_build_of_the_same_relea
     assert build_for("vllm/vllm-openai:v0.30.0") == "vllm-0.30-gb10"
     assert build_for("vllm-spark:0.31") is None and build_for("nothing") is None
     assert FLASHINFER == "0.7.0" and BUILDS["vllm-0.29-gb10"]["args"]["FLASHINFER"] == FLASHINFER
+
+
+def test_any_tag_can_be_pulled_and_followed_by_its_name(tmp_path):
+    m = ImageManager(FakeDocker(), CAT, str(tmp_path))
+    assert m.image_status("org/engine:1") == {"image": "org/engine:1", "ready": False, "job": None}
+    m.start_pull_image("org/engine:1")
+    wait(m, "image:org/engine:1")
+    st = m.image_status("org/engine:1")
+    assert st["job"]["state"] == "done" and st["job"]["kind"] == "pull"
+    with pytest.raises(ValueError):  # a second pull of the same tag while one runs is refused
+        m.jobs["image:org/engine:1"].state = "running"
+        m.start_pull_image("org/engine:1")

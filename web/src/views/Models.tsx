@@ -77,6 +77,11 @@ function ImagePicker({ engine, value, onChange }: { engine: string; value: strin
   const { data } = usePoll<{ default: string; choices: string[] }>(`/api/images/choices/${engine}`, 15000)
   const listed = !value || !!data?.choices.includes(value)
   const [other, setOther] = useState(false)
+  const status = usePoll<{ ready: boolean; job: { state: string; error: string | null; tail: string[] } | null }>(`/api/images/status?image=${encodeURIComponent(value ?? '')}`, 2000, !!value)
+  const [pullErr, setPullErr] = useState<string | null>(null)
+  const pull = () => { setPullErr(null); api('/api/images/pull', { method: 'POST', json: { image: value } }).then(status.reload).catch((e: Error) => setPullErr(e.message)) }
+  const st = status.data
+  const pulling = st?.job?.state === 'running'
   return (
     <label>Image
       {other ? (
@@ -91,6 +96,15 @@ function ImagePicker({ engine, value, onChange }: { engine: string; value: strin
           {value && !listed && <option value={value}>{value}</option>}
           <option value={'\u0000'}>Other tag…</option>
         </select>
+      )}
+      {value && st && (
+        <small className={pulling || st.ready ? 'muted' : 'warn'}>
+          {pulling ? `Pulling… ${st.job!.tail.at(-1) ?? ''}`
+            : st.ready ? 'On this box.'
+            : st.job?.state === 'failed' ? `Pull failed: ${st.job.error ?? ''}` : 'Not on this box yet; the model can’t start until it is pulled.'}
+          {!pulling && !st.ready && <> <button type="button" onClick={pull}>{st.job?.state === 'failed' ? 'Try again' : 'Pull'}</button></>}
+          {pullErr && <span className="bad"> {pullErr}</span>}
+        </small>
       )}
     </label>
   )

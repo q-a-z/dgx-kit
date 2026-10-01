@@ -235,6 +235,15 @@ class ImageManager:
     def start_pull(self, engine: str) -> Job:
         return self._spawn(Job(engine, "pull", self.image_for(engine)), self._pull_job)
 
+    def start_pull_image(self, image: str) -> Job:
+        """Pull any tag, such as the one picked in a model's settings; tracked by the tag."""
+        return self._spawn(Job("", "pull", image), self._pull_job, key=f"image:{image}")
+
+    def image_status(self, image: str) -> dict:
+        """Is this tag on the box, and is it being pulled (by the model picker or as an engine's image) right now."""
+        job = self.jobs.get(f"image:{image}") or next((j for j in self.jobs.values() if j.kind == "pull" and j.image == image), None)
+        return {"image": image, "ready": self.is_ready(image), "job": job.view() if job else None}
+
     def start_build(self, build: str, make_default: bool = False) -> Job:
         """Build a local image in the background; make_default also switches its engine to it."""
         if build not in BUILDS:
