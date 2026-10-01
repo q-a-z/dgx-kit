@@ -730,3 +730,7 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .sys-row .stats { justify-self: end; width: 23rem; max-width: 100%; }
 .pace { font-size: 11px; }
 .pace.ok { color: var(--ok); } .pace.warn { color: var(--warn); } .pace.bad { color: var(--bad); }
+
+.core-gauge { display: flex; flex-direction: column; align-items: center; }
+.core-gauge .core-grid { height: 96px; width: 112px; display: grid; grid-template-columns: repeat(10, 8px); gap: 3px; align-content: center; justify-content: center; }
+.core-gauge .core { height: 36px; border-radius: 2px; }

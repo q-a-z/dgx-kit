@@ -62,6 +62,25 @@ function net(latest: Snapshot, key: 'net_rx_bps' | 'net_tx_bps'): number | undef
   return r ? (iface && iface in r ? r[iface] : rateSum(r)) : undefined
 }
 
+/** The CPU's cores as small bars, the same view as the CPU tile at the bottom, sized to stand beside the ring gauges. */
+function CoreGauge({ latest }: { latest: Snapshot }) {
+  const s = latest.system
+  const cores = Object.entries(s?.cpu_pct ?? {}).filter(([k]) => k !== 'cpu').sort(([a], [b]) => Number(a.slice(3)) - Number(b.slice(3)))
+  if (!cores.length) return null
+  return (
+    <div className="donut core-gauge">
+      <div className="core-grid" role="group" aria-label="Load per CPU core">
+        {cores.map(([k, v]) => (
+          <div key={k} className={`core ${v >= 97 ? 'crit' : v >= 85 ? 'warn' : ''}`} title={`Core ${k.slice(3)}: ${fmtNum(v)}% at ${fmtNum(s?.cpu_freq_mhz[k])} MHz`}>
+            <i style={{ height: `${Math.max(v, 4)}%` }} />
+          </div>
+        ))}
+      </div>
+      <span className="lbl">CPU cores</span>
+    </div>
+  )
+}
+
 export const TINTS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)']
 
 /** The box itself, in one row: GPU heat, power, free memory and the gateway, each with what it means. */
@@ -83,6 +102,7 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
               zones={[{ upTo: 75, color: 'var(--s1)' }, { upTo: 90, color: 'var(--warn)' }, { upTo: 100, color: 'var(--bad)' }]} />
             <Donut label="Network" value={mb(net(latest, 'net_rx_bps'))} tag="In" second={{ value: mb(net(latest, 'net_tx_bps')), tag: 'Out' }} max={NET_MAX_MB} unit="MB/s" curve fine />
             <Donut label="Disk" value={mb(rateSum(latest.system?.disk_read_bps))} tag="Read" second={{ value: mb(rateSum(latest.system?.disk_write_bps)), tag: 'Write' }} max={DISK_MAX_MB} unit="MB/s" curve fine />
+            <CoreGauge latest={latest} />
             {throttled && <span className="warn small throttle">▲ throttling</span>}
           </div>
         )}
