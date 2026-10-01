@@ -2,7 +2,12 @@
 
 Newest first. Every commit adds its entry here.
 
-## 0.1.5 (in progress)
+## 0.1.6 (in progress)
+
+### Changed
+- Version bump. Everything in 0.1.5 below is released; new changes are listed here from now on.
+
+## 0.1.5
 
 ### Fixed
 - **Split GGUF models (`…-00001-of-00002.gguf`, `…-00002-of-00002.gguf`).** DGX-kit counted only one piece: the memory plan and "Check if it fits" were too small by the size of the other pieces, and each piece was offered as a separate model. A split GGUF is now one model: its pieces are added up for the plan, and only the first piece is offered (llama.cpp loads the others from it).
