@@ -2,7 +2,12 @@
 
 Newest first. Every commit adds its entry here.
 
-## 0.1.2 (in progress)
+## 0.1.3 (in progress)
+
+### Changed
+- Version bump. Everything in 0.1.2 below is released; new changes are listed here from now on.
+
+## 0.1.2
 
 ### Added
 - **Clock gauge** after GPU power: the GPU's clock (outer ring) and the CPU's average clock (inner ring), in MHz.
