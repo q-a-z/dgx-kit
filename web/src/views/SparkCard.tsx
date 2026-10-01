@@ -1,4 +1,4 @@
-import { fmtBytes, type Gateway, type Snapshot } from '../api'
+import { fmtBytes, fmtNum, type Gateway, type Live, type Snapshot } from '../api'
 import { Donut } from '../components/Donut'
 import type { Entry } from '../fleet'
 import { usePoll } from '../usePoll'
@@ -10,6 +10,37 @@ const POWER_MAX = 120
 function cpuTemp(latest: Snapshot): number | null {
   const t = (latest.system?.sensors ?? []).filter((x) => x.chip === 'acpitz' && x.unit === 'C').map((x) => x.value)
   return t.length ? Math.max(...t) : null
+}
+
+const sum = (xs: Live[], k: string) => xs.reduce((a, x) => a + (typeof x[k] === 'number' ? (x[k] as number) : 0), 0)
+const compact = (n: number) => n >= 1e9 ? `${(n / 1e9).toFixed(2)} B` : n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)} K` : `${Math.round(n)}`
+/** Tokens over the time spent on them, across models: each model's per-request speed weighted by its token count. */
+function avgSpeed(xs: Live[], toks: string, speed: string): number | null {
+  const parts = xs.filter((x) => typeof x[toks] === 'number' && typeof x[speed] === 'number' && (x[speed] as number) > 0)
+  const t = parts.reduce((a, x) => a + (x[toks] as number), 0)
+  const secs = parts.reduce((a, x) => a + (x[toks] as number) / (x[speed] as number), 0)
+  return secs > 0 ? t / secs : null
+}
+
+/** Traffic through the running models: totals since each started, speeds now and on average. */
+function TrafficStats({ latest }: { latest: Snapshot }) {
+  const up = Object.values(latest.models).filter((x) => x.up)
+  if (!up.length) return <div className="cell"><span className="lbl">Traffic</span><span className="muted small">No model running</span></div>
+  const dec = avgSpeed(up, 'gen_tokens_total', 'decode_tps_req')
+  const pre = avgSpeed(up, 'prompt_tokens_total', 'prefill_tps_req')
+  return (
+    <div className="cell traffic">
+      <span className="lbl">Traffic <span className="muted small">since the models started</span></span>
+      <dl>
+        <div><dt>Tokens in</dt><dd><b className="n">{compact(sum(up, 'prompt_tokens_total'))}</b></dd></div>
+        <div><dt>Tokens out</dt><dd><b className="n">{compact(sum(up, 'gen_tokens_total'))}</b></dd></div>
+        <div><dt>Requests</dt><dd><b className="n">{compact(sum(up, 'requests_total'))}</b></dd></div>
+        <div><dt>Busy now</dt><dd><b className="n">{sum(up, 'running')}</b> <small className="muted">{sum(up, 'waiting')} waiting</small></dd></div>
+        <div><dt>Decode</dt><dd><b className="n">{fmtNum(sum(up, 'decode_tps'))}</b> <span className="muted small">tok/s</span><small className="muted">{dec != null ? `average ${fmtNum(dec)}` : 'no average yet'}</small></dd></div>
+        <div><dt>Prefill</dt><dd><b className="n">{fmtNum(sum(up, 'prefill_tps'))}</b> <span className="muted small">tok/s</span><small className="muted">{pre != null ? `average ${fmtNum(pre)}` : 'no average yet'}</small></dd></div>
+      </dl>
+    </div>
+  )
 }
 
 export const TINTS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)']
@@ -38,6 +69,7 @@ export function SparkCard({ latest, reserved, hwOpen, toggleHw }: {
             {throttled && <span className="warn small throttle">▲ throttling</span>}
           </div>
         )}
+        <TrafficStats latest={latest} />
         {m && (
           <div className="cell">
             <span className="lbl">Memory free</span>

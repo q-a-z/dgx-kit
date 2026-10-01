@@ -5,6 +5,7 @@ Newest first. Every commit adds its entry here.
 ## 0.1.2 (in progress)
 
 ### Added
+- **Traffic stats** on the home page next to the gauges: tokens in and out, requests, requests running and waiting, and decode and prefill speed now and on average, summed over the running models. Totals count from when each model started.
 - **Extra LiteLLM settings editor** in Settings, Gateway: edit `litellm/extra.env` in the page (Save, or Save and apply, which restarts the gateway for a few seconds), see which lines are ignored and whether the saved file is live. No root editing needed.
 
 ### Changed
