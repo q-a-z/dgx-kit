@@ -1,7 +1,7 @@
 import { usePoll } from '../usePoll'
 import { useEffect, useRef, useState } from 'react'
 import { useModelActions } from '../actions'
-import { api, fmtBytes, fmtNum, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
+import { api, copyText, fmtBytes, fmtNum, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
 import type { Mark } from '../components/Chart'
 import { Icon } from '../components/Icon'
 import { ModelActions, type Tab } from '../components/ModelActions'
@@ -281,7 +281,7 @@ function LaunchView({ name }: { name: string }) {
     .then((r) => { setImported(r.name); setImportErr(r.notes.length ? r.notes.join('; ') : null) })
     .catch((e: Error) => setImportErr(e.message))
   if (!data) return <p className={error ? 'bad' : 'muted'}>{error ? `Couldn’t read how it was started: ${error}` : 'Reading how it was started…'}</p>
-  const copy = () => navigator.clipboard?.writeText(data.command).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) })
+  const copy = () => copyText(data.command).then((ok) => { if (ok) { setCopied(true); setTimeout(() => setCopied(false), 1500) } })
   return (
     <div className="launch">
       <p className="muted">Started outside DGX-kit, so this is read-only. DGX-kit never restarts it.</p>

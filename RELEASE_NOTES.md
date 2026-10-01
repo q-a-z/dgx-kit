@@ -4,6 +4,9 @@ Newest first. Every commit adds its entry here.
 
 ## 0.1.4 (in progress)
 
+### Fixed
+- **Copy buttons** (the LiteLLM key and address in Settings, Gateway, and the launch command of a model started elsewhere) did nothing when the dashboard was opened over plain http, because browsers only offer the clipboard on https. They now fall back to the older copy method, and say "Copy failed" if that fails too, instead of claiming "Copied".
+
 ### Changed
 - Version bump. Everything in 0.1.3 below is released; new changes are listed here from now on.
 

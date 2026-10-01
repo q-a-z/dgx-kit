@@ -1,6 +1,6 @@
 import { Pending } from './Settings'
 import { useState } from 'react'
-import { api, fmtBytes, fmtNum, fmtRate, type Download, type Gateway, type ModelRow, type Plan, type Recipe } from '../api'
+import { api, copyText, fmtBytes, fmtNum, fmtRate, type Download, type Gateway, type ModelRow, type Plan, type Recipe } from '../api'
 import { usePoll } from '../usePoll'
 import { Stat } from '../components/Stat'
 
@@ -223,8 +223,8 @@ export function GatewayCard() {
     .then(() => { setUrl(null); setKey(''); setMsg({ text: 'Saved.' }); conf.reload(); reload() })
     .catch((e: Error) => setMsg({ text: e.message, bad: true }))
   const copy = async (what: string, get: () => Promise<string>) => {
-    await navigator.clipboard?.writeText(await get())
-    setCopied(what); setTimeout(() => setCopied(null), 1500)
+    const ok = await copyText(await get())
+    setCopied(ok ? what : `${what}-failed`); setTimeout(() => setCopied(null), 1500)
   }
   const status = !data ? null
     : data.reachable === false ? { bad: !data.problem?.startsWith('pulling'), text: data.problem ?? `Not answering at ${data.url}${data.error ? `: ${data.error}` : ''}` }
@@ -260,14 +260,14 @@ export function GatewayCard() {
       <label>Address clients use
         <span className="row">
           <input className="grow" value={shownUrl} placeholder={c.url_default} onChange={(e) => setUrl(e.target.value)} />
-          <button onClick={() => copy('url', async () => data?.url ?? c.url ?? c.url_default)}>{copied === 'url' ? 'Copied' : 'Copy'}</button>
+          <button onClick={() => copy('url', async () => data?.url ?? c.url ?? c.url_default)}>{copied === 'url' ? 'Copied' : copied === 'url-failed' ? 'Copy failed' : 'Copy'}</button>
         </span>
         <small className="muted">Leave empty to use {c.url_default}. When set, DGX-kit publishes running models to this LiteLLM through its API and adds or removes only its own entries.</small>
       </label>
       <label>Key (LiteLLM master key)
         <span className="row">
           <input className="grow" type="password" autoComplete="off" value={key} placeholder={c.key_set ? `saved ${c.key_hint ?? ''}` : 'not set'} onChange={(e) => setKey(e.target.value)} />
-          {c.key_set && <button onClick={() => copy('key', () => api<{ key: string }>('/api/settings/gateway/key').then((r) => r.key))}>{copied === 'key' ? 'Copied' : 'Copy'}</button>}
+          {c.key_set && <button onClick={() => copy('key', () => api<{ key: string }>('/api/settings/gateway/key').then((r) => r.key))}>{copied === 'key' ? 'Copied' : copied === 'key-failed' ? 'Copy failed' : 'Copy'}</button>}
           {c.key_set && <button className="ghost" onClick={() => save({ clear_key: true })}>Remove</button>}
         </span>
       </label>

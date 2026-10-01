@@ -143,3 +143,18 @@ export type Action = { t: number; action: string; detail: string }
 export const fmtRate = (b: number | null | undefined) => (b == null ? '–' : `${fmtBytes(b)}/s`)
 export const sum = (r: Record<string, number> | undefined) => (r ? Object.values(r).reduce((a, b) => a + b, 0) : undefined)
 export type Gateway = { state: string | null; port: number; image: string; problem: string | null; models: string[]; external?: string | null; db?: string | null; extra_env?: string[]; extra_env_file?: string; key_ready?: boolean; url?: string; reachable?: boolean; auth?: string | null; served?: string[]; error?: string }
+
+/** Copy text to the clipboard. The clipboard API only exists on https and localhost, and the dashboard is often plain http
+ *  on the LAN, so fall back to a hidden text box and the old copy command. Resolves false when neither worked. */
+export async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true }
+  } catch { /* fall through to the old way */ }
+  const box = document.createElement('textarea')
+  box.value = text
+  box.setAttribute('readonly', '')
+  box.style.cssText = 'position:fixed;top:0;left:0;opacity:0'
+  document.body.appendChild(box)
+  box.select()
+  try { return document.execCommand('copy') } catch { return false } finally { box.remove() }
+}
