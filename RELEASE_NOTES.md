@@ -11,6 +11,7 @@ Newest first. Every commit adds its entry here.
 ## 0.1.2
 
 ### Added
+- **System tab** in Settings (the first tab): the machine's model, BIOS (version, date, vendor), GPU VBIOS, kernel, NVIDIA driver, CUDA, Docker and DGX-kit versions, and **firmware updates** from fwupd (the Linux firmware service the DGX Spark uses): every firmware device with its version and whether an update is on offer, a **Check for updates** button, and a check once a day. A **Changes** list remembers when any of these versions changed (a new BIOS, driver, kernel or firmware flash) and from what. DGX-kit only reports; installing is still `sudo fwupdmgr update` on the machine. The check runs in a short-lived container from DGX-kit's own image with access to the system bus; it is off in read-only mode.
 - **Clock gauge** after GPU power: the GPU's clock (outer ring) and the CPU's average clock (inner ring), in MHz.
 - **CPU cores gauge** beside the ring gauges: one short bar per core in a near-square grid (5 by 4 on the GB10), its caption level with the other gauges, the same view as the CPU tile at the bottom (amber from 85%, red from 97%; hover a bar for its core and clock).
 - **Network and Disk gauges** next to Temperature, GPU power and Load: network in and out, disk read and write, in MB/s. The rings use a square-root scale, so light traffic still shows.

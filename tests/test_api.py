@@ -201,10 +201,11 @@ def test_readonly_mode_blocks_everything_that_changes_the_box(tmp_path, monkeypa
         for method, path in [("post", "/api/models/llama/start"), ("post", "/api/models/llama/stop"),
                              ("post", "/api/models/llama/download"), ("delete", "/api/models/llama"),
                              ("post", "/api/images/vllm/pull"), ("post", "/api/gateway/sync"),
-                             ("post", "/api/images/clean")]:
+                             ("post", "/api/images/clean"), ("post", "/api/system/firmware/check")]:
             assert getattr(client, method)(path).status_code == 403, path
         assert s.runner.started == [] and s.gateway.synced == []
         assert client.get("/api/models").status_code == 200
+        assert client.get("/api/system").status_code == 200
 
 
 def test_library_lists_and_sets_up_models_on_disk(env, tmp_path):
@@ -451,3 +452,25 @@ def test_publish_and_unpublish_update_the_gateway_without_touching_the_model(env
     assert s.gateway.synced[-1] == {"llama": 8100}  # and back on it
     assert client.post("/api/models/nope/publish", json={"publish": True}).status_code == 404
     assert client.post("/api/models/llama/publish", json={}).status_code == 422
+
+
+def test_system_tab_tracks_versions_and_firmware_updates(env):
+    client, s, _ = env
+    first = client.get("/api/system").json()
+    labels = {i["label"]: i["value"] for i in first["items"]}
+    assert labels["NVIDIA driver"] and labels["DGX-kit"] and first["changes"] == []  # the first reading is only a baseline
+    devices = [{"id": "ec", "name": "Embedded Controller", "version": "0x02000006", "vendor": "Asus", "summary": None,
+                "plugin": "uefi_capsule", "updatable": True, "updates": [{"version": "0x03000001", "summary": "new EC", "remote": "lvfs"}]},
+               {"id": "kek", "name": "KEK CA", "version": "2023", "vendor": None, "summary": None, "plugin": "uefi_kek",
+                "updatable": False, "updates": []}]
+    s.firmware_probe = lambda: devices
+    r = client.post("/api/system/firmware/check").json()
+    assert r["firmware"]["updates"] == 1 and r["firmware"]["checked"] and r["firmware"]["error"] is None
+    devices[0]["version"] = "0x03000001"; devices[0]["updates"] = []  # it was flashed
+    r = client.post("/api/system/firmware/check").json()
+    assert r["firmware"]["updates"] == 0
+    assert [(c["label"], c["from"], c["to"]) for c in r["changes"] if c["key"] == "fw:ec"] == [("Embedded Controller", "0x02000006", "0x03000001")]
+    s.firmware_probe = lambda: (_ for _ in ()).throw(RuntimeError("fwupd isn't reachable"))
+    r = client.post("/api/system/firmware/check").json()
+    assert "fwupd" in r["firmware"]["error"] and r["firmware"]["devices"]  # the last good result is kept
+

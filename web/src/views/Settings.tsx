@@ -7,10 +7,12 @@ import { DiskDelete } from './DiskDelete'
 import { GatewayCard } from './Models'
 import { go } from '../nav'
 import { Images, Log } from './Other'
+import { SystemInfo } from './SystemInfo'
 
 type Lib = Parameters<typeof Folders>[0]['lib']
 
 const TABS = [
+  { id: 'system', label: 'System' },
   { id: 'gateway', label: 'Gateway' },
   { id: 'hf', label: 'Hugging Face' },
   { id: 'images', label: 'Engine images' },
@@ -26,7 +28,7 @@ const TABS = [
 export function Settings({ canChangePassword, tab }: { canChangePassword: boolean; tab?: string }) {
   const lib = usePoll<Pick<Lib, 'paths' | 'missing'>>('/api/library/paths', 30000)
   const tabs = TABS.filter((t) => t.id !== 'password' || canChangePassword)
-  const current = tabs.find((t) => t.id === tab)?.id ?? 'gateway'
+  const current = tabs.find((t) => t.id === tab)?.id ?? 'system'
   return (
     <div className="page narrow-page settings">
       <h1>Settings</h1>
@@ -36,6 +38,10 @@ export function Settings({ canChangePassword, tab }: { canChangePassword: boolea
         ))}
       </div>
       <div role="tabpanel" aria-label={tabs.find((t) => t.id === current)?.label}>
+        {current === 'system' && (<>
+          <p className="muted lead">This machine’s firmware and software versions, and whether fwupd has firmware updates for it.</p>
+          <SystemInfo />
+        </>)}
         {current === 'gateway' && (<>
           <p className="muted lead">Clients use one OpenAI-compatible address for every running model.</p>
           <div className="bare-head"><GatewayCard /></div>

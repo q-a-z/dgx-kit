@@ -138,7 +138,8 @@ class SystemCollector:
                 return "" if v.lower() in ("", "default string", "to be filled by o.e.m.", "system product name", "none") else v
             vendor, product = dmi("sys_vendor"), dmi("product_name")
             self._machine = {"name": machine_name(vendor, product), "vendor": vendor, "product": product,
-                             "family": dmi("product_family"), "bios": dmi("bios_version")} if product else None
+                             "family": dmi("product_family"), "bios": dmi("bios_version"),
+                             "bios_date": dmi("bios_date"), "bios_vendor": dmi("bios_vendor")} if product else None
         return self._machine
 
     def _cpu_model(self) -> str | None:

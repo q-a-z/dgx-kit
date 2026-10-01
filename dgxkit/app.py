@@ -48,6 +48,7 @@ class Services:
     settings: Settings | None = None
     external: dict = field(default_factory=dict)  # running model servers DGX-kit didn't start
     actions: deque = field(default_factory=lambda: deque(maxlen=1000))
+    firmware_probe: object = None  # tests give a fake; normally fwupd is asked through system_info.probe_firmware
     quick_pending: set = field(default_factory=set)  # models DGX-kit just started, waiting for their first answer
 
     def log(self, action: str, detail: str) -> None:
@@ -107,6 +108,21 @@ async def first_run(s: Services) -> None:
         s.log("gateway", f"not started: {e}")
 
 
+async def firmware_watch(s: Services) -> None:
+    """Once a day, note the machine's versions and ask fwupd for updates, so the System tab is current without a click.
+    Not in read-only mode (it starts a short-lived container) and never fatal."""
+    from . import system_info
+    await asyncio.sleep(120)
+    while True:
+        try:
+            if os.environ.get("DGXKIT_READONLY") != "1":
+                devices = await asyncio.to_thread(system_info.probe_firmware, s)
+                await asyncio.to_thread(system_info.refresh, s, devices)
+        except Exception as e:
+            s.log("firmware check", f"failed: {e}"[:200])
+        await asyncio.sleep(24 * 3600)
+
+
 def default_state_dir() -> str:
     """The installer's folder when it is there and usable (or we are root and can make it), else one in the user's own
     home, so running from a clone works without root."""
@@ -141,9 +157,11 @@ def create_app(services: Services | None = None) -> FastAPI:
         setup = asyncio.create_task(first_run(s))
         from .api_models import watch_external
         watcher = asyncio.create_task(watch_external(s))
+        fw_watch = asyncio.create_task(firmware_watch(s))
         yield
         setup.cancel()
         watcher.cancel()
+        fw_watch.cancel()
         await s.sampler.stop()
 
     app = FastAPI(title="DGX-kit", lifespan=lifespan)
@@ -170,7 +188,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             return False
         if method == "PUT" and re.fullmatch(r"/api/images/[a-z]+", path):
             return False  # picks which tag DGX-kit uses; nothing on the box changes
-        return (path.startswith(("/api/images", "/api/gateway", "/api/downloads"))
+        return (path.startswith(("/api/images", "/api/gateway", "/api/downloads", "/api/system/firmware"))
                 or re.fullmatch(r"/api/models/[^/]+/(start|stop|download)", path) is not None
                 or (method == "DELETE" and path.startswith("/api/models/")))
 

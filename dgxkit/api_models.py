@@ -1079,3 +1079,30 @@ async def put_layout(body: dict, request: Request):
         raise HTTPException(422, "layout must be an object under 200 KB")
     svc(request).settings.set_layout(layout)
     return {"saved": True}
+
+
+@router.get("/system")
+async def system_info_report(request: Request):
+    """Versions of what the machine runs (firmware, kernel, driver…), the firmware fwupd knows of, and what changed."""
+    from . import system_info
+    s = svc(request)
+    data = await asyncio.to_thread(system_info.refresh, s)
+    return system_info.report(s, data)
+
+
+@router.post("/system/firmware/check")
+async def system_firmware_check(request: Request):
+    """Ask fwupd for the firmware devices and the updates on offer (starts a short-lived container). Reports only; installs nothing."""
+    from . import system_info
+    s = svc(request)
+    try:
+        devices = await asyncio.to_thread(system_info.probe_firmware, s)
+    except Exception as e:
+        data = system_info.load(s.state_dir)
+        data["firmware"] = {**(data.get("firmware") or {}), "error": str(e)[:300]}
+        system_info.save(s.state_dir, data)
+        s.log("firmware check", f"failed: {e}")
+        return system_info.report(s, data)
+    data = await asyncio.to_thread(system_info.refresh, s, devices)
+    s.log("firmware check", f"{sum(1 for d in devices if d.get('updates'))} update(s) on offer")
+    return system_info.report(s, data)

@@ -120,6 +120,15 @@ class NvmlGpu:
             processes=self._processes(),
         )
 
+    def versions(self) -> dict:
+        """Driver, CUDA and VBIOS versions, for the System tab."""
+        N = self.N
+        text = lambda v: v.decode() if isinstance(v, bytes) else v
+        cuda = self._opt(N.nvmlSystemGetCudaDriverVersion)
+        return {"driver": text(self._opt(N.nvmlSystemGetDriverVersion)),
+                "cuda": f"{cuda // 1000}.{cuda % 1000 // 10}" if cuda else None,
+                "vbios": text(self._opt(N.nvmlDeviceGetVbiosVersion, self.h))}
+
     def close(self):
         self._opt(self.N.nvmlShutdown)
 
@@ -131,6 +140,9 @@ class FakeGpu:
     """
 
     name = "NVIDIA GB10 (simulated)"
+
+    def versions(self) -> dict:
+        return {"driver": "580.0 (simulated)", "cuda": "13.0", "vbios": "00.00.00.00.00"}
 
     def sample(self) -> GpuSample:
         util = random.randint(0, 100)
