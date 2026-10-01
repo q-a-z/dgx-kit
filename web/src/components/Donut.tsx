@@ -29,7 +29,7 @@ export function Donut({ value, min = 0, max, unit, label, zones, color = 'var(--
   )
   const num = (v: number | null | undefined) => (v == null ? '–' : fine && v < 10 ? v.toFixed(1) : Math.round(v))
   return (
-    <div className="donut" role="meter" aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value ?? undefined} aria-valuetext={second ? `${tag} ${num(value)}${unit}, ${second.tag} ${num(second.value)}${unit}` : undefined}>
+    <div className="donut" style={{ width: Math.max(120, size + 8) }} role="meter" aria-label={label} aria-valuemin={min} aria-valuemax={max} aria-valuenow={value ?? undefined} aria-valuetext={second ? `${tag} ${num(value)}${unit}, ${second.tag} ${num(second.value)}${unit}` : undefined}>
       <svg viewBox="0 0 96 96" width={size} height={size}>
         <g transform="rotate(135 48 48)" fill="none">
           {second ? ring(value, R_SHARED, 5) : <circle cx="48" cy="48" r={R} stroke="var(--track)" strokeWidth="8" style={arc(0, 1)} />}
@@ -44,9 +44,9 @@ export function Donut({ value, min = 0, max, unit, label, zones, color = 'var(--
         {second ? (
           <>
             <g style={{ color: 'var(--muted)' }} transform="translate(30 33.5)"><Icon name={(tag ?? '').toLowerCase()} size={11} /></g>
-            <text x="44" y="44" className="dv dv-sm">{num(value)}</text>
+            <text x="44" y="44" className={`dv dv-sm${String(num(value)).length > 3 ? ' dv-xs' : ''}`}>{num(value)}</text>
             <g style={{ color: 'var(--muted)' }} transform="translate(30 47.5)"><Icon name={second.tag.toLowerCase()} size={11} /></g>
-            <text x="44" y="58" className="dv dv-sm">{num(second.value)}</text>
+            <text x="44" y="58" className={`dv dv-sm${String(num(second.value)).length > 3 ? ' dv-xs' : ''}`}>{num(second.value)}</text>
             <text x="48" y="71" textAnchor="middle" className="du">{unit}</text>
           </>
         ) : (

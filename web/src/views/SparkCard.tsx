@@ -69,7 +69,7 @@ function CoreGauge({ latest }: { latest: Snapshot }) {
   if (!cores.length) return null
   return (
     <div className="donut core-gauge">
-      <div className="core-grid" role="group" aria-label="Load per CPU core">
+      <div className="core-grid" role="group" aria-label="Load per CPU core" style={{ gridTemplateColumns: `repeat(${Math.ceil(Math.sqrt(cores.length))}, 17px)` }}>
         {cores.map(([k, v]) => (
           <div key={k} className={`core ${v >= 97 ? 'crit' : v >= 85 ? 'warn' : ''}`} title={`Core ${k.slice(3)}: ${fmtNum(v)}% at ${fmtNum(s?.cpu_freq_mhz[k])} MHz`}>
             <i style={{ height: `${Math.max(v, 4)}%` }} />
@@ -100,8 +100,8 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
               zones={[{ upTo: 80, color: 'var(--ok)' }, { upTo: 100, color: 'var(--warn)' }, { upTo: POWER_MAX, color: 'var(--bad)' }]} />
             <Donut label="Load" value={g.util_pct} tag="GPU" second={{ value: latest.system?.cpu_pct?.cpu, tag: 'CPU' }} max={100} unit="%"
               zones={[{ upTo: 75, color: 'var(--s1)' }, { upTo: 90, color: 'var(--warn)' }, { upTo: 100, color: 'var(--bad)' }]} />
-            <Donut label="Network" value={mb(net(latest, 'net_rx_bps'))} tag="In" second={{ value: mb(net(latest, 'net_tx_bps')), tag: 'Out' }} max={NET_MAX_MB} unit="MB/s" curve fine />
-            <Donut label="Disk" value={mb(rateSum(latest.system?.disk_read_bps))} tag="Read" second={{ value: mb(rateSum(latest.system?.disk_write_bps)), tag: 'Write' }} max={DISK_MAX_MB} unit="MB/s" curve fine />
+            <Donut label="Network" value={mb(net(latest, 'net_rx_bps'))} tag="In" second={{ value: mb(net(latest, 'net_tx_bps')), tag: 'Out' }} max={NET_MAX_MB} unit="MB/s" curve fine size={128} />
+            <Donut label="Disk" value={mb(rateSum(latest.system?.disk_read_bps))} tag="Read" second={{ value: mb(rateSum(latest.system?.disk_write_bps)), tag: 'Write' }} max={DISK_MAX_MB} unit="MB/s" curve fine size={128} />
             <CoreGauge latest={latest} />
             {throttled && <span className="warn small throttle">▲ throttling</span>}
           </div>
