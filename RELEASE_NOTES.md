@@ -2,7 +2,12 @@
 
 Newest first. Every commit adds its entry here.
 
-## 0.1.3 (in progress)
+## 0.1.4 (in progress)
+
+### Changed
+- Version bump. Everything in 0.1.3 below is released; new changes are listed here from now on.
+
+## 0.1.3
 
 ### Changed
 - The box's real model is part of the logo in the top bar (for example "ASUS GX10"), read from the firmware; hover it for the vendor, product family, GPU and BIOS. Where the firmware says nothing, the GPU name is shown instead.
