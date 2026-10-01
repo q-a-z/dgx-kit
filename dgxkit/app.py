@@ -110,6 +110,21 @@ async def first_run(s: Services) -> None:
         s.log("gateway", f"not started: {e}")
 
 
+async def update_watch(s: Services) -> None:
+    """Look on GitHub for a newer version on the schedule in Settings (daily unless changed; never when set to never)."""
+    from .api_models import _updater
+    from .updater import due
+    await asyncio.sleep(90)
+    while True:
+        try:
+            u = _updater(s)
+            if due(s.settings.update_check, u.cache.get("checked")):
+                await asyncio.to_thread(u.check)
+        except Exception as e:
+            s.log("update check", f"failed: {e}"[:200])
+        await asyncio.sleep(600)
+
+
 async def firmware_watch(s: Services) -> None:
     """Once a day, note the machine's versions and ask fwupd for updates, so the System tab is current without a click.
     Not in read-only mode (it starts a short-lived container) and never fatal."""
@@ -160,10 +175,12 @@ def create_app(services: Services | None = None) -> FastAPI:
         from .api_models import watch_external
         watcher = asyncio.create_task(watch_external(s))
         fw_watch = asyncio.create_task(firmware_watch(s))
+        up_watch = asyncio.create_task(update_watch(s))
         yield
         setup.cancel()
         watcher.cancel()
         fw_watch.cancel()
+        up_watch.cancel()
         await s.sampler.stop()
 
     app = FastAPI(title="DGX-kit", lifespan=lifespan)

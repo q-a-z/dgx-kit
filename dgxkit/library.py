@@ -89,6 +89,22 @@ class Settings:
                 with os.fdopen(fd, "w") as f:
                     f.write(key.strip())
 
+    UPDATE_CHECKS = ("hourly", "daily", "weekly", "never")
+
+    @property
+    def update_check(self) -> str:
+        """How often DGX-kit looks on GitHub for a newer version by itself: hourly, daily (the default), weekly or never."""
+        v = self._load().get("update_check")
+        return v if v in self.UPDATE_CHECKS else "daily"
+
+    def set_update_check(self, value: str) -> str:
+        if value not in self.UPDATE_CHECKS:
+            raise ValueError(f"choose one of {', '.join(self.UPDATE_CHECKS)}")
+        data = self._load()
+        data["update_check"] = value
+        self._save(data)
+        return self.update_check
+
     @property
     def hf_token(self) -> str | None:
         """The Hugging Face token set in Settings; kept private in the state dir, never returned by the API."""

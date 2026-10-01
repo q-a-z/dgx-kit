@@ -6,6 +6,8 @@ Newest first. Every commit adds its entry here.
 
 ### Added
 - **Update DGX-kit from GitHub, from the page.** Settings → System → **DGX-kit update** shows the running version and the latest on GitHub, what's new, and an **Update** button: it downloads the latest source, builds the image, keeps the old one as `dgx-kit:previous` for a rollback, restarts the dashboard and reloads the page on the new version. Models and the gateway keep running, and your settings, keys and recipes are untouched. A yellow **Update 0.x.y** badge next to the logo appears when a newer version is out. It asks first, is off in read-only mode, and `DGXKIT_UPDATE_REPO` points it at another GitHub repository.
+- **Update checking is a setting.** DGX-kit looks on GitHub for a newer version by itself once a day. Settings → System → DGX-kit update → **Check for updates** changes that to every hour, every week or never (then only **Check now** looks). The last look is remembered across restarts, so a restart doesn't cause a new one, and a failed look keeps the last good answer and says why it failed.
+- Asking what is new no longer needs Docker to be running (it only needed it to start an update).
 
 ## 0.1.6
 

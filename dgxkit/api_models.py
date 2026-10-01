@@ -1191,7 +1191,7 @@ async def put_layout(body: dict, request: Request):
 def _updater(s):
     if s.updater is None:
         from .updater import Updater
-        s.updater = Updater(docker=getattr(s.runner, "docker", None))
+        s.updater = Updater(state_dir=s.state_dir)  # Docker is only needed to update, so asking what is new works without it
     return s.updater
 
 
@@ -1200,7 +1200,7 @@ def _update_state(s, current: str) -> dict:
     u = _updater(s)
     latest = u.cache or None
     return {"current": current, "latest": latest, "available": bool(latest and newer(latest.get("version"), current)),
-            "job": u.job.view() if u.job else None}
+            "job": u.job.view() if u.job else None, "frequency": s.settings.update_check}
 
 
 @router.get("/system/update")
@@ -1209,9 +1209,23 @@ async def update_state(request: Request):
     from .app import app_version
     s = svc(request)
     u = _updater(s)
-    if not u.cache or time.time() - u.cache.get("checked", 0) > 3600:
+    from .updater import due
+    if not u.cache and due(s.settings.update_check, None):  # the very first look; after that the daily (or chosen) schedule rules
         await asyncio.to_thread(u.check)
     return _update_state(s, app_version())
+
+
+class UpdateCheckBody(BaseModel):
+    frequency: str
+
+
+@router.put("/settings/updates")
+async def set_update_check(body: UpdateCheckBody, request: Request):
+    """How often DGX-kit looks on GitHub for a newer version by itself: hourly, daily, weekly or never."""
+    s = svc(request)
+    value = s.settings.set_update_check(body.frequency)
+    s.log("settings", f"update check: {value}")
+    return {"frequency": value}
 
 
 @router.post("/system/update/check")

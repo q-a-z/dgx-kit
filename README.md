@@ -88,7 +88,7 @@ Enter, and restarts the service on the new code. For updating, the next section 
 
 ### Updating
 
-**From the page:** Settings → System → **DGX-kit update** compares the running version with the one on GitHub (checked at most once an hour; a yellow **Update 0.x.y** badge appears next to the logo when a newer one exists), shows what's new, and **Update** does the rest after one confirmation: it downloads the latest source, builds the image, keeps the old image as `dgx-kit:previous`, and restarts the dashboard, which reloads by itself. Models and the gateway keep running. It is switched off in read-only mode, and `DGXKIT_UPDATE_REPO` changes the GitHub repository it uses.
+**From the page:** Settings → System → **DGX-kit update** compares the running version with the one on GitHub (looked up once a day by default; the **Check for updates** setting there makes it every hour, every week or never, and **Check now** always looks; a yellow **Update 0.x.y** badge appears next to the logo when a newer one exists), shows what's new, and **Update** does the rest after one confirmation: it downloads the latest source, builds the image, keeps the old image as `dgx-kit:previous`, and restarts the dashboard, which reloads by itself. Models and the gateway keep running. It is switched off in read-only mode, and `DGXKIT_UPDATE_REPO` changes the GitHub repository it uses.
 
 **From a terminal:** the install leaves a `dgx-kit` command. Updating is one line:
 

@@ -580,3 +580,34 @@ def test_updater_helpers_read_versions_and_notes():
     import pytest
     with pytest.raises(ValueError):
         slug_of("https://example.com/x/y.git")
+
+
+def test_update_check_frequency_is_a_setting_and_daily_by_default(env):
+    client, s, _ = env
+    s.updater = FakeUpdater()
+    s.updater.checks = 0
+    orig = s.updater.check
+    s.updater.check = lambda: (setattr(s.updater, "checks", s.updater.checks + 1), orig())[1]
+    assert client.get("/api/system/update").json()["frequency"] == "daily"
+    assert s.updater.checks == 1  # the first look
+    client.get("/api/system/update")
+    assert s.updater.checks == 1  # then it is the schedule's job, not every page load
+    assert client.put("/api/settings/updates", json={"frequency": "weekly"}).json() == {"frequency": "weekly"}
+    assert client.get("/api/system/update").json()["frequency"] == "weekly"
+    assert client.put("/api/settings/updates", json={"frequency": "sometimes"}).status_code == 422
+
+
+def test_never_means_no_automatic_look(env):
+    client, s, _ = env
+    s.updater = FakeUpdater()
+    client.put("/api/settings/updates", json={"frequency": "never"})
+    st = client.get("/api/system/update").json()
+    assert st["latest"] is None and st["available"] is False and st["frequency"] == "never"
+    assert client.post("/api/system/update/check").json()["latest"]["version"] == "99.0.0"  # a click still looks
+
+
+def test_when_an_automatic_check_is_due():
+    from dgxkit.updater import due
+    assert not due("never", None) and due("daily", None)
+    assert not due("daily", 1000.0, now=1000.0 + 3600) and due("daily", 1000.0, now=1000.0 + 25 * 3600)
+    assert due("hourly", 1000.0, now=1000.0 + 3700) and not due("weekly", 1000.0, now=1000.0 + 6 * 24 * 3600)

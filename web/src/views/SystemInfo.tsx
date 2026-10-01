@@ -20,6 +20,7 @@ export type UpdateState = {
   latest: { version?: string; sha?: string; notes?: string; checked?: number; error?: string; repo?: string } | null
   available: boolean
   job: { version: string | null; state: string; step: string; error: string | null; tail: string[] } | null
+  frequency?: string
 }
 
 /** Update DGX-kit from GitHub: what is out there, what's new, and one button. Models keep running during an update. */
@@ -41,6 +42,7 @@ function UpdateCard() {
   }, [job?.state, data?.current]) // eslint-disable-line react-hooks/exhaustive-deps
   if (!data) return null
   const latest = data.latest
+  const setFrequency = (frequency: string) => api('/api/settings/updates', { method: 'PUT', json: { frequency } }).then(() => { toast(`Update checks: ${frequency}.`); reload() }).catch((e: Error) => toast(e.message, true))
   const check = () => { setBusy(true); api('/api/system/update/check', { method: 'POST' }).then(reload).catch((e: Error) => toast(e.message, true)).finally(() => setBusy(false)) }
   const update = async () => {
     const ok = await ask({
@@ -73,6 +75,12 @@ function UpdateCard() {
       )}
       {job?.state === 'failed' && <p className="bad">The update failed: {job.error}</p>}
       {data.available && latest?.notes && <details className="more"><summary>What’s new</summary><pre className="logs">{latest.notes}</pre></details>}
+      <label className="row">Check for updates
+        <select value={data.frequency ?? 'daily'} onChange={(e) => setFrequency(e.target.value)}>
+          <option value="hourly">every hour</option><option value="daily">every day</option><option value="weekly">every week</option><option value="never">never (only when I press Check now)</option>
+        </select>
+        {latest?.checked && <span className="muted small">Last checked {new Date(latest.checked * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}.</span>}
+      </label>
       <p className="muted small">From {latest?.repo ?? 'GitHub'}. The same as running <code>dgx-kit update</code> on the machine. To go back: <code>docker tag dgx-kit:previous dgx-kit:latest && docker stop dgx-kit</code>.</p>
     </section>
   )

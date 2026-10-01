@@ -6,6 +6,7 @@ Models and the gateway are separate containers and keep running. Needs no git: t
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import tarfile
@@ -19,6 +20,15 @@ import httpx
 
 DEFAULT_REPO = "https://github.com/q-a-z/dgx-kit.git"
 MAX_SOURCE_BYTES = 200 * 2**20
+CHECK_EVERY = {"hourly": 3600, "daily": 24 * 3600, "weekly": 7 * 24 * 3600}  # seconds; "never" is absent
+
+
+def due(frequency: str, checked: float | None, now: float | None = None) -> bool:
+    """Is it time for an automatic look at GitHub? Never when set to never; at once when there has been no look yet."""
+    every = CHECK_EVERY.get(frequency)
+    if every is None:
+        return False
+    return not checked or (now or time.time()) - checked >= every
 
 
 def slug_of(repo: str) -> str:
@@ -65,12 +75,19 @@ class UpdateJob:
 
 
 class Updater:
-    def __init__(self, docker=None, repo: str | None = None, service: str | None = None):
+    def __init__(self, docker=None, repo: str | None = None, service: str | None = None, state_dir: str | None = None):
         self._docker = docker
+        self._file = Path(state_dir) / "update-check.json" if state_dir else None
         self.repo = repo or os.environ.get("DGXKIT_UPDATE_REPO") or DEFAULT_REPO
         self.service = service or os.environ.get("DGXKIT_SERVICE", "dgx-kit")
         self.job: UpdateJob | None = None
-        self.cache: dict = {}
+        self.cache: dict = self._load()
+
+    def _load(self) -> dict:
+        try:
+            return json.loads(self._file.read_text()) if self._file else {}
+        except (OSError, ValueError):
+            return {}  # the last look is remembered across restarts, so a restart doesn't cause a new one
 
     @property
     def docker(self):
@@ -96,7 +113,15 @@ class Updater:
                     out["sha"] = g.json().get("sha", "")[:7]
         except Exception as e:
             out["error"] = f"Couldn't reach GitHub: {type(e).__name__}: {str(e)[:120]}"
+        if "error" in out and self.cache.get("version"):  # a failed look keeps the last good answer, and says why
+            out = {**self.cache, "error": out["error"], "checked": out["checked"]}
         self.cache = out
+        if self._file:
+            try:
+                self._file.parent.mkdir(parents=True, exist_ok=True)
+                self._file.write_text(json.dumps(out))
+            except OSError:
+                pass
         return out
 
     def start(self, version: str | None = None) -> UpdateJob:
