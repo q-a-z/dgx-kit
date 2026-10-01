@@ -54,7 +54,11 @@ def ensure_config(s, r: Recipe) -> None:
     if r.config or not r.gguf_file:
         return
     from .gguf import read_config
-    r.config = read_config(Path(weights_path(r, s.models_root)) / r.gguf_file)
+    folder = weights_path(r, s.models_root)
+    f = Path(folder) / r.gguf_file
+    if not f.is_file():
+        raise ValueError(f"GGUF file not found: {f}. In the model's settings the GGUF file name is relative to the model folder ({folder}).")
+    r.config = read_config(f)
 
 
 def plan_for(s, r: Recipe, extra_free: int = 0):

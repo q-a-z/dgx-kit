@@ -500,7 +500,8 @@ def test_gguf_model_without_config_is_sized_from_the_files_header(env):
     assert r.status_code == 200 and "-c" in r.json()["command"]
     # a config that says nothing useful is a clear refusal, not a crash
     client.post("/api/models", json={**body, "name": "blank", "gguf_file": "missing.gguf"})
-    assert client.get("/api/models/blank/plan").status_code == 422
+    miss = client.get("/api/models/blank/plan")
+    assert miss.status_code == 422 and "GGUF file not found" in miss.json()["detail"] and "relative to the model folder" in miss.json()["detail"]
 
 
 def test_pulling_a_tag_picked_in_a_models_settings_can_be_followed(env):
