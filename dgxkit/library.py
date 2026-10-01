@@ -297,4 +297,7 @@ def recipe_from_folder(path: str, draft: str | None = None, gguf_file: str | Non
                      draft_siblings=draft_siblings, gguf_file=gguf_file)
     r.name = recipe_name(label)
     r.path, r.draft_path = path, draft
+    if not r.config and r.gguf_file:  # a GGUF has no config.json; its header says how big the model is
+        from .gguf import read_config
+        r.config = read_config(Path(path) / r.gguf_file)
     return r

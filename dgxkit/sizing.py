@@ -35,7 +35,9 @@ def kv_bytes_per_token(config: dict, kv_dtype: str = "auto") -> int:
     c = text_config(config)
     heads = c.get("num_attention_heads")
     kv_heads = c.get("num_key_value_heads") or heads
-    head_dim = c.get("head_dim") or (c["hidden_size"] // heads)
+    head_dim = c.get("head_dim") or (c["hidden_size"] // heads if heads and c.get("hidden_size") else None)
+    if not kv_heads or not head_dim:
+        raise ValueError("the model's config doesn't say how big its attention is, so the KV cache can't be sized")
     return 2 * attention_layers(config) * kv_heads * head_dim * KV_DTYPE_BYTES.get(kv_dtype, 2)
 
 

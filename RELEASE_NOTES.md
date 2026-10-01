@@ -5,6 +5,7 @@ Newest first. Every commit adds its entry here.
 ## 0.1.4 (in progress)
 
 ### Fixed
+- **GGUF models (llama.cpp) failed to start with a 500 error, and "Check if it fits" did nothing.** A GGUF comes without a `config.json`, so DGX-kit had nothing to size the context and KV cache from. It now reads the model's layer count, attention heads and context length from the GGUF file's own header (including sliding-window and shared-KV layers, as in Gemma), for new and already-saved models alike. A model whose size can't be found is now refused with a plain message instead of an error page.
 - **Copy buttons** (the LiteLLM key and address in Settings, Gateway, and the launch command of a model started elsewhere) did nothing when the dashboard was opened over plain http, because browsers only offer the clipboard on https. They now fall back to the older copy method, and say "Copy failed" if that fails too, instead of claiming "Copied".
 
 ### Changed

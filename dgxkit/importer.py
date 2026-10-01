@@ -177,6 +177,9 @@ def _fill_from_disk(r: Recipe, path: str, notes: list[str]) -> None:
         r.config = json.loads((Path(path) / "config.json").read_text())
     except (OSError, ValueError):
         r.config = {}
+    if not r.config and r.gguf_file:
+        from .gguf import read_config
+        r.config = read_config(Path(path) / r.gguf_file)
     r.quantization = detect_quantization(r.config, item["gguf_files"] or os.listdir(path))
 
 

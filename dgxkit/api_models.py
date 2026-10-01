@@ -49,7 +49,16 @@ def total_bytes(s) -> int | None:
         return None
 
 
+def ensure_config(s, r: Recipe) -> None:
+    """A GGUF comes without a config.json: take the model's shape from the file's own header."""
+    if r.config or not r.gguf_file:
+        return
+    from .gguf import read_config
+    r.config = read_config(Path(weights_path(r, s.models_root)) / r.gguf_file)
+
+
 def plan_for(s, r: Recipe, extra_free: int = 0):
+    ensure_config(s, r)
     return plan(r.config, r.weights_bytes + r.draft_weights_bytes, available_bytes(s) + max(0, extra_free),
                 kv_dtype=r.kv_cache_dtype, max_context=r.max_context, min_context=r.min_context,
                 min_concurrency=r.min_concurrency, kv_cache_bytes=r.kv_cache_bytes, total_bytes=total_bytes(s))

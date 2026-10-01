@@ -474,3 +474,22 @@ def test_system_tab_tracks_versions_and_firmware_updates(env):
     r = client.post("/api/system/firmware/check").json()
     assert "fwupd" in r["firmware"]["error"] and r["firmware"]["devices"]  # the last good result is kept
 
+
+
+def test_gguf_model_without_config_is_sized_from_the_files_header(env):
+    from tests.test_gguf import tiny_gguf
+    client, s, models = env
+    d = models / "gguf" / "tiny"
+    d.mkdir(parents=True)
+    tiny_gguf(d / "tiny.gguf")
+    body = {"name": "tiny", "repo": "local/tiny", "engine": "llamacpp", "quantization": "gguf", "gguf_file": "tiny.gguf",
+            "path": str(d), "config": {}, "weights_bytes": 2 * 2**30}
+    assert client.post("/api/models", json=body).status_code == 201
+    plan = client.get("/api/models/tiny/plan")
+    assert plan.status_code == 200 and plan.json()["context_tokens"] > 0  # "check if it fits"
+    assert client.post("/api/models/tiny/plan", json={}).status_code == 200
+    r = client.post("/api/models/tiny/start")
+    assert r.status_code == 200 and "-c" in r.json()["command"]
+    # a config that says nothing useful is a clear refusal, not a crash
+    client.post("/api/models", json={**body, "name": "blank", "gguf_file": "missing.gguf"})
+    assert client.get("/api/models/blank/plan").status_code == 422
