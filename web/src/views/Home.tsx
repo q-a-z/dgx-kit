@@ -96,13 +96,13 @@ export function Home({ view, setView, latest, history, entries, orphans, alerts,
   )
 }
 
-/** Clocks, cores, disk and network, always open at the bottom of the page. */
+/** GPU clock, processes and memory, always open at the bottom of the page. */
 function HardwareDetails({ latest, history, layout, update }: { latest: Snapshot; history: Snapshot[]; layout: Layout; update: (p: Partial<Layout>) => void }) {
   const [arrange, setArrange] = useState(false)
   return (
     <section className="hwdetails" aria-label="Hardware details">
       <div className="section-title">
-        <span className="grow">CPU, disk, network</span>
+        <span className="grow">Hardware details</span>
         <button className="ghost" aria-pressed={arrange} onClick={() => setArrange(!arrange)}>{arrange ? 'Done' : 'Arrange'}</button>
       </div>
       <TileGrid defs={HW_TILES} tiles={layout.hardware} editing={arrange} onChange={(hardware) => update({ hardware })} ctx={{ latest, history }} />

@@ -1,5 +1,5 @@
-import { fmtBytes, fmtNum, fmtRate, sum, type Snapshot } from '../api'
-import { Chart, Spark } from '../components/Chart'
+import { fmtBytes, fmtNum, type Snapshot } from '../api'
+import { Spark } from '../components/Chart'
 import { Status, Tape } from '../components/Tape'
 import type { TileConf, TileDef } from './layout'
 
@@ -59,9 +59,6 @@ const memSplit = (s: Snapshot) => {
 const gpuName = (s: Snapshot) => s.gpu?.name?.replace(/^NVIDIA /, '') ?? undefined
 
 export const HW_TILES: TileDef<HwCtx>[] = [
-  readingTile('gpu-util', 'GPU load', '%', (s) => s.gpu?.util_pct, { max: 100, warn: 0, crit: 0 }),
-  readingTile('gpu-temp', 'GPU temperature', '°C', (s) => s.gpu?.temp_c, { max: 100, warn: 80, crit: 90 }),
-  readingTile('gpu-power', 'GPU power', 'W', (s) => s.gpu?.power_w, { max: 150, warn: 0, crit: 0, digits: 1 }),
   readingTile('gpu-clock', 'GPU clock', 'MHz', (s) => s.gpu?.sm_clock_mhz, { max: 3003, warn: 0, crit: 0 }),
   {
     id: 'gpu-procs', title: 'On the GPU', sub: ({ latest }) => gpuName(latest), w: 12,
@@ -122,73 +119,6 @@ export const HW_TILES: TileDef<HwCtx>[] = [
             <span><i style={{ background: 'var(--track)' }} />Free<b>{fmtBytes(m.free)}</b></span>
           </div>
           <div className="chart-wrap"><Spark times={times(h)} values={h.map((s) => memSplit(s)?.used ?? null)} max={m.total} height={34} label="In use" fmt={(x) => fmtBytes(x)} /></div>
-        </>
-      )
-    },
-  },
-  {
-    id: 'cpu', title: 'CPU', sub: ({ latest }) => latest.system?.cpu_model ?? undefined, w: 6,
-    options: [{ key: 'warn', label: 'Warn at (0 = off)', default: 85 }, { key: 'crit', label: 'Critical at (0 = off)', default: 97 }, WINDOW],
-    render: ({ latest, history }, o) => {
-      const s = latest.system
-      const all = s?.cpu_pct?.cpu
-      const cores = Object.entries(s?.cpu_pct ?? {}).filter(([k]) => k !== 'cpu').sort(([a], [b]) => Number(a.slice(3)) - Number(b.slice(3)))
-      const h = recent(history, o.window)
-      return (
-        <>
-          <div className="reading-row">
-            <div className="reading">{all == null ? '–' : fmtNum(all)}<small>%</small>
-              {s && <span className="of">load {s.load.map((l) => l.toFixed(2)).join(', ')}</span>}
-            </div>
-            <Status level={lvl(all, o.warn, o.crit)} warn={o.warn} crit={o.crit} unit="%" />
-          </div>
-          <div className="cores" aria-label="Load per core">
-            {cores.map(([k, v]) => (
-              <div key={k} className={`core ${lvl(v, o.warn, o.crit)}`} title={`Core ${k.slice(3)}: ${fmtNum(v)}% at ${fmtNum(s?.cpu_freq_mhz[k])} MHz`}>
-                <i style={{ height: `${Math.max(v, 4)}%` }} />
-              </div>
-            ))}
-          </div>
-          <div className="chart-wrap"><Spark times={times(h)} values={h.map((x) => x.system?.cpu_pct?.cpu ?? null)} max={100} height={34} label="CPU" fmt={(x) => `${fmtNum(x)} %`} /></div>
-        </>
-      )
-    },
-  },
-  {
-    id: 'disk', title: 'Disk', w: 6, options: [WINDOW],
-    render: ({ latest, history }, o) => {
-      const s = latest.system
-      const h = recent(history, o.window)
-      return (
-        <>
-          <div className="pair">
-            <div className="reading">{fmtRate(sum(s?.disk_read_bps))}<span className="of">read</span></div>
-            <div className="reading">{fmtRate(sum(s?.disk_write_bps))}<span className="of">write</span></div>
-          </div>
-          <div className="chart-wrap">
-            <Chart times={times(h)} height={64} floor={1024} fmt={(v) => fmtBytes(v)}
-              series={[{ label: 'Read', values: h.map((x) => sum(x.system?.disk_read_bps) ?? null) }, { label: 'Write', values: h.map((x) => sum(x.system?.disk_write_bps) ?? null) }]} />
-          </div>
-        </>
-      )
-    },
-  },
-  {
-    id: 'network', title: 'Network', sub: ({ latest }) => latest.system?.net_iface ?? undefined, w: 6, options: [WINDOW],
-    render: ({ latest, history }, o) => {
-      const iface = latest.system?.net_iface
-      const pick = (r: Record<string, number> | undefined) => (r ? (iface && iface in r ? r[iface] : sum(r)) : undefined)
-      const h = recent(history, o.window)
-      return (
-        <>
-          <div className="pair">
-            <div className="reading">{fmtRate(pick(latest.system?.net_rx_bps))}<span className="of">in</span></div>
-            <div className="reading">{fmtRate(pick(latest.system?.net_tx_bps))}<span className="of">out</span></div>
-          </div>
-          <div className="chart-wrap">
-            <Chart times={times(h)} height={64} floor={1024} fmt={(v) => fmtBytes(v)}
-              series={[{ label: 'In', values: h.map((x) => pick(x.system?.net_rx_bps) ?? null) }, { label: 'Out', values: h.map((x) => pick(x.system?.net_tx_bps) ?? null) }]} />
-          </div>
         </>
       )
     },
