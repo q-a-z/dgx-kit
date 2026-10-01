@@ -43,6 +43,9 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
   useEffect(() => {
     api<Slo>('/api/settings/slo').then(setSlo).catch(() => {})
   }, [])
+  const box = latest?.system?.machine
+  const boxName = box?.name ?? latest?.gpu?.name
+  const boxTitle = [box && [box.vendor, box.product].filter(Boolean).join(' '), box?.family, latest?.gpu?.name, box?.bios && `BIOS ${box.bios}`].filter(Boolean).join(' · ')
   const g = gateway.data
   const gwUp = !!g && (g.reachable ?? g.state === 'running') && g.auth !== 'rejected'
   const gwState = !g ? 'pending' : gwUp ? 'ok' : 'bad'
@@ -53,7 +56,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
   return (
     <>
       <header>
-        <a className="brand" href="#/"><b>DGX</b>-kit{latest?.gpu?.name && <span className="brand-gpu" title="GPU">{latest.gpu.name}</span>}{version && <span className="ver" title="DGX-kit version">{/^\d/.test(version) ? `v${version}` : version}</span>}</a>
+        <a className="brand" href="#/"><b>DGX</b>-kit{boxName && <span className="brand-gpu" title={boxTitle}>{boxName}</span>}{version && <span className="ver" title="DGX-kit version">{/^\d/.test(version) ? `v${version}` : version}</span>}</a>
         {route.page === 'home' && latest && <Health alerts={alerts} entries={fleet.entries} />}
         <span className="grow" />
         {route.page !== 'home' && <a className="navlink" href="#/">Back to dashboard</a>}

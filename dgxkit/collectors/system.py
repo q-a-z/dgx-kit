@@ -6,6 +6,7 @@ raw counters and returns deltas. `root` lets tests point at fixture files.
 from __future__ import annotations
 
 import glob
+import re
 import os
 import time
 from pathlib import Path
@@ -71,6 +72,13 @@ def rate(now: dict, before: dict, seconds: float, index: int, scale: float = 1.0
     }
 
 
+def machine_name(vendor: str, product: str) -> str:
+    """A short name for the box: "ASUS GX10" from ASUSTeK COMPUTER INC. / GX10."""
+    v = re.sub(r"\b(computer|inc|corporation|corp|co|ltd)\b\.?,?", "", vendor, flags=re.I).strip(" ,.")
+    v = {"ASUSTeK": "ASUS"}.get(v, v)
+    return f"{v} {product}".strip() if v and v.lower() not in product.lower() else product
+
+
 class SystemCollector:
     def __init__(self, root: str = "/"):
         self.root = Path(root)
@@ -119,6 +127,20 @@ class SystemCollector:
             pass
         return None
 
+    def machine(self) -> dict | None:
+        """Which box this is, from the firmware (DMI): vendor, product, family and BIOS. Read once."""
+        if not hasattr(self, "_machine"):
+            def dmi(name: str) -> str:
+                try:
+                    v = self._read(f"sys/class/dmi/id/{name}").strip()
+                except OSError:
+                    return ""
+                return "" if v.lower() in ("", "default string", "to be filled by o.e.m.", "system product name", "none") else v
+            vendor, product = dmi("sys_vendor"), dmi("product_name")
+            self._machine = {"name": machine_name(vendor, product), "vendor": vendor, "product": product,
+                             "family": dmi("product_family"), "bios": dmi("bios_version")} if product else None
+        return self._machine
+
     def _cpu_model(self) -> str | None:
         try:
             for line in self._read("proc/cpuinfo").splitlines():
@@ -148,6 +170,7 @@ class SystemCollector:
             "cpu_freq_mhz": self._cpu_freqs(),
             "net_iface": self._default_iface(),
             "cpu_model": self._cpu_model(),
+            "machine": self.machine(),
             "sensors": self._sensors(),
         }
         if self._prev is not None:

@@ -105,3 +105,18 @@ def test_the_idle_power_governor_blip_is_not_throttling():
     assert decode_events(0x4, util_pct=95) == ["sw_power_cap"]  # busy and capped: worth showing
     assert decode_events(0x4) == ["sw_power_cap"]  # load unknown: don't hide it
     assert decode_events(0x40 | 0x4, util_pct=0) == ["hw_thermal_slowdown"]  # a real slowdown always shows
+
+
+def test_machine_name_comes_from_the_firmware(tmp_path):
+    from dgxkit.collectors.system import SystemCollector, machine_name
+    assert machine_name("ASUSTeK COMPUTER INC.", "GX10") == "ASUS GX10"
+    assert machine_name("NVIDIA", "DGX Spark") == "NVIDIA DGX Spark"
+    assert machine_name("Dell Inc.", "Dell Pro Max GB10") == "Dell Pro Max GB10"
+    d = tmp_path / "sys/class/dmi/id"
+    d.mkdir(parents=True)
+    (d / "sys_vendor").write_text("ASUSTeK COMPUTER INC.\n")
+    (d / "product_name").write_text("GX10\n")
+    (d / "product_family").write_text("DGX Spark\n")
+    m = SystemCollector(str(tmp_path)).machine()
+    assert m["name"] == "ASUS GX10" and m["family"] == "DGX Spark"
+    assert SystemCollector(str(tmp_path / "nowhere")).machine() is None

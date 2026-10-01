@@ -26,6 +26,8 @@ export type System = {
   disk_busy_pct?: Record<string, number>
   net_iface?: string | null
   cpu_model?: string | null
+  /** The box, from the firmware: a short name, and the parts it is made of. */
+  machine?: { name: string; vendor: string; product: string; family: string; bios: string } | null
 }
 
 export type Live = {
