@@ -1188,6 +1188,56 @@ async def put_layout(body: dict, request: Request):
     return {"saved": True}
 
 
+def _updater(s):
+    if s.updater is None:
+        from .updater import Updater
+        s.updater = Updater(docker=getattr(s.runner, "docker", None))
+    return s.updater
+
+
+def _update_state(s, current: str) -> dict:
+    from .updater import newer
+    u = _updater(s)
+    latest = u.cache or None
+    return {"current": current, "latest": latest, "available": bool(latest and newer(latest.get("version"), current)),
+            "job": u.job.view() if u.job else None}
+
+
+@router.get("/system/update")
+async def update_state(request: Request):
+    """The running version, what GitHub has (checked at most once an hour here), and the progress of an update."""
+    from .app import app_version
+    s = svc(request)
+    u = _updater(s)
+    if not u.cache or time.time() - u.cache.get("checked", 0) > 3600:
+        await asyncio.to_thread(u.check)
+    return _update_state(s, app_version())
+
+
+@router.post("/system/update/check")
+async def update_check(request: Request):
+    from .app import app_version
+    s = svc(request)
+    await asyncio.to_thread(_updater(s).check)
+    return _update_state(s, app_version())
+
+
+@router.post("/system/update", status_code=202)
+async def update_now(request: Request):
+    """Fetch the latest DGX-kit from GitHub, build it, and restart the dashboard on it. Models keep running."""
+    from .app import app_version
+    s = svc(request)
+    u = _updater(s)
+    if not u.cache:
+        await asyncio.to_thread(u.check)
+    try:
+        job = u.start()
+    except ValueError as e:
+        raise HTTPException(409, str(e))
+    s.log("update", f"from {app_version()} to {job.version or 'the latest'}")
+    return _update_state(s, app_version())
+
+
 @router.get("/system")
 async def system_info_report(request: Request):
     """Versions of what the machine runs (firmware, kernel, driver…), the firmware fwupd knows of, and what changed."""

@@ -215,7 +215,7 @@ def test_readonly_mode_blocks_everything_that_changes_the_box(tmp_path, monkeypa
         for method, path in [("post", "/api/models/llama/start"), ("post", "/api/models/llama/stop"),
                              ("post", "/api/models/llama/download"), ("delete", "/api/models/llama"),
                              ("post", "/api/images/vllm/pull"), ("post", "/api/gateway/sync"),
-                             ("post", "/api/images/clean"), ("post", "/api/system/firmware/check")]:
+                             ("post", "/api/images/clean"), ("post", "/api/system/firmware/check"), ("post", "/api/system/update")]:
             assert getattr(client, method)(path).status_code == 403, path
         assert s.runner.started == [] and s.gateway.synced == []
         assert client.get("/api/models").status_code == 200
@@ -542,3 +542,41 @@ def test_an_unbuilt_local_image_falls_back_to_the_engines_own(env):
     from dgxkit.recipes import Recipe
     r = Recipe(name="g", repo="org/g", engine="vllm", image="dgx-kit/llamacpp:gb10")
     assert image_to_use(s, r) == "dgx-kit/vllm:test"  # not the build, which would have to be compiled first
+
+
+class FakeUpdater:
+    def __init__(self):
+        self.cache, self.job, self.started = {}, None, 0
+
+    def check(self):
+        self.cache = {"checked": __import__("time").time(), "version": "99.0.0", "sha": "abc1234", "notes": "## 99.0.0\n- new things"}
+        return self.cache
+
+    def start(self, version=None):
+        from dgxkit.updater import UpdateJob
+        if self.job and self.job.state == "running":
+            raise ValueError("an update is already running")
+        self.started += 1
+        self.job = UpdateJob(self.cache.get("version"))
+        return self.job
+
+
+def test_update_from_github_is_checked_started_once_and_blocked_in_read_only(env):
+    client, s, _ = env
+    s.updater = FakeUpdater()
+    st = client.get("/api/system/update").json()
+    assert st["latest"]["version"] == "99.0.0" and st["available"] is True and st["job"] is None
+    r = client.post("/api/system/update")
+    assert r.status_code == 202 and r.json()["job"]["state"] == "running" and s.updater.started == 1
+    assert client.post("/api/system/update").status_code == 409  # one update at a time
+
+
+def test_updater_helpers_read_versions_and_notes():
+    from dgxkit.updater import first_notes, newer, parse_version, slug_of
+    assert parse_version('[project]\nname = "x"\nversion = "0.1.7"\n') == "0.1.7"
+    assert newer("0.1.10", "0.1.9") and not newer("0.1.6", "0.1.6") and not newer(None, "0.1.6")
+    assert first_notes("# Release notes\n\n## 0.1.7\n- a\n\n## 0.1.6\n- b\n").startswith("## 0.1.7") and "0.1.6" not in first_notes("# R\n## 0.1.7\n- a\n\n## 0.1.6\n- b")
+    assert slug_of("https://github.com/q-a-z/dgx-kit.git") == "q-a-z/dgx-kit"
+    import pytest
+    with pytest.raises(ValueError):
+        slug_of("https://example.com/x/y.git")

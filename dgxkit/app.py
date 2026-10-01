@@ -48,6 +48,7 @@ class Services:
     settings: Settings | None = None
     external: dict = field(default_factory=dict)  # running model servers DGX-kit didn't start
     actions: deque = field(default_factory=lambda: deque(maxlen=1000))
+    updater: object = None  # dgxkit.updater.Updater; tests give a fake
     preparing: dict = field(default_factory=dict)  # model name -> the image it waits for before starting
     firmware_probe: object = None  # tests give a fake; normally fwupd is asked through system_info.probe_firmware
     quick_pending: set = field(default_factory=set)  # models DGX-kit just started, waiting for their first answer
@@ -189,7 +190,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             return False
         if method == "PUT" and re.fullmatch(r"/api/images/[a-z]+", path):
             return False  # picks which tag DGX-kit uses; nothing on the box changes
-        return (path.startswith(("/api/images", "/api/gateway", "/api/downloads", "/api/system/firmware"))
+        return (path.startswith(("/api/images", "/api/gateway", "/api/downloads", "/api/system/firmware", "/api/system/update"))
                 or re.fullmatch(r"/api/models/[^/]+/(start|stop|download)", path) is not None
                 or (method == "DELETE" and path.startswith("/api/models/")))
 

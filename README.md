@@ -18,7 +18,7 @@ Release notes: [RELEASE_NOTES.md](RELEASE_NOTES.md).
 - **Bring your setup over:** import llmctl `.conf` files, including models whose weights are already on disk.
 - **Measure:** a ten-second speed check after each start, and a full benchmark when you ask for it.
 - **Build GB10 engine images:** vLLM with the GB10 patches and FlashInfer 0.7.0, from the Settings page.
-- **Install, update, roll back and remove** with one script, with or without sudo.
+- **Install, update, roll back and remove** with one script, with or without sudo; update from the page too, straight from GitHub.
 
 ## Screenshots
 
@@ -49,8 +49,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 1. Get the package onto the Spark and unpack it:
 
    ```
-   tar xzf dgx-kit-0.1.6.tar.gz
-   cd dgx-kit-0.1.6
+   tar xzf dgx-kit-0.1.7.tar.gz
+   cd dgx-kit-0.1.7
    ```
 
 2. Look before you leap (changes nothing):
@@ -88,12 +88,14 @@ Enter, and restarts the service on the new code. For updating, the next section 
 
 ### Updating
 
-The install leaves a `dgx-kit` command. Updating is one line:
+**From the page:** Settings → System → **DGX-kit update** compares the running version with the one on GitHub (checked at most once an hour; a yellow **Update 0.x.y** badge appears next to the logo when a newer one exists), shows what's new, and **Update** does the rest after one confirmation: it downloads the latest source, builds the image, keeps the old image as `dgx-kit:previous`, and restarts the dashboard, which reloads by itself. Models and the gateway keep running. It is switched off in read-only mode, and `DGXKIT_UPDATE_REPO` changes the GitHub repository it uses.
+
+**From a terminal:** the install leaves a `dgx-kit` command. Updating is one line:
 
 ```
 dgx-kit update                      # fetch the latest from git and update
 dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
-dgx-kit update dgx-kit-0.1.6.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit update dgx-kit-0.1.7.tar.gz # from a package, a .tgz, or a GitHub .zip
 dgx-kit version                     # what is running
 ```
 
@@ -196,7 +198,7 @@ Settings has one tab per topic (**System** is the first), and the tab is in the 
 
 | Tab | What it is for |
 |---|---|
-| System | The box's model, BIOS, GPU VBIOS, kernel, driver, CUDA, Docker and DGX-kit versions; firmware devices and updates from fwupd (a check once a day, or **Check for updates**); and a list of when any version changed. It only reports: install updates with `sudo fwupdmgr update`. |
+| System | **DGX-kit update** from GitHub (check, what's new, one-button update); the box's model, BIOS, GPU VBIOS, kernel, driver, CUDA, Docker and DGX-kit versions; firmware devices and updates from fwupd (a check once a day, or **Check for updates**); and a list of when any version changed. It only reports: install updates with `sudo fwupdmgr update`. |
 | Gateway | The LiteLLM address and key, the **Set up LiteLLM** button, what the gateway serves, and an editor for its extra LiteLLM settings. |
 | Hugging Face | A token for gated or private models. Checked when you save. |
 | Engine images | The Docker images models run in; pull, change a tag (a tag the box doesn't have is pulled at once, with a progress bar), or build the optional GB10 vLLM images (patches, FlashInfer 0.7.0). |

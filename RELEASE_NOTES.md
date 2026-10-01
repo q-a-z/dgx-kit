@@ -2,7 +2,12 @@
 
 Newest first. Every commit adds its entry here.
 
-## 0.1.6 (in progress)
+## 0.1.7 (in progress)
+
+### Added
+- **Update DGX-kit from GitHub, from the page.** Settings → System → **DGX-kit update** shows the running version and the latest on GitHub, what's new, and an **Update** button: it downloads the latest source, builds the image, keeps the old one as `dgx-kit:previous` for a rollback, restarts the dashboard and reloads the page on the new version. Models and the gateway keep running, and your settings, keys and recipes are untouched. A yellow **Update 0.x.y** badge next to the logo appears when a newer version is out. It asks first, is off in read-only mode, and `DGXKIT_UPDATE_REPO` points it at another GitHub repository.
+
+## 0.1.6
 
 ### Changed
 - **The repository moved to https://github.com/q-a-z/dgx-kit**, and `dgx-kit update` fetches from there. Installs that still point at the old address keep working until you run an update from a package or a clone once (`dgx-kit update PATH`), which refreshes the command.

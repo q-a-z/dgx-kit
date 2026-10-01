@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useConfirm } from '../components/Confirm'
+import { toast } from '../toast'
 import { api } from '../api'
 import { usePoll } from '../usePoll'
 import { Pending } from './Settings'
@@ -12,6 +14,69 @@ type Report = {
 }
 
 const when = (t: number) => new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+
+export type UpdateState = {
+  current: string
+  latest: { version?: string; sha?: string; notes?: string; checked?: number; error?: string; repo?: string } | null
+  available: boolean
+  job: { version: string | null; state: string; step: string; error: string | null; tail: string[] } | null
+}
+
+/** Update DGX-kit from GitHub: what is out there, what's new, and one button. Models keep running during an update. */
+function UpdateCard() {
+  const ask = useConfirm()
+  const [fast, setFast] = useState(false)
+  const { data, reload } = usePoll<UpdateState>('/api/system/update', fast ? 2000 : 60000)
+  const [busy, setBusy] = useState(false)
+  const job = data?.job
+  const working = job?.state === 'running' || job?.state === 'restarting'
+  if (working !== fast) setFast(working)
+  // After the restart the page that asked is talking to the new dashboard: reload when its version changes.
+  useEffect(() => {
+    if (job?.state !== 'restarting' || !data) return
+    const id = window.setInterval(() => {
+      fetch('/api/me').then((r) => r.json()).then((m: { version?: string }) => { if (m.version && m.version !== data.current) location.reload() }).catch(() => {})
+    }, 2000)
+    return () => window.clearInterval(id)
+  }, [job?.state, data?.current]) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!data) return null
+  const latest = data.latest
+  const check = () => { setBusy(true); api('/api/system/update/check', { method: 'POST' }).then(reload).catch((e: Error) => toast(e.message, true)).finally(() => setBusy(false)) }
+  const update = async () => {
+    const ok = await ask({
+      title: data.available ? `Update to ${latest?.version}?` : 'Reinstall the latest from GitHub?',
+      body: <>DGX-kit downloads the latest source from GitHub, builds it and restarts the dashboard on it. That takes a few minutes, and the page is unavailable for a moment at the end. Your models keep running, and your settings, keys and recipes are untouched. The current version stays as a rollback image.</>,
+      label: 'Update',
+    })
+    if (!ok) return
+    api('/api/system/update', { method: 'POST' }).then(() => { toast('Update started.'); reload() }).catch((e: Error) => toast(e.message, true))
+  }
+  return (
+    <section className="card wide">
+      <div className="row">
+        <h2 className="grow">DGX-kit update</h2>
+        <button disabled={busy || working} onClick={check}>{busy ? 'Checking…' : 'Check now'}</button>
+        <button className={data.available ? 'primary' : ''} disabled={working || !latest?.version} onClick={update}>{data.available ? `Update to ${latest?.version}` : 'Reinstall latest'}</button>
+      </div>
+      <p className={data.available ? 'warn' : 'muted'}>
+        {latest?.error ? latest.error
+          : !latest?.version ? 'Not checked yet.'
+          : data.available ? `▲ Version ${latest.version} is available${latest.sha ? ` (commit ${latest.sha})` : ''}. You have ${data.current}.`
+          : `You have ${data.current}, the latest on GitHub.`}
+      </p>
+      {working && job && (
+        <div className="pull-progress">
+          <progress className="pull" max={1} aria-label="update progress" />
+          <p className="muted">{job.step}{job.state === 'restarting' ? '… the page reloads by itself when the new version is up.' : '…'}</p>
+          <pre className="logs">{job.tail.join('\n')}</pre>
+        </div>
+      )}
+      {job?.state === 'failed' && <p className="bad">The update failed: {job.error}</p>}
+      {data.available && latest?.notes && <details className="more"><summary>What’s new</summary><pre className="logs">{latest.notes}</pre></details>}
+      <p className="muted small">From {latest?.repo ?? 'GitHub'}. The same as running <code>dgx-kit update</code> on the machine. To go back: <code>docker tag dgx-kit:previous dgx-kit:latest && docker stop dgx-kit</code>.</p>
+    </section>
+  )
+}
 
 /** What the machine is made of, its firmware and whether fwupd knows of updates, and what changed since DGX-kit started watching. */
 export function SystemInfo() {
@@ -29,6 +94,7 @@ export function SystemInfo() {
   const other = fw.devices.filter((d) => !d.updatable)
   return (
     <>
+      <UpdateCard />
       <section className="card wide">
         <div className="row">
           <h2 className="grow">Firmware updates</h2>

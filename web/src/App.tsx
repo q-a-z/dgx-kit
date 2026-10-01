@@ -40,6 +40,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
   const fleet = useFleet(latest)
   const { layout, update } = useLayout(DEFAULTS)
   const gateway = usePoll<Gateway>('/api/gateway', 10000)
+  const newer = usePoll<{ available: boolean; latest: { version?: string } | null }>('/api/system/update', 600000)
   const [slo, setSlo] = useState<Slo | null>(null)
   useEffect(() => {
     api<Slo>('/api/settings/slo').then(setSlo).catch(() => {})
@@ -58,6 +59,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
     <>
       <header>
         <a className="brand" href="#/"><b>DGX</b>-kit{boxName && <span className="brand-gpu" title={boxTitle}>{boxName}</span>}{version && <span className="ver" title="DGX-kit version">{/^\d/.test(version) ? `v${version}` : version}</span>}</a>
+        {newer.data?.available && !readonly && <a className="pill warn" href={href({ page: 'settings', arg: 'system' })} title="A newer DGX-kit is on GitHub">Update {newer.data.latest?.version}</a>}
         {route.page === 'home' && latest && <Health alerts={alerts} entries={fleet.entries} />}
         <span className="grow" />
         {route.page !== 'home' && <a className="navlink" href="#/">Back to dashboard</a>}

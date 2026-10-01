@@ -164,6 +164,9 @@ Clients use the gateway directly at `http://<host>:4000/v1` with the key (OpenAI
 | Method and path | What it does |
 |---|---|
 | `GET /api/system` | `items` (model, vendor, BIOS, GPU VBIOS, kernel, driver, CUDA, Docker, DGX-kit, each with `group`, `label`, `value`), `firmware` (`checked`, `error`, `updates`, `devices` from fwupd with their `updates`), `changes` (what changed and when) and `since` |
+| `GET /api/system/update` | `{current, latest, available, job}`: the running version; what GitHub has (`latest`: `version`, `sha`, `notes` of the newest release-notes section, `checked`, `repo`, or `error`; looked up at most once an hour); whether `latest` is newer; and the progress of an update (`job`: `state` running / restarting / failed, `step`, `tail`, `error`) |
+| `POST /api/system/update/check` | Look at GitHub now |
+| `POST /api/system/update` | Update from GitHub's `main`: download the source, build the image (the old one stays as `:previous`) and restart the dashboard. `202` with the state; `409` while one runs; `403` in read-only mode. Models and the gateway keep running. The page loses the connection for a moment at the end and comes back on the new version |
 | `POST /api/system/firmware/check` | Ask fwupd for devices and updates now (a short-lived container with the system D-Bus). Reports only; installs nothing. `403` in read-only mode |
 
 ## Settings
