@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api, fmtBytes, fmtNum, type Plan } from '../api'
 import { usePoll } from '../usePoll'
 import { select } from '../nav'
+import { toast } from '../toast'
 
 type Item = {
   name: string
@@ -22,7 +23,7 @@ export function Folders({ lib, onSaved }: { lib: Pick<Lib, 'paths' | 'missing'>;
   const [err, setErr] = useState<string | null>(null)
   const save = () =>
     api('/api/library/paths', { method: 'PUT', json: { paths: text.split('\n') } })
-      .then(() => { setErr(null); onSaved() })
+      .then(() => { setErr(null); toast('Model folders saved.'); onSaved() })
       .catch((e: Error) => setErr(e.message))
   return (
     <section className="card wide">

@@ -3,16 +3,36 @@ import { useState } from 'react'
 import { api, type Action, type Image } from '../api'
 import { usePoll } from '../usePoll'
 import { ChangePassword } from '../Login'
+import { toast } from '../toast'
 
 const LABELS: Record<string, string> = { vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp', litellm: 'LiteLLM gateway' }
+
+/** A bar and the words for a pull or build that is running (or the reason it failed). */
+export function PullProgress({ job }: { job: { kind: string; state: string; error: string | null; tail: string[]; progress?: number | null } }) {
+  if (job.state === 'done' && !job.error) return null
+  return (
+    <div className="pull-progress">
+      {job.state === 'running' && <progress className="pull" max={1} value={job.progress ?? undefined} aria-label={`${job.kind} progress`} />}
+      <pre className="logs">{[...job.tail, job.error ?? ''].filter(Boolean).join('\n') || `${job.kind} started`}</pre>
+    </div>
+  )
+}
 
 function ImageRow({ i, onChange }: { i: Image; onChange: () => void }) {
   const [edit, setEdit] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const running = i.job?.state === 'running'
   const others = (i.local ?? []).filter((t) => t !== i.image && !i.builds.some((b) => b.image === t))
-  const call = (path: string, init?: Parameters<typeof api>[1]) =>
-    api(path, init).then(onChange).catch((e: Error) => setErr(e.message))
+  const call = (path: string, init?: Parameters<typeof api>[1], saved?: string) =>
+    api(path, init).then(() => { if (saved) toast(saved); onChange() }).catch((e: Error) => { setErr(e.message); toast(e.message, true) })
+  // Pointing an engine at a tag the box doesn't have starts the pull at once, so its progress can be watched here.
+  const choose = (image: string | null) =>
+    api<{ image: string }>(`/api/images/${i.engine}`, { method: 'PUT', json: { image } })
+      .then((r) => api<{ ready: boolean }>(`/api/images/status?image=${encodeURIComponent(r.image)}`).then((st) => {
+        toast(`${LABELS[i.engine] ?? i.engine} will use ${r.image}.`)
+        return st.ready ? undefined : api(`/api/images/${i.engine}/pull`, { method: 'POST' }).then(() => toast(`Pulling ${r.image}…`))
+      }))
+      .then(onChange).catch((e: Error) => { setErr(e.message); toast(e.message, true) })
 
   return (
     <section className="card wide">
@@ -30,25 +50,23 @@ function ImageRow({ i, onChange }: { i: Image; onChange: () => void }) {
           <p className="muted">Other {LABELS[i.engine] ?? i.engine} images on this box:</p>
           {others.map((t) => (
             <div key={t} className="row"><code className="grow">{t}</code>
-              <button onClick={() => call(`/api/images/${i.engine}`, { method: 'PUT', json: { image: t } })}>Use this</button></div>
+              <button onClick={() => choose(t)}>Use this</button></div>
           ))}
         </div>
       )}
       {edit !== null && (
         <div className="row">
           <input className="grow" value={edit} onChange={(e) => setEdit(e.target.value)} placeholder="registry/name:tag" />
-          <button className="primary" onClick={() => { call(`/api/images/${i.engine}`, { method: 'PUT', json: { image: edit.trim() || null } }); setEdit(null) }}>Use this tag</button>
+          <button className="primary" onClick={() => { choose(edit.trim() || null); setEdit(null) }}>Use this tag</button>
           <button onClick={() => setEdit(null)}>Cancel</button>
         </div>
       )}
       <div className="row">
         {i.source !== 'found' && <button disabled={running} onClick={() => call(`/api/images/${i.engine}/pull`, { method: 'POST' })}>{i.ready ? 'Pull again' : 'Pull'}</button>}
         {edit === null && <button onClick={() => setEdit(i.image)}>Change tag</button>}
-        {i.source === 'chosen' && <button onClick={() => call(`/api/images/${i.engine}`, { method: 'PUT', json: { image: null } })}>Back to default</button>}
+        {i.source === 'chosen' && <button onClick={() => choose(null)}>Back to default</button>}
       </div>
-      {i.job && (i.job.state !== 'done' || i.job.error) && (
-        <pre className="logs">{[...i.job.tail, i.job.error ?? ''].filter(Boolean).join('\n') || `${i.job.kind} started`}</pre>
-      )}
+      {i.job && <PullProgress job={i.job} />}
       {i.builds.length > 0 && (
         <table className="builds">
           <tbody>
@@ -63,9 +81,7 @@ function ImageRow({ i, onChange }: { i: Image; onChange: () => void }) {
                     <div className="muted">
                       <code>{b.image}</code> · {i.engine !== 'vllm' ? 'compiled on this box' : b.patches.length ? <span title={b.patches.join('\n')}>{b.patches.length} patch{b.patches.length > 1 ? 'es' : ''}: {b.patches.map((x) => x.split('/').pop()!.replace(/^\d+-|\.patch$/g, '')).join(', ')}</span> : 'no patches added yet'}
                     </div>
-                    {b.job && (b.job.state !== 'done' || b.job.error) && (
-                      <pre className="logs">{[...b.job.tail, b.job.error ?? ''].filter(Boolean).join('\n') || 'build started'}</pre>
-                    )}
+                    {b.job && <PullProgress job={b.job} />}
                   </td>
                   <td className="num">{busy ? 'building…' : b.ready ? 'built' : 'not built'}</td>
                   <td className="num">

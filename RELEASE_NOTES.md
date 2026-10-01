@@ -5,6 +5,8 @@ Newest first. Every commit adds its entry here.
 ## 0.1.4 (in progress)
 
 ### Added
+- **"Saved" notifications.** Saving a model's settings (including template changes), the gateway and LiteLLM settings, the Hugging Face token, the model folders, an engine's image, or the password now shows a short message in the corner of the screen.
+- **Image pull progress.** Pulling an image shows a progress bar with the data downloaded ("3.2 GB of 8.4 GB downloaded · 5 of 12 layers"), in Settings, Engine images and in a model's settings. Choosing a tag the box doesn't have (Change tag, then Use this tag) now starts the pull straight away, so there is something to watch.
 - **Pull an image from a model's settings, and watch it.** When the image picked for a model (or typed under "Other tag…") isn't on the box, its settings say so and offer **Pull**; while it downloads they show the layer progress ("12 of 30 layers"), and a failed pull shows why, with **Try again**. Before, only an engine's own image could be pulled, in Settings, Engine images.
 
 ### Fixed

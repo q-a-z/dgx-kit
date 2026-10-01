@@ -64,6 +64,10 @@ def patches_for(build: dict) -> list[str]:
     return names
 
 
+def _gb(n: int) -> str:
+    return f"{n / 1e9:.1f} GB" if n >= 1e8 else f"{n / 1e6:.0f} MB"
+
+
 @dataclass
 class Job:
     engine: str
@@ -75,6 +79,7 @@ class Job:
     started: float = field(default_factory=time.time)
     build: str | None = None
     make_default: bool = False
+    progress: float | None = None  # 0..1 of the bytes to download, when Docker reports sizes
 
     def add(self, line: str) -> None:
         line = line.rstrip()
@@ -83,7 +88,7 @@ class Job:
 
     def view(self) -> dict:
         return {"kind": self.kind, "image": self.image, "state": self.state, "error": self.error,
-                "tail": self.lines[-8:], "started": self.started}
+                "tail": self.lines[-8:], "started": self.started, "progress": self.progress}
 
 
 class ImageManager:
@@ -272,13 +277,27 @@ class ImageManager:
     def _pull_job(self, job: Job) -> None:
         repo, _, tag = job.image.rpartition(":")
         layers: dict[str, str] = {}
+        sizes: dict[str, tuple[int, int]] = {}  # layer -> (bytes downloaded, bytes in all)
         for ev in self.docker.api.pull(repo, tag=tag or "latest", stream=True, decode=True):
             if "error" in ev:
                 raise RuntimeError(ev["error"])
-            if ev.get("id") and ev.get("status"):
-                layers[ev["id"]] = ev["status"]
-                done = sum(1 for s in layers.values() if s in ("Pull complete", "Already exists"))
-                job.lines = [f"{done} of {len(layers)} layers"]
+            if not (ev.get("id") and ev.get("status")):
+                continue
+            layers[ev["id"]] = ev["status"]
+            d = ev.get("progressDetail") or {}
+            if ev["status"] == "Downloading" and d.get("total"):
+                sizes[ev["id"]] = (d.get("current", 0), d["total"])
+            elif ev["status"] in ("Download complete", "Extracting", "Pull complete", "Already exists") and ev["id"] in sizes:
+                sizes[ev["id"]] = (sizes[ev["id"]][1], sizes[ev["id"]][1])
+            done = sum(1 for st in layers.values() if st in ("Pull complete", "Already exists"))
+            text = f"{done} of {len(layers)} layers"
+            total = sum(t for _, t in sizes.values())
+            if total:
+                got = sum(c for c, _ in sizes.values())
+                job.progress = round(got / total, 3)
+                text = f"{_gb(got)} of {_gb(total)} downloaded · {text}"
+            job.lines = [text]
+        job.progress = 1.0
 
     def _build_job(self, job: Job) -> None:
         b = BUILDS[job.build]

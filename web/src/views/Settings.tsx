@@ -6,6 +6,7 @@ import { Folders } from './Library'
 import { DiskDelete } from './DiskDelete'
 import { GatewayCard } from './Models'
 import { go } from '../nav'
+import { toast } from '../toast'
 import { Images, Log } from './Other'
 import { SystemInfo } from './SystemInfo'
 
@@ -87,7 +88,7 @@ function HfToken() {
   const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null)
   const put = (json: object, done: (r: HfConf & { checked?: boolean; account?: string }) => string) =>
     api<HfConf & { checked?: boolean; account?: string }>('/api/settings/hf', { method: 'PUT', json })
-      .then((r) => { setToken(''); setMsg({ text: done(r) }); conf.reload() })
+      .then((r) => { setToken(''); setMsg({ text: done(r) }); toast(done(r)); conf.reload() })
       .catch((e: Error) => setMsg({ text: e.message, bad: true }))
   if (!conf.data) return <Pending error={conf.error} what="the Hugging Face token" />
   const c = conf.data

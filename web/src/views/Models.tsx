@@ -1,4 +1,6 @@
 import { Pending } from './Settings'
+import { toast } from '../toast'
+import { PullProgress } from './Other'
 import { useState } from 'react'
 import { api, copyText, fmtBytes, fmtNum, fmtRate, type Download, type Gateway, type ModelRow, type Plan, type Recipe } from '../api'
 import { usePoll } from '../usePoll'
@@ -77,7 +79,7 @@ function ImagePicker({ engine, value, onChange }: { engine: string; value: strin
   const { data } = usePoll<{ default: string; choices: string[] }>(`/api/images/choices/${engine}`, 15000)
   const listed = !value || !!data?.choices.includes(value)
   const [other, setOther] = useState(false)
-  const status = usePoll<{ ready: boolean; job: { state: string; error: string | null; tail: string[] } | null }>(`/api/images/status?image=${encodeURIComponent(value ?? '')}`, 2000, !!value)
+  const status = usePoll<{ ready: boolean; job: { kind: string; state: string; error: string | null; tail: string[]; progress?: number | null } | null }>(`/api/images/status?image=${encodeURIComponent(value ?? '')}`, 2000, !!value)
   const [pullErr, setPullErr] = useState<string | null>(null)
   const pull = () => { setPullErr(null); api('/api/images/pull', { method: 'POST', json: { image: value } }).then(status.reload).catch((e: Error) => setPullErr(e.message)) }
   const st = status.data
@@ -99,12 +101,15 @@ function ImagePicker({ engine, value, onChange }: { engine: string; value: strin
       )}
       {value && st && (
         <small className={pulling || st.ready ? 'muted' : 'warn'}>
-          {pulling ? `Pulling… ${st.job!.tail.at(-1) ?? ''}`
+          {pulling ? 'Pulling…'
             : st.ready ? 'On this box.'
             : st.job?.state === 'failed' ? `Pull failed: ${st.job.error ?? ''}` : 'Not on this box yet; the model can’t start until it is pulled.'}
           {!pulling && !st.ready && <> <button type="button" onClick={pull}>{st.job?.state === 'failed' ? 'Try again' : 'Pull'}</button></>}
           {pullErr && <span className="bad"> {pullErr}</span>}
         </small>
+      )}
+      {value && st?.job && st.job.state === 'running' && (
+        <PullProgress job={st.job} />
       )}
     </label>
   )
@@ -197,7 +202,7 @@ function ExtraEnv({ onApplied }: { onApplied: () => void }) {
     if (apply && !window.confirm('Apply now? The LiteLLM gateway restarts for a few seconds; running models are not touched.')) return
     setBusy(true)
     api<ExtraEnvState>('/api/gateway/extra', { method: 'PUT', json: { text: shown, apply } })
-      .then(() => { setText(null); setMsg({ text: apply ? 'Saved and applied.' : 'Saved. Not applied yet.' }); reload(); onApplied() })
+      .then(() => { setText(null); setMsg({ text: apply ? 'Saved and applied.' : 'Saved. Not applied yet.' }); toast(apply ? 'LiteLLM settings saved and applied.' : 'LiteLLM settings saved. Not applied yet.'); reload(); onApplied() })
       .catch((e: Error) => setMsg({ text: e.message, bad: true }))
       .finally(() => setBusy(false))
   }
@@ -234,7 +239,7 @@ export function GatewayCard() {
   const c = conf.data
   const shownUrl = url ?? c.url ?? ''
   const save = (body: object) => api<GatewayConf>('/api/settings/gateway', { method: 'PUT', json: body })
-    .then(() => { setUrl(null); setKey(''); setMsg({ text: 'Saved.' }); conf.reload(); reload() })
+    .then(() => { setUrl(null); setKey(''); setMsg({ text: 'Saved.' }); toast('Gateway settings saved.'); conf.reload(); reload() })
     .catch((e: Error) => setMsg({ text: e.message, bad: true }))
   const copy = async (what: string, get: () => Promise<string>) => {
     const ok = await copyText(await get())

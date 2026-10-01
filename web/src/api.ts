@@ -135,7 +135,7 @@ export const fmtNum = (n: number | null | undefined, digits = 0) =>
 export const fmtMs = (s: number | null | undefined) => (s == null ? '–' : `${Math.round(s * 1000)} ms`)
 
 export type Download = { repo: string; state: string; error: string | null; bytes: number; total_bytes: number; pct: number | null; bytes_per_s: number | null }
-export type ImageJob = { kind: string; image: string; state: string; error: string | null; tail: string[] }
+export type ImageJob = { kind: string; image: string; state: string; error: string | null; tail: string[]; progress?: number | null }
 export type ImageBuild = { id: string; image: string; about: string; ready: boolean; patches: string[]; job: ImageJob | null }
 export type Image = { engine: string; image: string; default: string; ready: boolean; builds: ImageBuild[]; job: ImageJob | null; local?: string[]; source?: 'default' | 'chosen' | 'found' }
 export type Action = { t: number; action: string; detail: string }

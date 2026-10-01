@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api, type Gateway } from './api'
+import { Toasts } from './toast'
 import { useFleet, type Entry } from './fleet'
 import { alertsFor, type Alert } from './health'
 import { Login } from './Login'
@@ -67,6 +68,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
         <span className="conn" title={connected ? 'Receiving live data' : 'Reconnecting'}><span className={`dot ${connected ? 'on' : ''}`} />{connected ? 'Live' : 'Reconnecting'}</span>
         {canSignOut && <button className="ghost" onClick={onSignOut}>Sign out</button>}
       </header>
+      <Toasts />
       <main>
         {route.page === 'settings' ? <Settings canChangePassword={canSignOut} tab={route.arg} />
           : route.page === 'library' ? <LibraryPage />

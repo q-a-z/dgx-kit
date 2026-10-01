@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from './api'
+import { toast } from './toast'
 
 export function Login({ onDone, version }: { onDone: () => void; version?: string }) {
   const [pw, setPw] = useState('')
@@ -32,6 +33,7 @@ export function ChangePassword() {
     try {
       await api('/api/password', { method: 'POST', json: { old, new: next } })
       setMsg('Password changed. Other signed-in browsers were signed out.')
+      toast('Password changed.')
       setOld('')
       setNext('')
     } catch (e) {

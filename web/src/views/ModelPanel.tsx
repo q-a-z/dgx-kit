@@ -1,6 +1,7 @@
 import { usePoll } from '../usePoll'
 import { useEffect, useRef, useState } from 'react'
 import { useModelActions } from '../actions'
+import { toast } from '../toast'
 import { api, copyText, fmtBytes, fmtNum, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
 import type { Mark } from '../components/Chart'
 import { Icon } from '../components/Icon'
@@ -192,6 +193,7 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
       if (then === 'restart') await a.restart()
       else if (then === 'start') await a.start()
       setMsg({ text: then ? 'Saved.' : entry.running ? 'Saved. It applies at the next restart.' : 'Saved.' })
+      toast(then ? 'Settings saved.' : entry.running ? 'Settings saved. They apply at the next restart.' : 'Settings saved.')
       onChanged()
     } catch (e) {
       setMsg({ text: (e as Error).message, bad: true })
@@ -237,7 +239,7 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
         <button className="ghost" aria-expanded={all} onClick={() => setAll(!all)}>{all ? 'Hide all settings' : 'All settings and flags'}</button>
       </div>
       {msg && <p className={msg.bad ? 'bad' : 'muted'}>{msg.text}</p>}
-      {all && <Editor model={model} onDone={(t) => { setMsg({ text: t }); onChanged() }} />}
+      {all && <Editor model={model} onDone={(t) => { setMsg({ text: t }); toast(t); onChanged() }} />}
     </div>
   )
 }

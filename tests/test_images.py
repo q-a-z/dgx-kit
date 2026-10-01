@@ -161,3 +161,23 @@ def test_any_tag_can_be_pulled_and_followed_by_its_name(tmp_path):
     with pytest.raises(ValueError):  # a second pull of the same tag while one runs is refused
         m.jobs["image:org/engine:1"].state = "running"
         m.start_pull_image("org/engine:1")
+
+
+def test_a_pull_reports_bytes_and_progress(tmp_path):
+    seen = []
+
+    class Api:
+        def pull(self, repo, tag, stream, decode):
+            yield {"id": "a", "status": "Downloading", "progressDetail": {"current": 500_000_000, "total": 1_000_000_000}}
+            yield {"id": "b", "status": "Downloading", "progressDetail": {"current": 0, "total": 1_000_000_000}}
+            j = m.jobs["vllm"]
+            seen.append((j.progress, list(j.lines)))  # the state after both layers were reported
+            yield {"id": "a", "status": "Pull complete"}
+
+    d = FakeDocker()
+    d.api = Api()
+    m = ImageManager(d, CAT, str(tmp_path))
+    job = m.start_pull("vllm")
+    wait(m, "vllm")
+    assert seen[0] == (0.25, ["0.5 GB of 2.0 GB downloaded · 0 of 2 layers"])
+    assert job.state == "done" and job.progress == 1.0
