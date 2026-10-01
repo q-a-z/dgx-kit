@@ -114,7 +114,7 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
           </div>
         )}
       </div>
-      <div className="stats-line"><h2>Stats</h2><TrafficStats latest={latest} /></div>
+      <div className="stats-line"><TrafficStats latest={latest} /></div>
     </section>
   )
 }

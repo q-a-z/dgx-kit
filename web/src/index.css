@@ -621,7 +621,7 @@ main { max-width: 1320px; }
 .sys-head .muted { font-size: 12px; }
 .sys-row { display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; }
 .sys-row .cell { display: grid; gap: 8px; align-content: center; min-width: 0; }
-.gauges { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; align-items: flex-end; position: relative; }
+.gauges { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px 28px; align-items: flex-end; position: relative; }
 .donut { display: grid; justify-items: center; gap: 0; width: 120px; }
 .donut .lbl { font-size: 12px; color: var(--muted); margin-top: -8px; text-align: center; white-space: nowrap; }
 .donut .dv { fill: var(--text); font: 600 22px var(--font); font-variant-numeric: tabular-nums; }
@@ -718,7 +718,7 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .settings .tabs { flex-wrap: wrap; margin-bottom: 16px; }
 .settings [role=tabpanel] > .lead { margin-top: 0; }
 
-.traffic { margin: 0; display: flex; flex-wrap: wrap; gap: 8px 32px; }
+.traffic { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 32px; }
 .traffic > div { display: grid; gap: 0; min-width: 0; white-space: nowrap; }
 .traffic dt { font-size: 11px; color: var(--muted); }
 .traffic dd { margin: 0; font-variant-numeric: tabular-nums; }
@@ -734,5 +734,5 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .core-gauge .core { height: 17px; border-radius: 2px; }
 .donut .dv-xs { font-size: 11px; }
 
-.stats-line { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.stats-line { display: flex; align-items: center; justify-content: center; gap: 28px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .stats-line h2 { font-size: 15px; margin: 0; }
