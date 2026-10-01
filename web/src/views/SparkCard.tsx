@@ -108,8 +108,8 @@ export function SparkCard({ latest }: { latest: Snapshot }) {
             <Donut label="Clock" value={g.sm_clock_mhz} tag="GPU" second={{ value: cpuClock(latest), tag: 'CPU' }} max={CLOCK_MAX_MHZ} unit="MHz" />
             <Donut label="Load" value={g.util_pct} tag="GPU" second={{ value: latest.system?.cpu_pct?.cpu, tag: 'CPU' }} max={100} unit="%"
               zones={[{ upTo: 75, color: 'var(--s1)' }, { upTo: 90, color: 'var(--warn)' }, { upTo: 100, color: 'var(--bad)' }]} />
-            <Donut label="Network" value={mb(net(latest, 'net_rx_bps'))} tag="In" second={{ value: mb(net(latest, 'net_tx_bps')), tag: 'Out' }} max={NET_MAX_MB} unit="MB/s" curve fine size={128} />
-            <Donut label="Disk" value={mb(rateSum(latest.system?.disk_read_bps))} tag="Read" second={{ value: mb(rateSum(latest.system?.disk_write_bps)), tag: 'Write' }} max={DISK_MAX_MB} unit="MB/s" curve fine size={128} />
+            <Donut label="Network" value={mb(net(latest, 'net_rx_bps'))} tag="In" second={{ value: mb(net(latest, 'net_tx_bps')), tag: 'Out' }} max={NET_MAX_MB} unit="MB/s" curve fine />
+            <Donut label="Disk" value={mb(rateSum(latest.system?.disk_read_bps))} tag="Read" second={{ value: mb(rateSum(latest.system?.disk_write_bps)), tag: 'Write' }} max={DISK_MAX_MB} unit="MB/s" curve fine />
             <CoreGauge latest={latest} />
             {throttled && <span className="warn small throttle">▲ throttling</span>}
           </div>
