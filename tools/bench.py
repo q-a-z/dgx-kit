@@ -280,51 +280,13 @@ def t_syntax_line3():
     else: raise AssertionError("no error")
 """
 
-HARNESS = """
-import json, sys, traceback
-ns = {}
-exec(open(sys.argv[1]).read(), ns)
-res = {}
-for k, f in list(ns.items()):
-    if k.startswith("t_") and callable(f):
-        try: f(); res[k] = "ok"
-        except BaseException as e: res[k] = (repr(e) or type(e).__name__)[:120]
-print("@@" + json.dumps(res))
-"""
-
-
 def dump(name, rs):
     d = os.path.join(A.out, "raw"); os.makedirs(d, exist_ok=True)
     for i, r in enumerate(rs):
         open(f"{d}/{A.tag}-{name}-{i}.txt", "w").write(f"finish={r['finish']} toks={r['toks']}\n" + r["content"])
 
 
-def verify(content, hidden):
-    """Run OUR hidden tests against the model's solution (the model's own tests only prove self-consistency)."""
-    import subprocess, tempfile
-    blocks = re.findall(r"```(?:python|py)?\s*\n(.*?)(?:```|\Z)", content, re.S)
-    if not blocks:
-        return dict(correct=0, total=0, fail_class="no_code", note="no code block in the answer")
-    with tempfile.TemporaryDirectory() as d:
-        open(f"{d}/solution.py", "w").write(blocks[0]); open(f"{d}/hidden.py", "w").write(hidden); open(f"{d}/harness.py", "w").write(HARNESS)
-        total = len(re.findall(r"^def t_", hidden, re.M))
-        try:
-            p = subprocess.run([sys.executable, "harness.py", "hidden.py"], cwd=d, capture_output=True, text=True, timeout=120)
-            res = json.loads(p.stdout.split("@@")[-1])
-        except Exception as e:
-            err = (locals().get("p") and p.stderr) or ""
-            cls = "timeout" if isinstance(e, subprocess.TimeoutExpired) else "syntax" if "SyntaxError" in err or "IndentationError" in err else "crash"
-            return dict(correct=0, total=total, fail_class=cls, note="solution failed to import/run: " + (repr(e) if not isinstance(e, subprocess.TimeoutExpired) else "timeout"), stderr=err[-300:] or None)
-        own = None
-        if len(blocks) > 1:
-            open(f"{d}/test_model.py", "w").write(blocks[1])
-            try:
-                o = subprocess.run([sys.executable, "-m", "pytest", "-q", "-x", "test_model.py"], cwd=d, capture_output=True, text=True, timeout=120)
-                own = "pass" if o.returncode == 0 else "fail" if "passed" in o.stdout or "failed" in o.stdout else "n/a"
-            except Exception:
-                own = "n/a"
-    bad = {k: v for k, v in res.items() if v != "ok"}
-    return dict(correct=total - len(bad), total=total, failed=bad, model_own_tests=own)
+from bench_verify import HARNESS, verify, why  # noqa: E402,F401  (kept in their own file so they can be tested)
 
 
 def t_complex():
@@ -333,11 +295,11 @@ def t_complex():
     for t in (0.0, 0.5, 1.0):
         rs = [one(CODE_COMPLEX, temperature=t, max_tokens=8000, think=A.code_think or False) for _ in range(2)]
         o[f"temp{t:g}"] = rep(f"Code COMPLEX temp{t:g}", rs)
-        o[f"temp{t:g}"]["verify"] = [dict(verify(r["content"], HIDDEN_COMPLEX), finish=r["finish"], toks=r["toks"]) for r in rs]
+        o[f"temp{t:g}"]["verify"] = [dict(verify(r["content"], HIDDEN_COMPLEX, r["finish"]), finish=r["finish"], toks=r["toks"]) for r in rs]
         dump(f"complex-t{t:g}", rs)
         print("   toks", [r["toks"] for r in rs], "correct:", [f"{v['correct']}/{v['total']}" for v in o[f"temp{t:g}"]["verify"]], "own-tests", [v.get("model_own_tests") for v in o[f"temp{t:g}"]["verify"]])
         for v in o[f"temp{t:g}"]["verify"]:
-            if v.get("note") or v.get("failed"): print("      ", v.get("note") or v["failed"], (v.get("stderr") or "")[-200:])
+            if v.get("note") or v.get("failed"): print("      ", v.get("note") or v["failed"])
     return o
 
 
@@ -346,7 +308,7 @@ def t_hardcore():
     rs = [one(CODE_HARDCORE, temperature=0.0, max_tokens=32000, think=A.code_think or False) for _ in range(2)]
     o = rep("Code HARDCORE temp0", rs)
     o["completion_toks"] = [x["toks"] for x in rs]
-    o["verify"] = [dict(verify(r["content"], HIDDEN_HARDCORE), finish=r["finish"], toks=r["toks"]) for r in rs]
+    o["verify"] = [dict(verify(r["content"], HIDDEN_HARDCORE, r["finish"]), finish=r["finish"], toks=r["toks"]) for r in rs]
     dump("hardcore", rs)
     for r, v in zip(rs, o["verify"]):
         print(f"   {r['toks']} toks -> correct {v['correct']}/{v['total']} own-tests={v.get('model_own_tests')} {v.get('note', '')}")

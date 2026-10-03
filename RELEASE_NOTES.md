@@ -4,6 +4,9 @@ Newest first. Every commit adds its entry here.
 
 ## 0.1.8 (in progress)
 
+### Fixed
+- **Benchmark: a coding test that scored 0/9 now says why.** A solution that wouldn't load was reported as "JSONDecodeError" (the benchmark failing to read a result) instead of the real error, such as `IndentationError` or `NameError: name 'time' is not defined`. It now shows that error line. An answer cut off by the token limit (the model kept thinking aloud inside its code block until the limit) is now marked "cut off at the token limit, so this is not a fair score" and classed as `truncated`, not as a syntax error by the model.
+
 ### Changed
 - Version bump. Everything in 0.1.7 below is released; new changes are listed here from now on.
 
