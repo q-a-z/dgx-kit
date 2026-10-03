@@ -643,3 +643,12 @@ def test_the_default_context_never_exceeds_what_a_small_model_has(env):
     assert client.get("/api/models/small/plan").json()["context_tokens"] == 8192
     client.post("/api/models", json=model_body(name="big", config=small, max_context=65536, weights_bytes=2**30))
     assert client.get("/api/models/big/plan").json()["context_tokens"] == 65536  # an explicit one is kept
+
+
+def test_a_running_model_that_lost_its_watcher_is_watched_again(env):
+    client, s, models = env
+    client.post("/api/models", json=model_body())
+    s.runner.running["llama"] = 8100  # serving, but nothing is scraping it (dropped while its container was "created")
+    assert "llama" not in s.sampler.engines
+    client.get("/api/models")
+    assert s.sampler.engines["llama"].base_url == "http://127.0.0.1:8100"

@@ -242,8 +242,11 @@ async def list_models(request: Request):
     live = s.sampler.latest["models"]
     for name in list(s.sampler.engines):
         c = running.get(name)
-        if c is not None and c["state"] not in ("running", "restarting"):  # it crashed: stop scraping it
+        if c is not None and c["state"] not in ("running", "restarting", "created"):  # it crashed: stop scraping it
             s.sampler.remove_engine(name)
+    for name, c in running.items():  # running but not watched (dropped while it was being created): pick it up again
+        if c["state"] == "running" and c.get("engine") and name not in s.sampler.engines and name not in s.external:
+            watch(s, name, c["engine"], c["port"], c.get("meta") or {"port": c["port"]})
     out = []
     by_user = stopped_by_user(s)
     for r in s.store.list():
