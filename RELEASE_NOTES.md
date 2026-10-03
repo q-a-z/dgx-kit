@@ -2,7 +2,18 @@
 
 Newest first. Every commit adds its entry here.
 
-## 0.1.8 (in progress)
+## 0.1.9 (in progress)
+
+### Changed
+- Version bump. Everything in 0.1.8 below is released; new changes are listed here from now on.
+
+### Fixed
+- **A context you set is kept as you wrote it.** The memory autotuner capped an explicit context at the config's `max_position_embeddings`, which would have lowered models that serve more than their config says (Nemotron 3.5 runs at 393K although its config says 256K). Only the default 32K context is now limited by the model's own maximum, so a small model isn't asked for more than it has.
+
+### Added
+- **Tuning notes for a GB10** in the README: what speculative decoding and the Mamba SSM cache cost in KV cache, which flag combinations vLLM refuses, the parsers a Qwen model needs, and a pointer to recipes.vllm.ai, all with the numbers measured on a Spark.
+
+## 0.1.8
 
 ### Added
 - **"Why it stopped" for a model that crashed.** A model that stopped on its own now shows, in its panel, what its log says went wrong, in plain words, with a one-click fix saved as a new version of its settings (so Restore can undo it). Recognised: a KV cache too small for the context ("raise it to 7.2 GB" or "lower the context to 86,016"), other models holding too much memory, the GPU out of memory, an illegal memory access (offers to turn prefix caching off), an engine image that doesn't know the model, a missing file, a taken port, and settings the engine refuses together (for example `--enable-expert-parallel` with a speculative draft, or Mamba stochastic rounding without a float16 SSM cache). Anything else shows the last error line.

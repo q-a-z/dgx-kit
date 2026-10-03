@@ -49,8 +49,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 1. Get the package onto the Spark and unpack it:
 
    ```
-   tar xzf dgx-kit-0.1.8.tar.gz
-   cd dgx-kit-0.1.8
+   tar xzf dgx-kit-0.1.9.tar.gz
+   cd dgx-kit-0.1.9
    ```
 
 2. Look before you leap (changes nothing):
@@ -95,7 +95,7 @@ Enter, and restarts the service on the new code. For updating, the next section 
 ```
 dgx-kit update                      # fetch the latest from git and update
 dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
-dgx-kit update dgx-kit-0.1.8.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit update dgx-kit-0.1.9.tar.gz # from a package, a .tgz, or a GitHub .zip
 dgx-kit version                     # what is running
 ```
 
@@ -208,6 +208,16 @@ Settings has one tab per topic (**System** is the first), and the tab is in the 
 | Delete from disk | The only place model files can be deleted (four confirmations). |
 | Activity | What DGX-kit has done on this machine. |
 | Password | Change the admin password (shown when a password is set). |
+
+## Tuning notes for a GB10
+
+Measured on one DGX Spark with the GB10 vLLM 0.30 image, one model at a time (running two loads at once changed speeds by up to 2×, so test alone). Your machine, drafts and prompts may differ. [recipes.vllm.ai](https://recipes.vllm.ai) lists vendor-tested flags per model, including a DGX Spark entry for Nemotron 3.5 Lightning.
+
+- **Speculative decoding takes KV cache, more with more draft tokens.** Qwen 3.8 27B with its dflash2 draft needed 5.8 GB of KV cache at 128K context with 3 draft tokens and 11 GB with 7; 7 decoded code about 36% faster (28 → 38 tokens/s). Nemotron 3.5 Lightning with DSpark and 7 draft tokens needed 4.5 GB at 256K and about 6.7 GB at 393K. A model that stops with "KV cache is needed … larger than the available KV cache memory" needs more cache or less context; the **Why it stopped** card offers both.
+- **Hybrid Mamba models keep their SSM state in the same pool.** For Nemotron a float32 SSM cache needed 7.8 GB at 256K against 4.5 GB for bfloat16 or float16. The vendor's "fast SSM cache" (`--mamba-ssm-cache-dtype float16` with `--enable-mamba-cache-stochastic-rounding`) was about as fast as bfloat16 here and gave a stray Chinese word in 1 of 12 Russian answers, against 0 of 12; bfloat16 is the safe choice. Stochastic rounding is refused with any other cache type.
+- **Don't combine `--enable-expert-parallel` with a speculative draft** that has no experts; vLLM refuses to start.
+- **Qwen 3.5 and 3.8 want `--reasoning-parser qwen3`** (otherwise the thinking text lands in the answer) **and `--tool-call-parser qwen3_coder`**. `--load-format fastsafetensors` cut loading from about 390 s to 170–250 s.
+- **Prefix caching worked** on Qwen 3.8 with dflash2: a 15,000-token prompt sent three times gave correct, identical answers, the repeat in 9 s against 22 s.
 
 ## Where things live
 

@@ -72,8 +72,9 @@ def test_a_model_takes_what_its_context_needs_not_all_free_memory():
     assert modest.gpu_fraction < greedy.gpu_fraction              # vLLM is told to take less, too
 
 
-def test_a_context_beyond_what_the_model_was_trained_for_is_clipped():
+def test_a_context_the_user_asked_for_is_kept_even_beyond_the_configs_maximum():
     from dgxkit.sizing import GIB, plan
     cfg = {"num_hidden_layers": 32, "num_attention_heads": 32, "num_key_value_heads": 8, "hidden_size": 4096,
            "max_position_embeddings": 8192}
-    assert plan(cfg, 8 * GIB, 60 * GIB, max_context=131072, cap_pool=True).context_tokens == 8192
+    assert plan(cfg, 8 * GIB, 60 * GIB, max_context=131072, cap_pool=True).context_tokens == 131072  # models can serve more than their config says
+    assert plan(cfg, 8 * GIB, 60 * GIB, cap_pool=True).context_tokens == 8192  # the model's own maximum is only the default

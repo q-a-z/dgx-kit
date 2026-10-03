@@ -634,3 +634,12 @@ def test_a_crashed_model_is_diagnosed_from_its_log_and_a_fix_applies_in_one_call
     assert client.post("/api/models/llama/diagnosis/fix", json={"index": 9}).status_code == 404
     s.runner.logs = lambda name, tail=200: "listening on port 8000"
     assert client.get("/api/models/llama/diagnosis").json() == {"found": False}
+
+
+def test_the_default_context_never_exceeds_what_a_small_model_has(env):
+    client, s, _ = env
+    small = {**CFG, "max_position_embeddings": 8192}
+    client.post("/api/models", json=model_body(name="small", config=small, max_context=None, weights_bytes=2**30))
+    assert client.get("/api/models/small/plan").json()["context_tokens"] == 8192
+    client.post("/api/models", json=model_body(name="big", config=small, max_context=65536, weights_bytes=2**30))
+    assert client.get("/api/models/big/plan").json()["context_tokens"] == 65536  # an explicit one is kept

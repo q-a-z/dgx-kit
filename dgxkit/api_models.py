@@ -74,7 +74,9 @@ def plan_for(s, r: Recipe, extra_free: int = 0):
             pass
     max_context = r.max_context
     if not max_context and not r.fill_memory:
-        max_context = DEFAULT_CONTEXT
+        from .sizing import text_config
+        model_max = text_config(r.config).get("max_position_embeddings")
+        max_context = min(DEFAULT_CONTEXT, model_max) if model_max else DEFAULT_CONTEXT  # a small-context model isn't asked for more than it has
     return plan(r.config, r.weights_bytes + r.draft_weights_bytes, available_bytes(s) + max(0, extra_free),
                 kv_dtype=r.kv_cache_dtype, max_context=max_context, min_context=r.min_context,
                 min_concurrency=r.min_concurrency, kv_cache_bytes=r.kv_cache_bytes, total_bytes=total_bytes(s),

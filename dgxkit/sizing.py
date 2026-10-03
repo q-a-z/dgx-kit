@@ -82,9 +82,9 @@ def plan(
     """
     c = text_config(config)
     model_max = c.get("max_position_embeddings")
+    # An explicit context is kept even beyond the config's max_position_embeddings: many models serve more than their
+    # config says (Nemotron 3.5 to 1M with VLLM_ALLOW_LONG_MAX_MODEL_LEN). Only the default is capped by the model.
     max_context = max_context or model_max or 32768
-    if model_max:
-        max_context = min(max_context, model_max)  # no point asking for more than the model was trained for
     per_token = kv_bytes_per_token(config, kv_dtype)
     kv_budget = available_bytes - reserve_bytes - int(weights_bytes * (1 + headroom_fraction))
     if kv_budget <= 0:
