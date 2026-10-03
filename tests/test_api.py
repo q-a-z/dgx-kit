@@ -611,3 +611,11 @@ def test_when_an_automatic_check_is_due():
     assert not due("never", None) and due("daily", None)
     assert not due("daily", 1000.0, now=1000.0 + 3600) and due("daily", 1000.0, now=1000.0 + 25 * 3600)
     assert due("hourly", 1000.0, now=1000.0 + 3700) and not due("weekly", 1000.0, now=1000.0 + 6 * 24 * 3600)
+
+
+def test_bench_history_is_served_before_the_run_route(env, tmp_path):
+    from dgxkit.benchmarks import Benchmarks
+    client, s, _ = env
+    s.bench = Benchmarks(str(tmp_path / "state"))
+    r = client.get("/api/bench/history", params={"model": "llama"})
+    assert r.status_code == 200 and r.json()["runs"] == [] and r.json()["regressions"] == []  # not "run history"

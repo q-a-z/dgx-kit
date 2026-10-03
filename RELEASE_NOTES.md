@@ -4,6 +4,9 @@ Newest first. Every commit adds its entry here.
 
 ## 0.1.8 (in progress)
 
+### Added
+- **Benchmark history.** A model's Benchmark tab now keeps every finished run and shows them over time: a table (decode, prefill, concurrent streams, tool calls, needle, complex-code score), charts of decode and prefill speed, and a warning when the latest run is clearly worse than your usual (decode, prefill or total speed more than 8% below the median of the last five runs, latency 15% above, or a quality score 10 points down). Each run now records what the model ran on (engine image and its build, DGX-kit version, driver, context, KV cache type, draft settings), so the warning says what changed since the run before, for example "image: vllm-spark:0.29 → vllm-spark:0.30". Runs made before this have no such record, and show no changes.
+
 ### Fixed
 - **Benchmark: a coding test that scored 0/9 now says why.** A solution that wouldn't load was reported as "JSONDecodeError" (the benchmark failing to read a result) instead of the real error, such as `IndentationError` or `NameError: name 'time' is not defined`. It now shows that error line. An answer cut off by the token limit (the model kept thinking aloud inside its code block until the limit) is now marked "cut off at the token limit, so this is not a fair score" and classed as `truncated`, not as a syntax error by the model.
 

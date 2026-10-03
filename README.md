@@ -187,7 +187,7 @@ Every question can be answered ahead of time with `DGXKIT_INSTALL_<NAME>` (see *
 - **"Saved" messages.** Saving settings, templates, the gateway, the Hugging Face token, folders, an image or the password shows a short message in the corner.
 - **Start, Stop and Restart.** Stop and Restart always ask first. A model you stopped shows **Stopped**; one that died shows **Crashed** with its exit code.
 - **Speed check.** When a model you started first answers, DGX-kit takes a ten-second check (two short decodes, two prefills) and shows it on the model. It is skipped when other models are busy.
-- **Benchmark.** The **Benchmark** tab runs the full battery or a quick run, only when you press the button. It refuses to run while other models are busy, because that would spoil the numbers.
+- **Benchmark.** The **Benchmark** tab runs the full battery or a quick run, only when you press the button. Finished runs are kept: the **History** at the top of the tab charts decode and prefill speed over time, lists every run with what changed since the one before (engine image, DGX-kit, driver, settings), and warns when the latest run is clearly worse than your usual. It refuses to run while other models are busy, because that would spoil the numbers.
 - **Removing a model** (the three-dot menu) removes it from DGX-kit only. Its files stay on disk.
 - **Deleting files from disk** is only possible in **Settings → Delete from disk**, after four confirmations, the last one typing the folder's name. A model that is running can't be deleted, and nothing outside your model folders can be.
 - **Version.** The running version is shown next to the logo, and on the sign-in page.

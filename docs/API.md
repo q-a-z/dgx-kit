@@ -109,6 +109,7 @@ Ready-made sets of sizing settings (`compact`, `balanced`, `long-context`, `many
 |---|---|
 | `POST /api/models/{name}/bench` | Run `tools/bench.py` against a running model. Optional body chooses the tests (`decode`, `complex`, `hardcore`, `conc`, `prefill`, `stall`, `needle`, `tools`, `sanity`). `202` with the run |
 | `GET /api/bench?model=name` | Runs, optionally for one model |
+| `GET /api/bench/history?model=name` | Finished runs of a model, oldest first: `runs` (`id`, `started`, `tests`, `context` (what it ran on: `image`, `image_id`, `dgxkit`, `driver`, `max_context`, `kv_cache_dtype`, `draft_method`, `speculative_tokens`), `metrics` (decode, prefill, concurrent total, tool-call, needle and complex-code numbers)), `regressions` (metrics of the newest run clearly worse than the median of the five before, with `since`: what changed) and `metrics` (labels and units) |
 | `GET /api/bench/{run_id}` | One run, with results and output so far |
 | `POST /api/bench/{run_id}/stop` | Stop a run |
 

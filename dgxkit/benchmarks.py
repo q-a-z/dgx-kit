@@ -23,7 +23,7 @@ class Benchmarks:
         self.script = script
         self._procs: dict[str, subprocess.Popen] = {}
 
-    def start(self, model: str, port: int, tests: str = TESTS, conc: int = 2) -> dict:
+    def start(self, model: str, port: int, tests: str = TESTS, conc: int = 2, context: dict | None = None) -> dict:
         if any(r["model"] == model and r["state"] == "running" for r in self.list()):
             raise ValueError(f"{model} is already being benchmarked")
         self.dir.mkdir(parents=True, exist_ok=True)
@@ -33,7 +33,7 @@ class Benchmarks:
         with open(self.dir / f"{run_id}.log", "w") as log:
             proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         self._procs[run_id] = proc
-        meta = {"id": run_id, "model": model, "port": port, "tests": tests, "conc": conc, "started": time.time(), "pid": proc.pid}
+        meta = {"id": run_id, "model": model, "port": port, "tests": tests, "conc": conc, "started": time.time(), "pid": proc.pid, "context": context or {}}
         (self.dir / f"{run_id}.meta").write_text(json.dumps(meta))
         return {**meta, "state": "running"}
 
@@ -56,6 +56,21 @@ class Benchmarks:
     def list(self, model: str | None = None) -> list[dict]:
         runs = [self._view(f) for f in self.dir.glob("*.meta")] if self.dir.exists() else []
         return sorted((r for r in runs if model in (None, r["model"])), key=lambda r: -r["started"])
+
+    def history(self, model: str) -> dict:
+        """The finished runs of a model, oldest first, each with its tracked metrics and what it ran on, and the metrics
+        of the newest that got worse than usual."""
+        from .benchhistory import METRICS, extract_metrics, regressions
+        runs = []
+        for r in sorted((x for x in self.list(model) if x["state"] == "done"), key=lambda x: x["started"]):
+            try:
+                res = json.loads((self.dir / f"{r['id']}.json").read_text())
+            except (OSError, ValueError):
+                continue
+            runs.append({"id": r["id"], "started": r["started"], "tests": r["tests"], "context": r.get("context") or {},
+                         "metrics": extract_metrics(res)})
+        return {"runs": runs, "regressions": regressions(runs),
+                "metrics": {k: {"label": v[0], "unit": v[1], "higher_is_better": v[2]} for k, v in METRICS.items()}}
 
     def get(self, run_id: str) -> dict | None:
         f = self.dir / f"{Path(run_id).name}.meta"  # a name, never a path

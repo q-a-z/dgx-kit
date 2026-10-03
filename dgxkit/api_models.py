@@ -436,11 +436,37 @@ async def run_bench(name: str, request: Request, body: dict | None = None):
         raise HTTPException(422, "no known tests picked")
     seqs = next((int(m.group(1)) for a in s.store.get(name).extra_args if (m := re.fullmatch(r"--max-num-seqs\s+(\d+)", a.strip()))), 2)
     try:
-        run = s.bench.start(name, c["port"], ",".join(t for t in TEST_ORDER if t in tests), int(body.get("conc") or seqs))
+        run = s.bench.start(name, c["port"], ",".join(t for t in TEST_ORDER if t in tests), int(body.get("conc") or seqs),
+                            context=await asyncio.to_thread(bench_context, s, name, c))
     except ValueError as e:
         raise HTTPException(409, str(e))
     s.log("bench", f"{name}: {run['tests']}")
     return run
+
+
+def bench_context(s, name: str, c: dict) -> dict:
+    """What the model runs on, saved with a benchmark run so a change in speed can be set against what changed."""
+    from .app import app_version
+    r = s.store.get(name)
+    ctx = {"engine": r.engine, "image": r.image or s.images.image_for(r.engine), "quantization": r.quantization,
+           "kv_cache_dtype": r.kv_cache_dtype, "max_context": (c.get("meta") or {}).get("context_tokens"),
+           "draft_method": r.draft_method if (r.draft_repo or r.draft_path) else None,
+           "speculative_tokens": r.num_speculative_tokens if (r.draft_repo or r.draft_path) else None, "dgxkit": app_version()}
+    try:
+        ctx["image_id"] = s.runner.docker.containers.get(c["id"]).image.id.split(":")[-1][:12]  # the build behind the tag
+    except Exception:
+        pass
+    try:
+        ctx["driver"] = (getattr(s.sampler.gpu, "versions", lambda: {})() or {}).get("driver")
+    except Exception:
+        pass
+    return {k: v for k, v in ctx.items() if v is not None}
+
+
+@router.get("/bench/history")
+async def bench_history(model: str, request: Request):
+    """Finished runs of a model over time, with the tracked numbers, what changed between runs and any regressions."""
+    return await asyncio.to_thread(svc(request).bench.history, model)
 
 
 @router.get("/bench/{run_id}")

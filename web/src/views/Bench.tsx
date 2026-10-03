@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../api'
 import { usePoll } from '../usePoll'
+import { Chart } from '../components/Chart'
 
 type Res = Record<string, any> // eslint-disable-line @typescript-eslint/no-explicit-any -- bench.py's own json, shown as it comes
 type Run = { id: string; model: string; state: 'running' | 'done' | 'failed'; tests: string; started: number; tail?: string[]; result?: Res | null }
@@ -23,6 +24,63 @@ function summary(r: Res): [string, string][] {
   if (r.tools) rows.push(['Tool calls', err('tools') ?? `${r.tools.valid} of ${r.tools.total} valid`])
   if (r.sanity) rows.push(['Sanity', err('sanity') ?? (r.sanity.empty ? 'empty answer' : `${r.sanity.words} words, ${f(r.sanity.repeated_8gram_ratio, 3)} repeated`)])
   return rows
+}
+
+type Hist = {
+  runs: { id: string; started: number; tests: string; context: Record<string, string | number>; metrics: Record<string, number> }[]
+  regressions: { metric: string; label: string; unit: string; now: number; usual: number; change: number; points: boolean; since: string[] }[]
+}
+
+const CONTEXT_LABELS: Record<string, string> = { image: 'image', image_id: 'image build', dgxkit: 'DGX-kit', driver: 'driver', engine: 'engine', quantization: 'quantization', kv_cache_dtype: 'KV cache type', max_context: 'context', draft_method: 'draft method', speculative_tokens: 'draft tokens' }
+/** What differs between two runs' setups, in words (the same rule as the service's, to mark the charts). */
+const diff = (a?: Record<string, string | number>, b?: Record<string, string | number>) =>
+  Object.entries(CONTEXT_LABELS).filter(([k]) => a?.[k] != null && b?.[k] != null && a[k] !== b[k]).map(([k, l]) => `${l}: ${a![k]} → ${b![k]}`)
+
+/** The finished runs of this model over time: whether the latest got worse than usual, what changed since the run before, and the trend. */
+function BenchHistory({ name }: { name: string }) {
+  const { data } = usePoll<Hist>(`/api/bench/history?model=${encodeURIComponent(name)}`, 30000)
+  if (!data || !data.runs.length) return null
+  const runs = data.runs
+  const bad = new Set(data.regressions.map((r) => r.metric))
+  const times = runs.map((r) => r.started)
+  const marks = runs.flatMap((r, i) => (i > 0 && diff(runs[i - 1].context, r.context).length ? [{ t: r.started, label: diff(runs[i - 1].context, r.context)[0].split(':')[0] }] : []))
+  const line = (key: string, label: string) => ({ label, values: runs.map((r) => r.metrics[key] ?? null) })
+  const since = data.regressions[0]?.since ?? []
+  const cols: [string, string, number][] = [['decode_code', 'Decode', 1], ['prefill_tps', 'Prefill', 0], ['conc_total', 'Streams', 0], ['tools_pct', 'Tools %', 0], ['needle_pct', 'Needle %', 0], ['complex_pct', 'Complex %', 0]]
+  return (
+    <div className="bench-history">
+      <h3>History</h3>
+      {data.regressions.length > 0 ? (
+        <div className="warn">
+          <p>▲ The latest run is worse than your usual in:</p>
+          <ul>{data.regressions.map((r) => <li key={r.metric}>{r.label}: {f(r.now, 1)} {r.unit} against {f(r.usual, 1)} usually ({r.points ? `${r.change} points` : `${r.change > 0 ? '+' : ''}${r.change}%`})</li>)}</ul>
+          <p className="muted small">{since.length ? `Changed since the run before: ${since.join('; ')}.` : 'Nothing recorded changed since the run before (image, DGX-kit, driver, settings): it may be noise, other load on the box, or the model itself.'}</p>
+        </div>
+      ) : runs.length > 1 && <p className="muted">The latest run is in line with the earlier ones.</p>}
+      {runs.length > 1 && (
+        <div className="row bench-charts">
+          <div className="grow"><span className="lbl">Decode speed, t/s</span>
+            <Chart times={times} fit marks={marks} height={110} fmt={(v) => v.toFixed(0)} series={[line('decode_code', 'code'), line('decode_prose', 'prose'), line('decode_complex', 'complex code')]} /></div>
+          <div className="grow"><span className="lbl">Prefill, t/s</span>
+            <Chart times={times} fit marks={marks} height={110} fmt={(v) => v.toFixed(0)} series={[line('prefill_tps', 'prefill')]} /></div>
+        </div>
+      )}
+      <table className="bench-result"><thead><tr><th>When</th><th>Changed</th>{cols.map(([, l]) => <th key={l}>{l}</th>)}</tr></thead><tbody>
+        {runs.slice().reverse().slice(0, 10).map((r, ri, arr) => {
+          const prev = arr[ri + 1]
+          const changes = prev ? diff(prev.context, r.context) : []
+          const latest = ri === 0
+          return (
+            <tr key={r.id}>
+              <td>{new Date(r.started * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+              <td className="small muted" title={changes.join('\n')}>{prev ? (changes.length ? changes.map((c) => c.split(':')[0]).join(', ') : '–') : 'first run'}</td>
+              {cols.map(([k, , d]) => <td key={k} className={latest && bad.has(k) ? 'bad' : ''}>{f(r.metrics[k], d)}{latest && bad.has(k) ? ' ▼' : ''}</td>)}
+            </tr>
+          )
+        })}
+      </tbody></table>
+    </div>
+  )
 }
 
 /** Runs tools/bench.py against the running model and shows what came out. */
@@ -49,6 +107,7 @@ export function Bench({ name, ready, readonly }: { name: string; ready: boolean;
         <span className="muted small">{ready ? 'Runs on this model only; stop other models’ traffic first, the script refuses if they are busy.' : 'Start the model and wait until it is serving.'}</span>
       </div>
       {msg && <p className="bad">{msg}</p>}
+      <BenchHistory name={name} />
       {list.length === 0 && <p className="muted">No runs yet.</p>}
       {list.length > 0 && (
         <ul className="bench-runs">
