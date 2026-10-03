@@ -564,6 +564,39 @@ async def logs(name: str, request: Request, tail: int = 200):
     return {"logs": svc(request).runner.logs(name, tail=min(tail, 5000))}
 
 
+@router.get("/models/{name}/diagnosis")
+async def model_diagnosis(name: str, request: Request):
+    """Why a model that isn't running stopped, from the end of its log, with fixes where one is known."""
+    from .diagnose import diagnose
+    s = svc(request)
+    if not _exists(s, name):
+        raise HTTPException(404)
+    log = await asyncio.to_thread(s.runner.logs, name, 800)
+    d = diagnose(log, s.store.get(name)) if log else None
+    return {"found": d is not None, **(d or {})}
+
+
+class FixBody(BaseModel):
+    index: int
+
+
+@router.post("/models/{name}/diagnosis/fix")
+async def apply_model_fix(name: str, body: FixBody, request: Request):
+    """Apply one of the fixes the diagnosis offered, as a new version of the model's settings."""
+    from .diagnose import apply_fix, diagnose
+    s = svc(request)
+    if not _exists(s, name):
+        raise HTTPException(404)
+    r = s.store.get(name)
+    d = diagnose(await asyncio.to_thread(s.runner.logs, name, 800), r)
+    if not d or not (0 <= body.index < len(d["fixes"])):
+        raise HTTPException(404, "that fix isn't on offer any more")
+    fix = d["fixes"][body.index]
+    s.store.save(apply_fix(r, fix))
+    s.log("fix", f"{name}: {fix['label']}")
+    return {"saved": True, "label": fix["label"]}
+
+
 @router.delete("/models/{name}")
 async def delete(name: str, request: Request):
     """Forget a model. Its files on disk are never touched here; that is /library/delete, from Settings only."""

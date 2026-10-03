@@ -154,6 +154,24 @@ const FIELDS: { key: 'max_context' | 'min_concurrency' | 'kv_cache_dtype' | 'num
   { key: 'num_speculative_tokens', label: 'Draft tokens per step', hint: 'speculative decoding' },
 ]
 
+type Diag = { found: boolean; title?: string; detail?: string; fixes?: { label: string }[] }
+
+/** Why a model that stopped on its own did, from its log, with the fix where one is known. */
+function Diagnosis({ name, onChanged }: { name: string; onChanged: () => void }) {
+  const { data, reload } = usePoll<Diag>(`/api/models/${encodeURIComponent(name)}/diagnosis`, 15000)
+  if (!data?.found) return null
+  const fix = (i: number) => api<{ label: string }>(`/api/models/${encodeURIComponent(name)}/diagnosis/fix`, { method: 'POST', json: { index: i } })
+    .then((r) => { toast(`Saved: ${r.label}. Start the model again.`); reload(); onChanged() })
+    .catch((e: Error) => toast(e.message, true))
+  return (
+    <div className="diagnosis warn">
+      <p><b>▲ {data.title}</b></p>
+      <p className="muted">{data.detail}</p>
+      {!!data.fixes?.length && <div className="row">{data.fixes.map((f, i) => <button key={f.label} className={i === 0 ? 'primary' : ''} onClick={() => fix(i)}>{f.label}</button>)}</div>}
+    </div>
+  )
+}
+
 /** The settings people actually change, with what they'll do shown before anything restarts. */
 function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
   entry: Entry; model: ModelRow; readonly: boolean; onChanged: () => void; onPreview: (p: Preview) => void
@@ -245,6 +263,7 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
         <button className="ghost" aria-expanded={all} onClick={() => setAll(!all)}>{all ? 'Hide all settings' : 'All settings and flags'}</button>
       </div>
       {msg && <p className={msg.bad ? 'bad' : 'muted'}>{msg.text}</p>}
+      {entry.state === 'exited' && <Diagnosis name={model.name} onChanged={onChanged} />}
       {model.preparing && (
         <div>
           <p className="muted">Fetching <code>{model.preparing.image}</code>; the model starts by itself when it is here.</p>

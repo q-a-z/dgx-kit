@@ -619,3 +619,18 @@ def test_bench_history_is_served_before_the_run_route(env, tmp_path):
     s.bench = Benchmarks(str(tmp_path / "state"))
     r = client.get("/api/bench/history", params={"model": "llama"})
     assert r.status_code == 200 and r.json()["runs"] == [] and r.json()["regressions"] == []  # not "run history"
+
+
+def test_a_crashed_model_is_diagnosed_from_its_log_and_a_fix_applies_in_one_call(env):
+    from tests.test_diagnose import KV_LOG
+    client, s, _ = env
+    client.post("/api/models", json=model_body(kv_cache_bytes=4_500_000_000, max_context=131072))
+    s.runner.logs = lambda name, tail=200: "log line" if False else KV_LOG
+    d = client.get("/api/models/llama/diagnosis").json()
+    assert d["found"] and d["cause"] == "kv_too_small" and len(d["fixes"]) == 2
+    r = client.post("/api/models/llama/diagnosis/fix", json={"index": 0}).json()
+    assert r["saved"] and "KV cache" in r["label"]
+    assert client.get("/api/models").json()[0]["kv_cache_bytes"] >= int(5.84 * 2**30)
+    assert client.post("/api/models/llama/diagnosis/fix", json={"index": 9}).status_code == 404
+    s.runner.logs = lambda name, tail=200: "listening on port 8000"
+    assert client.get("/api/models/llama/diagnosis").json() == {"found": False}
