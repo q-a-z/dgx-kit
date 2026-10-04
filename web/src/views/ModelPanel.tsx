@@ -276,7 +276,7 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
         <button className="ghost" aria-expanded={all} onClick={() => setAll(!all)}>{all ? 'Hide all settings' : 'All settings and flags'}</button>
       </div>
       {msg && <p className={msg.bad ? 'bad' : 'muted'}>{msg.text}</p>}
-      <label className="note">
+      <label className="note-edit">
         <span>Notes</span>
         <textarea rows={2} value={note} disabled={readonly} onChange={(e) => setNote(e.target.value)} />
       </label>
