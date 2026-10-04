@@ -1,6 +1,6 @@
 import { Pending } from './Settings'
 import { useState } from 'react'
-import { api, type Action, type Image } from '../api'
+import { api, fmtTime, type Action, type Image } from '../api'
 import { usePoll } from '../usePoll'
 import { ChangePassword } from '../Login'
 import { toast } from '../toast'
@@ -130,7 +130,7 @@ export function Log({ canChangePassword }: { canChangePassword: boolean }) {
         <table>
           <tbody>
             {[...data].reverse().map((a, i) => (
-              <tr key={i}><td className="muted">{new Date(a.t * 1000).toLocaleTimeString()}</td><td>{a.action}</td><td>{a.detail}</td></tr>
+              <tr key={i}><td className="muted">{fmtTime(a.t, true)}</td><td>{a.action}</td><td>{a.detail}</td></tr>
             ))}
           </tbody>
         </table>

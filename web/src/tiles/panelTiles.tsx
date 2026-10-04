@@ -1,4 +1,4 @@
-import { fmtNum, type Live, type Snapshot } from '../api'
+import { fmtNum, fmtTime, type Live, type Snapshot } from '../api'
 import { Chart } from '../components/Chart'
 import { KV_WARN } from '../health'
 import type { TileConf, TileDef } from './layout'
@@ -25,7 +25,7 @@ function beforeAfter(c: ModelCtx, times: number[], values: (number | null)[]) {
   const before = mean(values.filter((_, i) => times[i] < m.t && times[i] >= m.t - 120))
   const after = mean(values.filter((_, i) => times[i] > m.t + 5))
   if (before == null || after == null) return null
-  return { label: m.label, at: new Date(m.t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), before, after }
+  return { label: m.label, at: fmtTime(m.t), before, after }
 }
 
 /** One number that answers one question, what it's measured against, and its recent history with restarts marked. */

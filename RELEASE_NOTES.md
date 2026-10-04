@@ -12,6 +12,8 @@ Newest first. Every commit adds its entry here.
 
 - **A model that is up no longer stays on "Starting".** The model list dropped a model's live stats the moment its container wasn't "running", and that includes the second or two it is "created" right after Start (more likely when several models start at once). Nothing brought the stats back until the dashboard restarted, so a server that already answered still read "Starting". Only a crashed container is dropped now, and a running one that lost its stats is picked up again on the next refresh.
 
+- **Every time is shown on a 24-hour clock.** Chart axes and hover readouts, the action log, benchmark and firmware dates and the update check no longer follow the browser's language: no more "3:07 PM" or "3pm", always "15:07".
+
 ### Added
 - **Tuning notes for a GB10** in the README: what speculative decoding and the Mamba SSM cache cost in KV cache, which flag combinations vLLM refuses, the parsers a Qwen model needs, and a pointer to recipes.vllm.ai, all with the numbers measured on a Spark.
 

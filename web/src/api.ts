@@ -135,6 +135,12 @@ export const fmtBytes = (b: number | null | undefined) => {
 export const fmtNum = (n: number | null | undefined, digits = 0) =>
   n == null ? '–' : n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits })
 
+/** Times are always shown on a 24-hour clock, whatever the browser's language is set to. */
+export const fmtTime = (t: number, seconds = false) =>
+  new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' })
+export const fmtDateTime = (t: number, dateStyle: 'short' | 'medium' = 'short') =>
+  new Date(t * 1000).toLocaleString([], { dateStyle, timeStyle: 'short', hourCycle: 'h23' })
+
 export const fmtMs = (s: number | null | undefined) => (s == null ? '–' : `${Math.round(s * 1000)} ms`)
 
 export type Download = { repo: string; state: string; error: string | null; bytes: number; total_bytes: number; pct: number | null; bytes_per_s: number | null }

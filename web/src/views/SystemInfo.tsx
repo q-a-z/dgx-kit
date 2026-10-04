@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useConfirm } from '../components/Confirm'
 import { toast } from '../toast'
-import { api } from '../api'
+import { api, fmtDateTime } from '../api'
 import { usePoll } from '../usePoll'
 import { Pending } from './Settings'
 
@@ -13,7 +13,7 @@ type Report = {
   since: number | null
 }
 
-const when = (t: number) => new Date(t * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
+const when = (t: number) => fmtDateTime(t, 'medium')
 
 export type UpdateState = {
   current: string
@@ -79,7 +79,7 @@ function UpdateCard() {
         <select value={data.frequency ?? 'daily'} onChange={(e) => setFrequency(e.target.value)}>
           <option value="hourly">every hour</option><option value="daily">every day</option><option value="weekly">every week</option><option value="never">never (only when I press Check now)</option>
         </select>
-        {latest?.checked && <span className="muted small">Last checked {new Date(latest.checked * 1000).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })}.</span>}
+        {latest?.checked && <span className="muted small">Last checked {fmtDateTime(latest.checked, 'medium')}.</span>}
       </label>
       <p className="muted small">From {latest?.repo ?? 'GitHub'}. The same as running <code>dgx-kit update</code> on the machine. To go back: <code>docker tag dgx-kit:previous dgx-kit:latest && docker stop dgx-kit</code>.</p>
     </section>

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { api } from '../api'
+import { api, fmtDateTime } from '../api'
 import { usePoll } from '../usePoll'
 import { Chart } from '../components/Chart'
 
@@ -72,7 +72,7 @@ function BenchHistory({ name }: { name: string }) {
           const latest = ri === 0
           return (
             <tr key={r.id}>
-              <td>{new Date(r.started * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}</td>
+              <td>{fmtDateTime(r.started)}</td>
               <td className="small muted" title={changes.join('\n')}>{prev ? (changes.length ? changes.map((c) => c.split(':')[0]).join(', ') : '–') : 'first run'}</td>
               {cols.map(([k, , d]) => <td key={k} className={latest && bad.has(k) ? 'bad' : ''}>{f(r.metrics[k], d)}{latest && bad.has(k) ? ' ▼' : ''}</td>)}
             </tr>
@@ -98,7 +98,7 @@ export function Bench({ name, ready, readonly }: { name: string; ready: boolean;
     .catch((e: Error) => setMsg(e.message))
   const stop = (id: string) => api(`/api/bench/${encodeURIComponent(id)}/stop`, { method: 'POST' }).then(() => runs.reload()).catch((e: Error) => setMsg(e.message))
   const busy = list.some((r) => r.state === 'running')
-  const when = (t: number) => new Date(t * 1000).toLocaleString()
+  const when = (t: number) => fmtDateTime(t)
   return (
     <div className="bench">
       <div className="row">

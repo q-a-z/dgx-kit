@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import uPlot from 'uplot'
 import 'uplot/dist/uPlot.min.css'
+import { fmtTime } from '../api'
 
 export type Series = { label: string; values: (number | null)[]; /** CSS variable for the line, instead of the next slot. */ color?: string }
 /** Something that happened to the model (a start, a settings change), drawn as a line across the chart. */
@@ -28,7 +29,7 @@ type Props = {
 // Categorical slots, fixed order (validated for the dark surface; see notes/dgx-kit-design.md).
 const SLOTS = ['--s1', '--s2', '--s3', '--s4', '--s5']
 
-const clock = (t: number) => new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+const clock = (t: number) => fmtTime(t, true)
 
 /** Dashed lines at restarts and settings changes, labelled at the top unless the chart is a sparkline. */
 function markers(get: () => Mark[] | undefined, color: string, text: string, font: string, labels: boolean): uPlot.Plugin {
@@ -163,7 +164,10 @@ export function Chart({ times, series, height = 90, min = 0, max, fmt, floor = 1
         ? Object.fromEntries(names.map((_, i) => [`y${i}`, { range: lane(i, names.length) }]))
         : { y: { range: yRange } }) },
       axes: bare ? [{ show: false }, { show: false }] : [
-        { stroke: muted, grid: { show: false }, ticks: { show: false }, size: 22, font, space: 110 },
+        { stroke: muted, grid: { show: false }, ticks: { show: false }, size: 22, font, space: 110,
+          // uPlot's own labels are 12-hour ("3pm"); show the same 24-hour clock as everywhere else, with the day when ticks are a day apart
+          values: (_u, vals, _axis, _space, incr) => vals.map((v) => (v == null ? '' : incr >= 86400
+            ? new Date(v * 1000).toLocaleDateString([], { month: 'short', day: 'numeric' }) : fmtTime(v, incr < 60))) },
         { stroke: muted, grid: { stroke: grid, width: 1 }, ticks: { show: false }, size: 48, font, space: 30, values: (_u, vals) => vals.map((v) => (v == null ? '' : f(v))) },
       ],
       series: [{}, ...colors.map((c, i) => ({ scale: split ? `y${i}` : 'y', stroke: c, width: split ? 1.5 : 2, fill: names.length === 1 ? c + '1a' : undefined, points: { show: false } }))],
