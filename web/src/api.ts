@@ -86,7 +86,7 @@ export type Recipe = {
 }
 
 export type ModelRow = Recipe & {
-  container: { state: string; port: number; exit_code?: number | null; stopped_cleanly?: boolean } | null
+  container: { state: string; port: number; exit_code?: number | null; stopped_cleanly?: boolean; /** Epoch seconds the container last started. */ started?: number | null } | null
   live: Live | null
   downloaded: boolean
   /** Waiting for its image to be pulled or built; it starts by itself afterwards. */
@@ -140,6 +140,15 @@ export const fmtTime = (t: number, seconds = false) =>
   new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' })
 export const fmtDateTime = (t: number, dateStyle: 'short' | 'medium' = 'short') =>
   new Date(t * 1000).toLocaleString([], { dateStyle, timeStyle: 'short', hourCycle: 'h23' })
+
+/** How long something has been up: "42 s", "8 min", "3 h 12 min", "4 d 6 h". */
+export const fmtUptime = (seconds: number) => {
+  const s = Math.max(0, Math.floor(seconds))
+  const [d, h, m] = [Math.floor(s / 86400), Math.floor((s % 86400) / 3600), Math.floor((s % 3600) / 60)]
+  if (d) return `${d} d ${h} h`
+  if (h) return `${h} h ${m} min`
+  return m ? `${m} min` : `${s} s`
+}
 
 export const fmtMs = (s: number | null | undefined) => (s == null ? '–' : `${Math.round(s * 1000)} ms`)
 

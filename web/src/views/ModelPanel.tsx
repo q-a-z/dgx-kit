@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useModelActions } from '../actions'
 import { toast } from '../toast'
 import { PullProgress } from './Other'
-import { api, copyText, fmtBytes, fmtNum, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
+import { api, copyText, fmtBytes, fmtDateTime, fmtNum, fmtUptime, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
 import type { Mark } from '../components/Chart'
 import { Icon } from '../components/Icon'
 import { ModelActions, type Tab } from '../components/ModelActions'
@@ -61,6 +61,7 @@ export function ModelPanel({ entry, tab, setTab, latest, history, readonly, layo
         {port ? <span>port <b>{port}</b></span> : null}
         {entry.managed && r && <span title="Whether it is listed on the gateway while it runs">gateway <b>{r.publish ? 'published' : 'not published'}</b></span>}
         {pid ? <span>PID <b>{pid}</b></span> : null}
+        {entry.running && entry.row?.container?.started ? <span title={`Running since ${fmtDateTime(entry.row.container.started, 'medium')}`}>up <b>{fmtUptime(Date.now() / 1000 - entry.row.container.started)}</b></span> : null}
         {qc && (qc.decode_mean_tps != null || qc.prefill_mean_tps != null
           ? <span title="Ten-second check taken when it started">at start: decode <b>{fmtNum(qc.decode_mean_tps ?? 0, 0)} t/s</b> · prefill <b>{fmtNum(qc.prefill_mean_tps ?? 0, 0)} t/s</b></span>
           : <span className="muted">start check {qc.skipped ? `skipped: ${qc.skipped}` : `failed: ${qc.error ?? 'no numbers'}`}</span>)}

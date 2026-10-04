@@ -67,7 +67,7 @@ A model is a **recipe**: the engine, the weights, and its options. Fields (all o
 
 | Method and path | What it does |
 |---|---|
-| `GET /api/models` | Every model: the recipe fields, plus `options` (the vLLM options as one text block), `quick` (latest speed check), `container` (Docker state; `stopped_cleanly` true when you stopped it), `live` (its current numbers), `downloaded` |
+| `GET /api/models` | Every model: the recipe fields, plus `options` (the vLLM options as one text block), `quick` (latest speed check), `container` (Docker state; `started` is when it last started, in epoch seconds; `stopped_cleanly` true when you stopped it), `live` (its current numbers), `downloaded` |
 | `POST /api/models` | Create from a recipe body. `201`; `409` if the name exists |
 | `PUT /api/models/{name}` | Replace a recipe. The old one goes to the version history |
 | `DELETE /api/models/{name}` | Forget the model. Its files on disk are never touched |

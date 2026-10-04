@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { fmtBytes, fmtNum, type Download, type Snapshot } from '../api'
+import { fmtBytes, fmtDateTime, fmtNum, fmtUptime, type Download, type Snapshot } from '../api'
 import { Spark } from '../components/Chart'
 import { Icon } from '../components/Icon'
 import { DownloadActions, ModelActions, type Tab } from '../components/ModelActions'
@@ -49,6 +49,7 @@ export function ModelList({ switcher, history, entries, orphans, alerts, readonl
               <div className="imeta">
                 <span className="tag">{[engine && (ENGINES[engine] ?? engine), !e.managed && 'watch only'].filter(Boolean).join(' · ')}</span>
                 <span><b>{fmtNum(l.decode_tps, (l.decode_tps ?? 0) < 100 ? 1 : 0)}</b> tok/s</span>
+                {e.row?.container?.started ? <span title={`Running since ${fmtDateTime(e.row.container.started, 'medium')}`}>up <b>{fmtUptime(Date.now() / 1000 - e.row.container.started)}</b></span> : null}
                 {l.ttft_p95_s != null && <span>p95 <b>{fmtNum(l.ttft_p95_s * 1000)}</b> ms</span>}
                 <span className={(l.waiting ?? 0) > 0 ? 'warn' : ''}>{(l.waiting ?? 0) > 0 && '▲ '}queue <b>{fmtNum(l.waiting ?? 0)}</b></span>
                 {(l.kv_used_pct ?? 0) >= KV_WARN && <span className="warn">▲ KV <b>{fmtNum(l.kv_used_pct)}</b>%</span>}

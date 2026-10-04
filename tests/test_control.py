@@ -44,9 +44,9 @@ def test_check_start_lists_every_problem(tmp_path):
 
 
 class FakeContainer:
-    def __init__(self, labels, status="running", exit_code=None):
+    def __init__(self, labels, status="running", exit_code=None, started="2026-10-03T20:06:32.648744384Z"):
         self.labels, self.status, self.id = labels, status, "abc123"
-        self.attrs = {"State": {"ExitCode": exit_code}}
+        self.attrs = {"State": {"ExitCode": exit_code, "StartedAt": started}}
         self.stopped = self.removed = False
 
     def stop(self, timeout=None):
@@ -74,7 +74,7 @@ def test_runner_only_sees_its_own_containers():
     mine = FakeContainer({LABEL: "m", "dgxkit.port": "8100"})
     someone_elses = FakeContainer({"com.example": "vllm"})
     runner = DockerRunner(FakeDocker([mine, someone_elses]))
-    assert runner.status() == {"m": {"state": "running", "port": 8100, "id": "abc123", "exit_code": None, "engine": None, "meta": {}}}
+    assert runner.status() == {"m": {"state": "running", "port": 8100, "id": "abc123", "exit_code": None, "engine": None, "started": 1791057992.648744, "meta": {}}}
     assert runner.ports_in_use() == {8100}
 
 
@@ -108,3 +108,11 @@ def test_engines_that_compile_get_persistent_caches_and_a_capped_compile(tmp_pat
     assert o["volumes"][str(tmp_path / "vllm-jit")]["bind"] == "/root/.cache/vllm"
     assert o["environment"] == {"MAX_JOBS": "4", "NVCC_THREADS": "1", "VLLM_MARLIN_USE_ATOMIC_ADD": "1"}  # the recipe wins
     assert docker_options(Recipe(name="l", repo="x", engine="llamacpp"), "/m")["environment"] is None
+
+
+def test_status_says_when_a_container_started():
+    from dgxkit.control import started_at
+    c = FakeContainer({LABEL: "a", "dgxkit.port": "8100"})
+    assert DockerRunner(FakeDocker([c])).status()["a"]["started"] == 1791057992.648744  # 2026-10-03 20:06:32.65 UTC
+    assert started_at(FakeContainer({}, started="0001-01-01T00:00:00Z")) is None  # never started
+    assert started_at(FakeContainer({}, started="")) is None

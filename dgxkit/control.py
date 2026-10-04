@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shlex
 import socket
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from .recipes import Recipe
@@ -185,6 +187,16 @@ def check_start(r: Recipe, p: Plan, models_root: str, image_ready: bool) -> Star
     return StartCheck(not problems, problems)
 
 
+def started_at(container) -> float | None:
+    """When the container last started, in epoch seconds (None if it never has). Docker gives nanoseconds, Python reads six digits."""
+    iso = (((getattr(container, "attrs", None) or {}).get("State") or {}).get("StartedAt")) or ""
+    try:
+        t = datetime.fromisoformat(re.sub(r"(\.\d{6})\d*Z$", r"\1+00:00", iso).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return t.timestamp() if t.year > 1 else None
+
+
 class DockerRunner:
     """Starts, stops and inspects DGX-kit's own model containers."""
 
@@ -219,6 +231,7 @@ class DockerRunner:
             return {c.labels[LABEL]: {"state": c.status, "port": int(c.labels.get("dgxkit.port", 0)), "id": c.id,
                                       "exit_code": ((getattr(c, "attrs", None) or {}).get("State") or {}).get("ExitCode"),
                                       "engine": c.labels.get("dgxkit.engine"),
+                                      "started": started_at(c),
                                       "meta": json.loads(c.labels.get("dgxkit.meta", "{}"))}
                     for c in self._ours()}
         except Exception:  # Docker down: show nothing running rather than failing the page
