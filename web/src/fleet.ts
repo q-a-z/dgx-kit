@@ -1,4 +1,4 @@
-import type { Download, Live, ModelRow, Snapshot } from './api'
+import { fmtDateTime, fmtUptime, type Download, type Live, type ModelRow, type Snapshot } from './api'
 import { usePoll } from './usePoll'
 
 export type External = { name: string; engine: string; port: number; model: string | null; served_name: string | null; draft: string | null; image: string; live?: Live | null }
@@ -48,6 +48,15 @@ export const STATE_LABEL: Record<string, string> = {
   running: 'Serving', starting: 'Starting', down: 'Not answering', stopped: 'Stopped', exited: 'Crashed', restarting: 'Crashing, restarting',
   preparing: 'Fetching image', downloading: 'Downloading', paused: 'Download paused', failed: 'Download failed', missing: 'Not downloaded', nofiles: 'Weights not found',
 }
+/** "Serving", and for a running model how long: "Serving for 3 h 12 min". */
+export const stateText = (e: Entry) => {
+  const label = STATE_LABEL[e.state] ?? e.state
+  const started = e.row?.container?.started
+  return e.state === 'running' && started ? `${label} for ${fmtUptime(Date.now() / 1000 - started)}` : label
+}
+/** When it started, for the hover on that text. */
+export const stateTitle = (e: Entry) => (e.state === 'running' && e.row?.container?.started ? `Running since ${fmtDateTime(e.row.container.started, 'medium')}` : undefined)
+
 export const STATE_TONE: Record<string, string> = { running: 'ok', starting: 'pending', down: 'bad', exited: 'bad', restarting: 'bad', failed: 'bad', nofiles: 'bad', downloading: 'pending', paused: 'pending', preparing: 'pending' }
 
 /** Every model DGX-kit knows about or can see running, with its live numbers and GPU memory. */

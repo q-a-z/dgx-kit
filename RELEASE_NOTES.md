@@ -15,7 +15,7 @@ Newest first. Every commit adds its entry here.
 - **Every time is shown on a 24-hour clock.** Chart axes and hover readouts, the action log, benchmark and firmware dates and the update check no longer follow the browser's language: no more "3:07 PM" or "3pm", always "15:07".
 
 ### Added
-- **Model uptime.** A running model shows how long it has been up ("up 3 h 12 min") in the model list and in its panel, and hovering shows when it started. It counts from the last time its container started, so a restart resets it. Models DGX-kit didn't start show nothing, since Docker's start time isn't theirs to report. The service reports it as `container.started` in `GET /api/models`.
+- **Model uptime.** A running model's state reads "Serving for 3 h 12 min" in its panel and in the model table, and hovering shows when it started. It counts from the last time its container started, so a restart resets it. Models DGX-kit didn't start show nothing, since Docker's start time isn't theirs to report. The service reports it as `container.started` in `GET /api/models`.
 - **Tuning notes for a GB10** in the README: what speculative decoding and the Mamba SSM cache cost in KV cache, which flag combinations vLLM refuses, the parsers a Qwen model needs, and a pointer to recipes.vllm.ai, all with the numbers measured on a Spark.
 
 ## 0.1.8

@@ -5,7 +5,7 @@ import { MultiSpark } from '../components/Chart'
 const RATES = ['--s1', '--s4']
 import { Icon } from '../components/Icon'
 import { DownloadActions, ModelActions, type Tab } from '../components/ModelActions'
-import { base, ENGINES, fetching, prettyName, STATE_LABEL, STATE_TONE, type Entry } from '../fleet'
+import { base, ENGINES, fetching, prettyName, STATE_LABEL, STATE_TONE, stateText, stateTitle, type Entry } from '../fleet'
 import { KV_WARN, type Alert } from '../health'
 import { RUN, select } from '../nav'
 import { recent } from '../tiles/hardwareTiles'
@@ -153,7 +153,7 @@ function MapTable({ latest, resident, tint, readonly, selected, onOpen, onChange
             <tr key={e.name} className={selected === e.name ? 'sel' : ''} onClick={() => select(e.name)}>
               <td><button className="link who" onClick={() => select(e.name)}><i style={{ background: tint(e) }} />{prettyName(e)}</button></td>
               <td className="acts-cell"><ModelActions entry={e} readonly={readonly} onChanged={onChanged} onOpen={(t) => onOpen(e.name, t)} /></td>
-              <td><span className={`state-word ${STATE_TONE[e.state] ?? ''}`}>{STATE_LABEL[e.state] ?? e.state}</span></td>
+              <td><span className={`state-word ${STATE_TONE[e.state] ?? ''}`} title={stateTitle(e)}>{stateText(e)}</span></td>
               <td className="num">{e.live?.decode_tps != null ? `${fmtNum(e.live.decode_tps, 1)} tok/s` : '–'}</td>
               <td className="num">{fmtNum((e.live?.context_tokens as number | undefined) ?? p?.ctx ?? null)}</td>
               <td className="num muted">{p?.pid ?? '–'}</td>

@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useModelActions } from '../actions'
 import { toast } from '../toast'
 import { PullProgress } from './Other'
-import { api, copyText, fmtBytes, fmtDateTime, fmtNum, fmtUptime, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
+import { api, copyText, fmtBytes, fmtNum, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
 import type { Mark } from '../components/Chart'
 import { Icon } from '../components/Icon'
 import { ModelActions, type Tab } from '../components/ModelActions'
-import { base, ENGINES, prettyName, STATE_LABEL, STATE_TONE, type Entry } from '../fleet'
+import { base, ENGINES, prettyName, STATE_TONE, stateText, stateTitle, type Entry } from '../fleet'
 import type { Alert } from '../health'
 import { select } from '../nav'
 import type { Layout } from '../tiles/layout'
@@ -44,7 +44,7 @@ export function ModelPanel({ entry, tab, setTab, latest, history, readonly, layo
       <div className="panel-head">
         <span className={`dot ${tone}`} aria-hidden />
         <h2 className="panel-name">{prettyName(entry)}</h2>{prettyName(entry) !== entry.name && <code className="muted" title="Name clients use on the gateway">{entry.name}</code>}
-        <span className={`state-word ${tone}`}>{STATE_LABEL[entry.state] ?? entry.state}</span>
+        <span className={`state-word ${tone}`} title={stateTitle(entry)}>{stateText(entry)}</span>
         <span className="grow" />
         <button className="ic" title="Close" aria-label="Close details" onClick={() => select(undefined)}><Icon name="close" /></button>
       </div>
@@ -61,7 +61,6 @@ export function ModelPanel({ entry, tab, setTab, latest, history, readonly, layo
         {port ? <span>port <b>{port}</b></span> : null}
         {entry.managed && r && <span title="Whether it is listed on the gateway while it runs">gateway <b>{r.publish ? 'published' : 'not published'}</b></span>}
         {pid ? <span>PID <b>{pid}</b></span> : null}
-        {entry.running && entry.row?.container?.started ? <span title={`Running since ${fmtDateTime(entry.row.container.started, 'medium')}`}>up <b>{fmtUptime(Date.now() / 1000 - entry.row.container.started)}</b></span> : null}
         {qc && (qc.decode_mean_tps != null || qc.prefill_mean_tps != null
           ? <span title="Ten-second check taken when it started">at start: decode <b>{fmtNum(qc.decode_mean_tps ?? 0, 0)} t/s</b> · prefill <b>{fmtNum(qc.prefill_mean_tps ?? 0, 0)} t/s</b></span>
           : <span className="muted">start check {qc.skipped ? `skipped: ${qc.skipped}` : `failed: ${qc.error ?? 'no numbers'}`}</span>)}
