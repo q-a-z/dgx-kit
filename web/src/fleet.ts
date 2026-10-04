@@ -48,6 +48,12 @@ export const STATE_LABEL: Record<string, string> = {
   running: 'Serving', starting: 'Starting', down: 'Not answering', stopped: 'Stopped', exited: 'Crashed', restarting: 'Crashing, restarting',
   preparing: 'Fetching image', downloading: 'Downloading', paused: 'Download paused', failed: 'Download failed', missing: 'Not downloaded', nofiles: 'Weights not found',
 }
+/** What the saved settings say, in one line: the starting text for a note, so it can't disagree with the config. */
+export const describeModel = (r: ModelRow) =>
+  [base(r.repo), [ENGINES[r.engine] ?? r.engine, r.quantization].filter(Boolean).join(' '),
+    [r.draft_repo && r.num_speculative_tokens ? `draft n=${r.num_speculative_tokens}` : '', r.kv_cache_dtype && `${r.kv_cache_dtype} KV`, r.max_context ? `ctx ${r.max_context}` : '']
+      .filter(Boolean).join(', ')].filter(Boolean).join(' · ')
+
 /** "Serving", and for a running model how long: "Serving for 3 h 12 min". */
 export const stateText = (e: Entry) => {
   const label = STATE_LABEL[e.state] ?? e.state

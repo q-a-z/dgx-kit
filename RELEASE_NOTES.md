@@ -15,6 +15,8 @@ Newest first. Every commit adds its entry here.
 - **Every time is shown on a 24-hour clock.** Chart axes and hover readouts, the action log, benchmark and firmware dates and the update check no longer follow the browser's language: no more "3:07 PM" or "3pm", always "15:07".
 
 ### Added
+- **Notes can be edited, and start from the real settings.** The model's Settings tab has a Notes box. When a model has no note yet it is filled with one line built from its saved settings ("Laguna-XS-2.1-Abliterated · vLLM nvfp4 · draft n=9, fp8 KV, ctx 262144"); edit it and press Save note. Fill from settings rebuilds that line after you change something, so it can't quietly disagree with the config.
+- **The draft-token count shows next to the draft model** in the model panel ("draft Laguna-XS-2.1-DFlash · n=9"), read from the saved settings, so it is always the real number.
 - **Model uptime.** A running model's state reads "Serving for 3 h 12 min" in its panel and in the model table, and hovering shows when it started. It counts from the last time its container started, so a restart resets it. Models DGX-kit didn't start show nothing, since Docker's start time isn't theirs to report. The service reports it as `container.started` in `GET /api/models`.
 - **Tuning notes for a GB10** in the README: what speculative decoding and the Mamba SSM cache cost in KV cache, which flag combinations vLLM refuses, the parsers a Qwen model needs, and a pointer to recipes.vllm.ai, all with the numbers measured on a Spark.
 

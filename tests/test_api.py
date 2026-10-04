@@ -652,3 +652,12 @@ def test_a_running_model_that_lost_its_watcher_is_watched_again(env):
     assert "llama" not in s.sampler.engines
     client.get("/api/models")
     assert s.sampler.engines["llama"].base_url == "http://127.0.0.1:8100"
+
+
+def test_a_note_is_saved_with_the_model_and_survives_other_edits(env):
+    client, s, models = env
+    client.post("/api/models", json=model_body())
+    assert client.put("/api/models/llama", json=model_body(notes="DFLASH n=9, fp8 KV")).status_code == 200
+    assert client.get("/api/models").json()[0]["notes"] == "DFLASH n=9, fp8 KV"
+    client.put("/api/models/llama", json={"name": "llama", "max_context": 4096})  # an edit that doesn't mention it
+    assert client.get("/api/models").json()[0]["notes"] == "DFLASH n=9, fp8 KV"

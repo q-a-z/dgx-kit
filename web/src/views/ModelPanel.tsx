@@ -7,7 +7,7 @@ import { api, copyText, fmtBytes, fmtNum, type ModelRow, type Plan, type Recipe,
 import type { Mark } from '../components/Chart'
 import { Icon } from '../components/Icon'
 import { ModelActions, type Tab } from '../components/ModelActions'
-import { base, ENGINES, prettyName, STATE_TONE, stateText, stateTitle, type Entry } from '../fleet'
+import { base, describeModel, ENGINES, prettyName, STATE_TONE, stateText, stateTitle, type Entry } from '../fleet'
 import type { Alert } from '../health'
 import { select } from '../nav'
 import type { Layout } from '../tiles/layout'
@@ -57,7 +57,7 @@ export function ModelPanel({ entry, tab, setTab, latest, history, readonly, layo
         {engine && <span>{ENGINES[engine] ?? engine}{r?.quantization ? ` · ${r.quantization}` : ''}</span>}
         {entry.memBytes != null && <span><b>{fmtBytes(entry.memBytes)}</b></span>}
         {ctx ? <span>ctx <b>{fmtNum(ctx)}</b></span> : null}
-        {draft && <span>draft <b>{base(draft)}</b></span>}
+        {draft && <span>draft <b>{base(draft)}</b>{r?.num_speculative_tokens ? <> · n=<b>{r.num_speculative_tokens}</b></> : null}</span>}
         {port ? <span>port <b>{port}</b></span> : null}
         {entry.managed && r && <span title="Whether it is listed on the gateway while it runs">gateway <b>{r.publish ? 'published' : 'not published'}</b></span>}
         {pid ? <span>PID <b>{pid}</b></span> : null}
@@ -183,6 +183,19 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
   const [all, setAll] = useState(false)
   const a = useModelActions(entry, readonly, onChanged)
   const q = encodeURIComponent(model.name)
+  const summary = describeModel(model)
+  const [note, setNote] = useState(model.notes || summary)  // an empty note starts as the settings in one line; saving is explicit
+  useEffect(() => setNote(model.notes || describeModel(model)), [model.name, model.notes]) // eslint-disable-line react-hooks/exhaustive-deps
+  const saveNote = async () => {
+    try {
+      const { container: _c, live: _l, downloaded: _d, ...rest } = { ...model, notes: note } as ModelRow
+      await api(`/api/models/${q}`, { method: 'PUT', json: rest })
+      toast('Note saved.')
+      onChanged()
+    } catch (e) {
+      toast((e as Error).message, true)
+    }
+  }
   const own = entry.running ? entry.memBytes ?? 0 : 0
   const changed = FIELDS.filter((f) => r[f.key] !== model[f.key])
   const fillChanged = !!r.fill_memory !== !!model.fill_memory
@@ -263,6 +276,14 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
         <button className="ghost" aria-expanded={all} onClick={() => setAll(!all)}>{all ? 'Hide all settings' : 'All settings and flags'}</button>
       </div>
       {msg && <p className={msg.bad ? 'bad' : 'muted'}>{msg.text}</p>}
+      <label className="note">
+        <span>Notes</span>
+        <textarea rows={2} value={note} disabled={readonly} onChange={(e) => setNote(e.target.value)} />
+      </label>
+      <div className="row">
+        <button disabled={readonly || note === (model.notes ?? '')} onClick={saveNote}>Save note</button>
+        <button className="ghost" disabled={readonly || note === summary} onClick={() => setNote(summary)} title="Replace the text with a line built from the current settings">Fill from settings</button>
+      </div>
       {entry.state === 'exited' && <Diagnosis name={model.name} onChanged={onChanged} />}
       {model.preparing && (
         <div>
