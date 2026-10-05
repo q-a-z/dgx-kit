@@ -54,10 +54,11 @@ def test_gpu_processes_get_model_and_context(tmp_path):
     from dgxkit.discover import container_models
     from dgxkit.procs import ProcessNamer
     cs = [C("llm-laguna", ["vllm", "serve", "/m/laguna-xs", "--served-model-name", "laguna", "--max-model-len", "262144"]),
-          C("mine", ["/app/llama-server", "-m", "/x.gguf"], labels={LABEL: "qwen", "dgxkit.meta": '{"context_tokens": 32768}'})]
+          C("mine", ["/app/llama-server", "-m", "/x.gguf"], labels={LABEL: "qwen", "dgxkit.meta": '{"context_tokens": 32768}'}),
+          C("dgxkit-laya", ["python3", "/opt/laya_local.py"], labels={"dgxkit.service": "laya"})]
     namer = ProcessNamer(str(tmp_path))
     namer.set_containers(container_models(Client(cs)))
-    for pid, c in ((10, cs[0]), (11, cs[1])):
+    for pid, c in ((10, cs[0]), (11, cs[1]), (13, cs[2])):
         (tmp_path / "proc" / str(pid)).mkdir(parents=True)
         (tmp_path / "proc" / str(pid) / "cgroup").write_text(f"0::/system.slice/docker-{c.id}.scope\n")
     (tmp_path / "proc" / "12").mkdir()
@@ -66,6 +67,8 @@ def test_gpu_processes_get_model_and_context(tmp_path):
     assert (a["model"], a["ctx"], a["container"], a["key"]) == ("laguna", 262144, "llm-laguna", "llm-laguna")
     assert (b["model"], b["ctx"], b["managed"]) == ("qwen", 32768, True)
     assert (c["model"], c["ctx"], c["container"]) == ("gemma", 8192, None)
+    laya = namer({"pid": 13, "mem_mib": 4})
+    assert (laya["key"], laya["model"], laya["managed"], laya["container"]) == ("laya", "laya", True, "dgxkit-laya")  # a service of ours: its memory is its own
     assert namer({"pid": 99, "mem_mib": 0})["model"] is None
 
 

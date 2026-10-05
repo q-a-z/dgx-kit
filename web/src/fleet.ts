@@ -1,4 +1,4 @@
-import { fmtDateTime, fmtUptime, type Download, type Live, type ModelRow, type Snapshot } from './api'
+import { fmtDateTime, fmtUptime, type Download, type Live, type ModelRow, type Service, type Snapshot } from './api'
 import { usePoll } from './usePoll'
 
 export type External = { name: string; engine: string; port: number; model: string | null; served_name: string | null; draft: string | null; image: string; live?: Live | null }
@@ -12,6 +12,8 @@ export type Entry = {
   managed: boolean
   row?: ModelRow
   ext?: External
+  /** Set for a service that isn't a model (Laya): it is listed with the models, and its controls go to /api/services. */
+  service?: Service
   running: boolean
   live?: Live
   download?: Download
@@ -20,11 +22,12 @@ export type Entry = {
   state: string
 }
 
-export const ENGINES: Record<string, string> = { vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp' }
+export const ENGINES: Record<string, string> = { vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp', laya: 'Decision model' }
 export const base = (p: string | null | undefined) => (p ? p.replace(/\/+$/, '').split('/').pop() ?? p : null)
 const ACTIVE = new Set(['queued', 'running', 'paused', 'failed'])
 
 export function stateOf(e: Omit<Entry, 'state'>): string {
+  if (e.service) return e.service.state  // running | starting | preparing | stopped | exited, same words as a model's
   const d = e.download
   if (e.row?.preparing && !e.running) return 'preparing'
   if (d && d.state === 'failed') return 'failed'
@@ -55,13 +58,14 @@ export const describeModel = (r: ModelRow) =>
       .filter(Boolean).join(', ')].filter(Boolean).join(' · ')
 
 /** "Serving", and for a running model how long: "Serving for 3 h 12 min". */
+export const startedOf = (e: Entry) => e.service?.started ?? e.row?.container?.started
 export const stateText = (e: Entry) => {
   const label = STATE_LABEL[e.state] ?? e.state
-  const started = e.row?.container?.started
+  const started = startedOf(e)
   return e.state === 'running' && started ? `${label} for ${fmtUptime(Date.now() / 1000 - started)}` : label
 }
 /** When it started, for the hover on that text. */
-export const stateTitle = (e: Entry) => (e.state === 'running' && e.row?.container?.started ? `Running since ${fmtDateTime(e.row.container.started, 'medium')}` : undefined)
+export const stateTitle = (e: Entry) => (e.state === 'running' && startedOf(e) ? `Running since ${fmtDateTime(startedOf(e)!, 'medium')}` : undefined)
 
 export const STATE_TONE: Record<string, string> = { running: 'ok', starting: 'pending', down: 'bad', exited: 'bad', restarting: 'bad', failed: 'bad', nofiles: 'bad', downloading: 'pending', paused: 'pending', preparing: 'pending' }
 
@@ -69,6 +73,7 @@ export const STATE_TONE: Record<string, string> = { running: 'ok', starting: 'pe
 export function useFleet(latest: Snapshot | null) {
   const models = usePoll<ModelRow[]>('/api/models', 3000)
   const running = usePoll<External[]>('/api/running', 5000)
+  const services = usePoll<Service[]>('/api/services', 4000)
   const downloads = usePoll<Download[]>('/api/downloads', 2000)
   const procs = latest?.gpu?.processes ?? []
   // A DGX-kit model owns only the processes in its own container; matching by served name would hand
@@ -87,6 +92,7 @@ export function useFleet(latest: Snapshot | null) {
       live: latest?.models[row.name] ?? row.live ?? undefined, download: dl(row.repo, row.draft_repo), memBytes: mem(row.name, true),
     })),
     ...(running.data ?? []).map((ext) => make({ name: ext.name, managed: false, ext, running: true, live: latest?.models[ext.name] ?? ext.live ?? undefined, memBytes: mem(ext.name, false) })),
+    ...(services.data ?? []).map((service) => make({ name: service.name, managed: true, service, running: service.state === 'running' || service.state === 'starting', memBytes: mem(service.name, true) })),
   ]
   // A model can be live in the stream before the lists load.
   for (const [n, live] of Object.entries(latest?.models ?? {}))
@@ -96,7 +102,7 @@ export function useFleet(latest: Snapshot | null) {
 
   return {
     entries, orphans, loaded: !!models.data,
-    reload: () => { models.reload(); running.reload(); downloads.reload() },
+    reload: () => { models.reload(); running.reload(); downloads.reload(); services.reload() },
   }
 }
 
@@ -105,6 +111,7 @@ const SPECIAL: Record<string, string> = { gpt: 'GPT', oss: 'OSS', glm: 'GLM', ll
 
 /** A readable name for people: "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8" becomes "Qwen3 Coder 30B A3B". */
 export function prettyName(e: Entry): string {
+  if (e.service) return e.service.title
   const src = base(e.row?.repo ?? e.ext?.model ?? e.ext?.served_name) ?? e.name
   const words = src.replace(/\.gguf$/i, '').split(/[-_\s]+/).filter((w) => w && !DROP.test(w))
   if (!words.length) return e.name

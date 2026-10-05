@@ -27,7 +27,7 @@ export function ModelActions({ entry, readonly, onChanged, onOpen, labels = fals
   const items = [
     ...(entry.running ? [btn('restart', a.busy === 'Starting' ? 'Starting…' : 'Restart', a.restart, control), btn('stop', 'Stop', a.stop, control)] : []),
     // A crashed or crash-looping model still has a container: Stop clears it and frees its port.
-    ...(!entry.running && entry.managed && ['exited', 'restarting', 'starting'].includes(s) && entry.row?.container ? [btn('stop', 'Stop', a.stop, control)] : []),
+    ...(!entry.running && entry.managed && ['exited', 'restarting', 'starting'].includes(s) && (entry.row?.container || entry.service) ? [btn('stop', 'Stop', a.stop, control)] : []),
     ...(['stopped', 'exited'].includes(s) ? [btn('start', a.busy ? `${a.busy}…` : 'Start', a.start, { ...control, primary: labels })] : []),
     ...(s === 'missing' || s === 'failed' ? [btn('download', s === 'failed' ? 'Retry download' : 'Download', a.download, { ...control, primary: labels })] : []),
     ...(s === 'downloading' ? [btn('pause', 'Pause download', a.pause, control), btn('cancel', 'Cancel download', a.cancel, control)] : []),

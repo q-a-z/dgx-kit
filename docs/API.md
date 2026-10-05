@@ -173,6 +173,22 @@ Clients use the gateway directly at `http://<host>:4000/v1` with the key (OpenAI
 | `POST /api/system/update` | Update from GitHub's `main`: download the source, build the image (the old one stays as `:previous`) and restart the dashboard. `202` with the state; `409` while one runs; `403` in read-only mode. Models and the gateway keep running. The page loses the connection for a moment at the end and comes back on the new version |
 | `POST /api/system/firmware/check` | Ask fwupd for devices and updates now (a short-lived container with the system D-Bus). Reports only; installs nothing. `403` in read-only mode |
 
+## Services
+
+Things that run beside the models and aren't models. Today that is Laya, the decision model server. All of these answer `403` in read-only mode except the reading ones.
+
+| Method and path | What it does |
+|---|---|
+| `GET /api/services` | A list with one entry, `laya`: `state` (`running`, `starting`, `preparing` while its image is built, `stopped`, `exited`), `started` (epoch seconds), `port`, `device` (what is asked for, `cuda` or `cpu`), `device_in_use` and `loaded` (what its `/health` says), `checkpoints` (`dir`, `found`: the ones the models folder has), `selected` (the ones that will run), `image`, `image_ready` (built from the files this DGX-kit ships), `build` (progress of the image build), `error`, `problems` |
+| `POST /api/services/laya/start` | Start it. `200 {"started": true}`; `202 {"preparing": {...}}` when the image has to be built first (it starts by itself afterwards); `409 {"detail": {"problems": [...]}}` when there is no checkpoint under the models folder or the port is taken |
+| `POST /api/services/laya/stop`, `POST /api/services/laya/restart` | Stop it (the container is removed), or stop and start |
+| `PUT /api/services/laya` | Body `{"device"?: "cuda" or "cpu", "port"?, "dir"?, "checkpoints"?: ["english", "multilingual", "typed-decisions"]}`: applies at the next start; `checkpoints` is which of them to load (at least one; left unset, every one found). `422` for a bad value |
+| `GET /api/services/laya/logs?tail=200` | `{"logs": "..."}` |
+| `GET /api/services/laya/key` | `{"key": "..."}`: the bearer key the server asks for (made on first use, kept in the state folder) |
+| `POST /api/services/laya/test` | Send the server a sample question; `{"ms", "model", "jailbreak", "topic"}`. `502` when it doesn't answer |
+
+Laya's own API is on its port: `POST /v1/systemone` with `Authorization: Bearer <key>` and `{"state": ..., "questions": {...}}`, `POST /v1/systemone/batch`, and `GET /health`.
+
 ## Settings
 
 | Method and path | What it does |

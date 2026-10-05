@@ -31,6 +31,16 @@ FLASHINFER = os.environ.get("DGXKIT_FLASHINFER", "0.7.0")  # what the vLLM build
 
 # Local builds for the GB10. Each uses images/<dir>/Dockerfile with build args and produces one tag.
 # vLLM builds are an upstream release plus the patches under images/vllm/patches.
+def _revision(dirname: str) -> str:
+    """A short fingerprint of a build's files, so an image built from older ones can be told from a current one."""
+    import hashlib
+    h = hashlib.sha1()
+    for f in sorted((BUILD_DIR / dirname).glob("*")):
+        if f.is_file():
+            h.update(f.name.encode() + f.read_bytes())
+    return h.hexdigest()[:12]
+
+
 BUILDS: dict[str, dict] = {
     "llamacpp-gb10": {"engine": "llamacpp", "dir": "llamacpp", "tag": "dgx-kit/llamacpp:gb10", "args": {},
                       "about": "llama.cpp compiled for the GB10 (sm_121)"},
@@ -40,6 +50,9 @@ BUILDS: dict[str, dict] = {
     "vllm-0.29-gb10": {"engine": "vllm", "dir": "vllm", "tag": "dgx-kit/vllm:0.29-gb10",
                        "args": {"BASE": os.environ.get("DGXKIT_VLLM_029_BASE", "vllm/vllm-openai:v0.29.0"), "SERIES": "0.29", "FLASHINFER": FLASHINFER},
                        "about": "vLLM 0.29 with the GB10 patches and FlashInfer " + (FLASHINFER or "as shipped")},
+    # Not an engine models run on: the HTTP server for the Laya decision model (dgxkit/laya.py), built on the vLLM image.
+    "laya-gb10": {"engine": "laya", "dir": "laya", "tag": "dgx-kit/laya:gb10", "args": {"BASE": DEFAULTS["vllm"], "REV": _revision("laya")},
+                  "about": "Laya, the decision model server, for the GB10"},
 }
 
 
@@ -338,7 +351,8 @@ class ImageManager:
     def remove_unused(self, in_use: set[str]) -> list[str]:
         """Remove images DGX-kit pulled or built earlier that no engine points at any more."""
         keep = set(self.catalog.values()) | in_use
-        ours = set(self.defaults.values()) | {d["tag"] for d in BUILDS.values()} | set(self._history())
+        kept = {d["tag"] for d in BUILDS.values() if d["engine"] not in self.defaults}  # the Laya server's image isn't an engine's, and nothing else would rebuild it
+        ours = (set(self.defaults.values()) | {d["tag"] for d in BUILDS.values()} | set(self._history())) - kept
         removed = []
         for img in sorted(ours - keep):
             try:

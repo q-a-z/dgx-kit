@@ -14,6 +14,7 @@ import { MemoryMap } from './MemoryMap'
 import { ModelList } from './ModelList'
 import { ModelPanel, type Preview } from './ModelPanel'
 import { RunPanel, type Ghost } from './RunPanel'
+import { ServicePanel } from './Services'
 import { SparkCard } from './SparkCard'
 
 const MARK_LABEL: Record<string, string> = { start: 'started', stop: 'stopped', edit: 'settings changed', restore: 'settings restored', template: 'template applied' }
@@ -47,6 +48,8 @@ export function Home({ view, setView, latest, history, entries, orphans, alerts,
 
   const panel = sel === RUN
     ? <RunPanel readonly={readonly} onGhost={setGhost} onChanged={onChanged} />
+    : entry?.service
+      ? <ServicePanel key={entry.name} entry={entry} tab={tab} setTab={setTab} readonly={readonly} onChanged={onChanged} />
     : entry
       ? <ModelPanel key={entry.name} entry={entry} tab={tab} setTab={setTab} latest={latest} history={history} readonly={readonly}
           layout={layout} update={update} slo={slo} setSlo={setSlo} marks={marksFor(log.data, entry.name)}

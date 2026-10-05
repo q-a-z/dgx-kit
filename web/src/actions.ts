@@ -10,6 +10,7 @@ export function useModelActions(entry: Entry, readonly: boolean, onChanged: () =
   const [busy, setBusy] = useState<string | null>(null)
   const [msg, setMsg] = useState<Msg | null>(null)
   const q = encodeURIComponent(entry.name)
+  const root = entry.service ? `/api/services/${q}` : `/api/models/${q}`  // a service has start and stop of its own
   const ask = useConfirm()
 
   const call = async (what: string, path: string, method = 'POST', retry = true, json?: object) => {
@@ -30,9 +31,9 @@ export function useModelActions(entry: Entry, readonly: boolean, onChanged: () =
       onChanged()
     }
   }
-  const doStop = () => call('Stopping', `/api/models/${q}/stop`)
+  const doStop = () => call('Stopping', `${root}/stop`)
   const stop = async () => (await ask({ title: `Stop ${entry.name}?`, body: 'It stops serving right away. Requests in progress are lost, and it has to load again to come back.', label: 'Stop', danger: true })) && doStop()
-  const start = () => call('Starting', `/api/models/${q}/start`, 'POST', false)
+  const start = () => call('Starting', `${root}/start`, 'POST', false)
   const restart = async () => (await ask({ title: `Restart ${entry.name}?`, body: 'It stops, then loads again; that takes minutes and requests in progress are lost.', label: 'Restart', danger: true })) && (await doStop()) && start()
   const publish = async (on: boolean) => {
     if (!on && !(await ask({ title: `Unpublish ${entry.name}?`, label: 'Unpublish', danger: true,

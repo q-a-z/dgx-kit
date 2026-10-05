@@ -56,9 +56,9 @@ export function MemoryMap({ switcher, latest, history, entries, orphans, alerts,
             const on = e.state === 'running' && l
             const a = alertOf(e.name)
             const tone = STATE_TONE[e.state] ?? ''
-            const engine = e.row?.engine ?? e.ext?.engine
+            const engine = e.row?.engine ?? e.ext?.engine ?? (e.service ? e.name : undefined)
             return (
-              <div key={e.name} className={`blk ${selected === e.name ? 'sel' : ''} ${preview?.name === e.name ? 'previewing' : ''} ${a ? a.level : ''}`}
+              <div key={e.name} className={`blk ${e.service ? 'svc' : ''} ${selected === e.name ? 'sel' : ''} ${preview?.name === e.name ? 'previewing' : ''} ${a ? a.level : ''}`}
                 style={{ flexGrow: Math.max(bytes / GB, 0.5), ['--tint' as string]: tint(e) }}
                 onClick={() => select(e.name)}>
                 <div className="bn">
@@ -72,7 +72,7 @@ export function MemoryMap({ switcher, latest, history, entries, orphans, alerts,
                     <span className={(l.waiting ?? 0) > 0 ? 'warn' : ''}>{(l.waiting ?? 0) > 0 && '▲ '}queue <b>{fmtNum(l.waiting ?? 0)}</b></span>
                     {l.kv_used_pct != null && <span className={l.kv_used_pct >= KV_WARN ? 'warn' : ''}>{l.kv_used_pct >= KV_WARN && '▲ '}KV <b>{fmtNum(l.kv_used_pct)}</b>%</span>}
                   </div>
-                ) : <div className="bs"><span className={tone === 'bad' ? 'bad' : ''}>{STATE_LABEL[e.state] ?? e.state}</span></div>}
+                ) : <div className="bs"><span className={tone === 'bad' ? 'bad' : ''} title={stateTitle(e)}>{stateText(e)}</span></div>}
                 {on && (
                   <div className="bsparks">
                     <div className="bs-legend">

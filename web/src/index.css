@@ -746,3 +746,11 @@ dialog.modal h3 { margin: 0 0 8px; font-size: 16px; }
 .toast.ok { border-left: 3px solid var(--ok); }
 .toast.bad { border-left: 3px solid var(--bad); color: var(--text); }
 progress.pull { width: 100%; height: 8px; accent-color: var(--accent); }
+
+/* Laya, listed with the models */
+/* It has no charts to draw, so its block is narrower; and if the blocks still don't fit, the card scrolls instead of letting them spill out of it. */
+.mapwrap { overflow-x: auto; }
+.blk.svc { min-width: 150px; }
+.panel .svc-url code { font-size: 12px; }
+.ckpts { border: 0; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; }
+.ckpts legend { padding: 0; margin-bottom: 4px; color: var(--muted); font-size: 12px; }

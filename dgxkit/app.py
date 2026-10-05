@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .api_models import router as models_router
+from .api_services import router as services_router
 from .collectors.gpu import open_gpu
 from .collectors.system import SystemCollector
 from .auth import COOKIE, SESSION_SECONDS, Auth
@@ -52,6 +53,7 @@ class Services:
     preparing: dict = field(default_factory=dict)  # model name -> the image it waits for before starting
     firmware_probe: object = None  # tests give a fake; normally fwupd is asked through system_info.probe_firmware
     quick_pending: set = field(default_factory=set)  # models DGX-kit just started, waiting for their first answer
+    laya: object = None  # dgxkit.laya.LayaService, made on first use; tests give a fake
 
     def log(self, action: str, detail: str) -> None:
         self.actions.append({"t": time.time(), "action": action, "detail": detail})
@@ -185,6 +187,7 @@ def create_app(services: Services | None = None) -> FastAPI:
 
     app = FastAPI(title="DGX-kit", lifespan=lifespan)
     app.include_router(models_router)
+    app.include_router(services_router)
 
     @app.exception_handler(ValueError)
     async def bad_value(request: Request, exc: ValueError):
@@ -207,7 +210,7 @@ def create_app(services: Services | None = None) -> FastAPI:
             return False
         if method == "PUT" and re.fullmatch(r"/api/images/[a-z]+", path):
             return False  # picks which tag DGX-kit uses; nothing on the box changes
-        return (path.startswith(("/api/images", "/api/gateway", "/api/downloads", "/api/system/firmware", "/api/system/update"))
+        return (path.startswith(("/api/images", "/api/gateway", "/api/downloads", "/api/system/firmware", "/api/system/update", "/api/services"))
                 or re.fullmatch(r"/api/models/[^/]+/(start|stop|download)", path) is not None
                 or (method == "DELETE" and path.startswith("/api/models/")))
 

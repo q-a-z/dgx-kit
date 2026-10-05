@@ -3,7 +3,7 @@ import { fmtBytes, fmtNum, type Download, type Snapshot } from '../api'
 import { Spark } from '../components/Chart'
 import { Icon } from '../components/Icon'
 import { DownloadActions, ModelActions, type Tab } from '../components/ModelActions'
-import { base, ENGINES, prettyName, STATE_LABEL, STATE_TONE, type Entry } from '../fleet'
+import { base, ENGINES, prettyName, STATE_LABEL, STATE_TONE, stateText, stateTitle, type Entry } from '../fleet'
 import { KV_WARN, type Alert } from '../health'
 import { RUN, select } from '../nav'
 import { recent } from '../tiles/hardwareTiles'
@@ -54,7 +54,13 @@ export function ModelList({ switcher, history, entries, orphans, alerts, readonl
                 {(l.kv_used_pct ?? 0) >= KV_WARN && <span className="warn">▲ KV <b>{fmtNum(l.kv_used_pct)}</b>%</span>}
                 <span className="ispark"><Spark times={times} values={h.map((s) => (s.models[e.name]?.decode_tps as number | undefined) ?? null)} height={18} label="Decode" fmt={(v) => `${fmtNum(v, 1)} tok/s`} /></span>
               </div>
-            ) : e.download ? <DownloadLine d={e.download} free={free} /> : (
+            ) : e.download ? <DownloadLine d={e.download} free={free} /> : e.service ? (
+              <div className="imeta">
+                <span className="tag">{ENGINES.laya}</span>
+                <span className={tone === 'bad' ? 'bad' : ''} title={stateTitle(e)}>{stateText(e)}</span>
+                {e.service.state === 'running' && <><span>port <b>{e.service.port}</b></span><span>{e.service.device_in_use === 'cuda' ? 'GPU' : 'CPU'}</span><span>{e.service.loaded.join(' · ')}</span></>}
+              </div>
+            ) : (
               <div className="imeta"><span className={tone === 'bad' ? 'bad' : ''}>{STATE_LABEL[e.state] ?? e.state}</span>{e.row && <span>{base(e.row.repo)}</span>}</div>
             )}
           </div>

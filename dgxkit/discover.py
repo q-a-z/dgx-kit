@@ -137,6 +137,9 @@ def container_models(client) -> dict[str, dict]:
             out[c.id] = {"key": labels[LABEL], "model": labels[LABEL], "container": c.name,
                          "ctx": meta.get("context_tokens"), "managed": True}
             continue
+        if "dgxkit.service" in labels:  # a service DGX-kit runs beside the models (Laya): its memory is its own, under its name
+            out[c.id] = {"key": labels["dgxkit.service"], "model": labels["dgxkit.service"], "container": c.name, "ctx": None, "managed": True}
+            continue
         args = _args(c)
         info = parse(args, (c.attrs.get("Config") or {}).get("Image", ""))
         model = info and (info["served_name"] or (info["model"] or "").rstrip("/").rsplit("/", 1)[-1] or None)

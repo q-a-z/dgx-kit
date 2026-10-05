@@ -255,6 +255,9 @@ def scan(paths: list[str], kinds: dict[str, str] | None = None) -> dict:
             dirnames[:] = sorted(d for d in dirnames if not d.startswith(".") and d not in ("blobs", "refs", "original"))
             if dirpath.count("/") - base_depth >= MAX_DEPTH:
                 dirnames[:] = []
+            if "rl_agent_config.json" in filenames:  # a Laya checkpoint: served by the Laya service, not a model an engine runs
+                dirnames[:] = []
+                continue
             # Keep walking inside a model: a draft is often kept in a subfolder of the model it serves.
             try:
                 item = describe(Path(dirpath), filenames)

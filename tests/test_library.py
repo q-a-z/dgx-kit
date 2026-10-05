@@ -81,3 +81,17 @@ def test_drafts_on_q_spark_are_found_and_classed(tmp_path):
     assert names("models") == ["laguna-xs-2.1", "ornith-abl-dflash"]
     assert names("drafts") == ["gemma-4-dspark", "laguna-xs-2.1-dflash-nvfp4", "ornith-abl-dflash/dflash_draft", "qwen3-coder-dflash", "qwen3-coder-eagle"]
     assert out["incomplete"] == [str(tmp_path / "vllm/half-done")]
+
+
+def test_a_laya_checkpoint_folder_is_not_listed_as_a_model(tmp_path):
+    from dgxkit.library import scan
+    laya = tmp_path / "laya"
+    (laya / "typed-decisions").mkdir(parents=True)
+    (laya / "encoder").mkdir()
+    for d in (laya, laya / "typed-decisions"):
+        (d / "rl_agent_config.json").write_text("{}")
+        (d / "model.safetensors").write_bytes(b"x")
+    (laya / "config.json").write_text("{}")
+    (laya / "encoder" / "config.json").write_text("{}")
+    r = scan([str(tmp_path)])
+    assert r["models"] == [] and r["drafts"] == [] and r["incomplete"] == []

@@ -215,7 +215,8 @@ def test_readonly_mode_blocks_everything_that_changes_the_box(tmp_path, monkeypa
         for method, path in [("post", "/api/models/llama/start"), ("post", "/api/models/llama/stop"),
                              ("post", "/api/models/llama/download"), ("delete", "/api/models/llama"),
                              ("post", "/api/images/vllm/pull"), ("post", "/api/gateway/sync"),
-                             ("post", "/api/images/clean"), ("post", "/api/system/firmware/check"), ("post", "/api/system/update")]:
+                             ("post", "/api/images/clean"), ("post", "/api/system/firmware/check"), ("post", "/api/system/update"),
+                             ("post", "/api/services/laya/start"), ("post", "/api/services/laya/stop"), ("put", "/api/services/laya")]:
             assert getattr(client, method)(path).status_code == 403, path
         assert s.runner.started == [] and s.gateway.synced == []
         assert client.get("/api/models").status_code == 200
@@ -661,3 +662,58 @@ def test_a_note_is_saved_with_the_model_and_survives_other_edits(env):
     assert client.get("/api/models").json()[0]["notes"] == "DFLASH n=9, fp8 KV"
     client.put("/api/models/llama", json={"name": "llama", "max_context": 4096})  # an edit that doesn't mention it
     assert client.get("/api/models").json()[0]["notes"] == "DFLASH n=9, fp8 KV"
+
+
+class FakeLaya:
+    def __init__(self):
+        self.calls, self.problems = [], None
+
+    def status(self):
+        return {"name": "laya", "state": "stopped", "port": 8200}
+
+    def start(self):
+        from dgxkit.laya import Problems
+        if self.problems:
+            raise Problems(self.problems)
+        self.calls.append("start")
+        return {"preparing": {"state": "running"}} if self.preparing else {"started": True}
+
+    preparing = False
+
+    def stop(self):
+        self.calls.append("stop")
+        return True
+
+    def set_config(self, device=None, port=None, dir=None, checkpoints=None):
+        self.calls.append(("config", device, port, checkpoints))
+        return {"device": device or "cuda", "port": port or 8200, "dir": None, "checkpoints": checkpoints}
+
+    def logs(self, tail=200):
+        return "line"
+
+    def key(self):
+        return "secret-key"
+
+    def test(self):
+        return {"ms": 51, "model": "english", "jailbreak": 0.99, "topic": "security_testing"}
+
+
+def test_the_laya_service_has_status_start_stop_logs_key_and_a_test(env):
+    client, s, _ = env
+    s.laya = fake = FakeLaya()
+    assert client.get("/api/services").json() == [{"name": "laya", "state": "stopped", "port": 8200}]
+    assert client.post("/api/services/laya/start").json() == {"started": True}
+    fake.preparing = True
+    r = client.post("/api/services/laya/start")
+    assert r.status_code == 202 and "preparing" in r.json()
+    fake.problems = ["No Laya checkpoint found"]
+    r = client.post("/api/services/laya/start")
+    assert r.status_code == 409 and r.json()["detail"]["problems"] == ["No Laya checkpoint found"]
+    assert client.post("/api/services/laya/stop").json() == {"stopped": True}
+    fake.problems, fake.preparing = None, False
+    assert client.post("/api/services/laya/restart").status_code == 200 and fake.calls[-2:] == ["stop", "start"]
+    assert client.put("/api/services/laya", json={"device": "cpu", "port": 8300, "checkpoints": ["english"]}).json() == {"device": "cpu", "port": 8300, "dir": None, "checkpoints": ["english"]}
+    assert client.get("/api/services/laya/logs").json() == {"logs": "line"}
+    assert client.get("/api/services/laya/key").json() == {"key": "secret-key"}
+    assert client.post("/api/services/laya/test").json()["ms"] == 51
+    assert [a["action"] for a in client.get("/api/log").json()][-2:] == ["restart", "edit"]

@@ -176,3 +176,11 @@ export async function copyText(text: string): Promise<boolean> {
   box.select()
   try { return document.execCommand('copy') } catch { return false } finally { box.remove() }
 }
+
+/** A service that runs beside the models and isn't one (Laya, the decision model server). */
+export type ServiceJob = { kind: string; state: string; error: string | null; tail: string[]; progress?: number | null }
+export type Service = {
+  name: string; title: string; about: string; state: string; started: number | null; port: number; device: 'cuda' | 'cpu'
+  device_in_use: string | null; loaded: string[]; checkpoints: { dir: string | null; found: string[] }; selected: string[]
+  image: string; image_ready: boolean; build: ServiceJob | null; error: string | null; problems: string[]
+}
