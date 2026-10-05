@@ -6,6 +6,7 @@ Newest first. Every commit adds its entry here.
 
 ### Changed
 - Version bump. Everything in 0.1.9 below is released; new changes are listed here from now on.
+- **The dashboard is a little wider** on large screens: the page and its header have 30 px more room on each side (the page is 1380 px wide at most, up from 1320).
 
 ### Added
 - **Laya, a decision model, listed with the models.** Laya answers typed questions about a text (yes/no, a choice, a score) with calibrated probabilities in one pass, about 50 ms on the GB10: guardrails, routing, triage. It isn't a chat model, so it can't run on vLLM or sit behind the gateway; its own HTTP server (`POST /v1/systemone`) runs in a container that DGX-kit builds (`dgx-kit/laya:gb10`, on the vLLM image it already uses), starts, stops and watches. It appears in the memory map and the model list like any model, with its GPU memory, its state ("Serving for 3 h 12 min") and Restart, Stop and Logs. Its panel has **Live** (a **Test** button that asks it a sample question and times the answer), **Settings** and **Logs**, and copies its address and its API key (it asks for one). A missing or outdated image is built first and the server starts by itself afterwards.
@@ -22,14 +23,10 @@ Newest first. Every commit adds its entry here.
 - **A model that is up no longer stays on "Starting".** The model list dropped a model's live stats the moment its container wasn't "running", and that includes the second or two it is "created" right after Start (more likely when several models start at once). Nothing brought the stats back until the dashboard restarted, so a server that already answered still read "Starting". Only a crashed container is dropped now, and a running one that lost its stats is picked up again on the next refresh.
 - **Every time is shown on a 24-hour clock.** Chart axes and hover readouts, the action log, benchmark and firmware dates and the update check no longer follow the browser's language: no more "3:07 PM" or "3pm", always "15:07".
 
-### Added
-
 ## 0.1.9
 
 ### Changed
 - Version bump. Everything in 0.1.8 below is released; new changes are listed here from now on.
-
-### Fixed
 
 ### Fixed
 - **A context you set is kept as you wrote it.** The memory autotuner capped an explicit context at the config's `max_position_embeddings`, which would have lowered models that serve more than their config says (Nemotron 3.5 runs at 393K although its config says 256K). Only the default 32K context is now limited by the model's own maximum, so a small model isn't asked for more than it has.
