@@ -14,6 +14,7 @@ Release notes: [RELEASE_NOTES.md](RELEASE_NOTES.md).
 - **Watch the machine:** gauges for temperature, power, clock, load, network, disk and every CPU core, a stats line (tokens in and out, requests, decode and prefill speed against their averages), and the models laid out in unified memory. The logo carries the box's real model, read from its firmware (for example ASUS GX10).
 - **Keep track of firmware:** Settings → System lists the BIOS, GPU VBIOS, kernel, driver and every firmware device fwupd manages, says when an update is available, and remembers when any version changed.
 - **Run models:** start and stop them, edit their engine options as one block of text, and see speed and cache numbers live. A model takes the memory its context needs, not all that is free (it says how much), and Start fetches a missing engine image by itself. GGUF models run on llama.cpp with nothing to build.
+- **Decision models:** Laya, which answers typed yes/no, choice and score questions about a text with calibrated probabilities in about 20 ms, runs beside the models and is listed with them (see below).
 - **One gateway:** every running model is published on one OpenAI-compatible address through a built-in LiteLLM, and you can publish or unpublish each one.
 - **Bring your setup over:** import llmctl `.conf` files, including models whose weights are already on disk.
 - **Measure:** a ten-second speed check after each start, and a full benchmark when you ask for it.
@@ -49,8 +50,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 1. Get the package onto the Spark and unpack it:
 
    ```
-   tar xzf dgx-kit-0.1.9.tar.gz
-   cd dgx-kit-0.1.9
+   tar xzf dgx-kit-0.1.10.tar.gz
+   cd dgx-kit-0.1.10
    ```
 
 2. Look before you leap (changes nothing):
@@ -95,7 +96,7 @@ Enter, and restarts the service on the new code. For updating, the next section 
 ```
 dgx-kit update                      # fetch the latest from git and update
 dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
-dgx-kit update dgx-kit-0.1.9.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit update dgx-kit-0.1.10.tar.gz # from a package, a .tgz, or a GitHub .zip
 dgx-kit version                     # what is running
 ```
 
@@ -191,6 +192,9 @@ Every question can be answered ahead of time with `DGXKIT_INSTALL_<NAME>` (see *
 - **Benchmark.** The **Benchmark** tab runs the full battery or a quick run, only when you press the button. Finished runs are kept: the **History** at the top of the tab charts decode and prefill speed over time, lists every run with what changed since the one before (engine image, DGX-kit, driver, settings), and warns when the latest run is clearly worse than your usual. It refuses to run while other models are busy, because that would spoil the numbers.
 - **Removing a model** (the three-dot menu) removes it from DGX-kit only. Its files stay on disk.
 - **Deleting files from disk** is only possible in **Settings → Delete from disk**, after four confirmations, the last one typing the folder's name. A model that is running can't be deleted, and nothing outside your model folders can be.
+- **How long it has been up.** A running model's state reads "Serving for 3 h 12 min", counted from the last time its container started; hover for the start time.
+- **Notes.** A model's Settings tab has a Notes box. A model with no note yet starts with one line built from its saved settings (draft tokens, KV type, context); edit it and press **Save note**, or **Fill from settings** to rebuild it after you change something. The model panel also shows the real draft-token count next to the draft model.
+- **Times are on a 24-hour clock** everywhere (chart axes, the action log, benchmark and firmware dates), whatever the browser's language is.
 - **Version.** The running version is shown next to the logo, and on the sign-in page.
 
 ## Settings
