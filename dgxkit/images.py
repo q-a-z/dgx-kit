@@ -53,6 +53,9 @@ BUILDS: dict[str, dict] = {
     # Not an engine models run on: the HTTP server for the Laya decision model (dgxkit/laya.py), built on the vLLM image.
     "laya-gb10": {"engine": "laya", "dir": "laya", "tag": "dgx-kit/laya:gb10", "args": {"BASE": DEFAULTS["vllm"], "REV": _revision("laya")},
                   "about": "Laya, the decision model server, for the GB10"},
+    # Lev and Bekko (dgxkit/lev.py, dgxkit/bekko.py) share one image: the extras they need on top of the same vLLM image.
+    "decision-gb10": {"engine": "decision", "dir": "decision", "tag": "dgx-kit/decision:gb10", "args": {"BASE": DEFAULTS["vllm"], "REV": _revision("decision")},
+                      "about": "Lev and Bekko, decision model servers, for the GB10"},
 }
 
 

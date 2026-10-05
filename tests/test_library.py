@@ -95,3 +95,15 @@ def test_a_laya_checkpoint_folder_is_not_listed_as_a_model(tmp_path):
     (laya / "encoder" / "config.json").write_text("{}")
     r = scan([str(tmp_path)])
     assert r["models"] == [] and r["drafts"] == [] and r["incomplete"] == []
+
+
+def test_other_decision_model_folders_are_not_listed_as_models_either(tmp_path):
+    from dgxkit.library import scan
+    for name, marker in (("lev", "lev_release.json"), ("bekko", "inference_v0.py")):
+        d = tmp_path / name
+        d.mkdir()
+        (d / marker).write_text("{}")
+        (d / "config.json").write_text("{}")
+        (d / "model.safetensors").write_bytes(b"x")
+    r = scan([str(tmp_path)])
+    assert r["models"] == [] and r["drafts"] == [] and r["incomplete"] == []

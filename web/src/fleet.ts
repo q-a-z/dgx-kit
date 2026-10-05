@@ -22,7 +22,7 @@ export type Entry = {
   state: string
 }
 
-export const ENGINES: Record<string, string> = { vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp', laya: 'Decision model' }
+export const ENGINES: Record<string, string> = { vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp', laya: 'Decision model', lev: 'Decision model', bekko: 'Decision model' }
 export const base = (p: string | null | undefined) => (p ? p.replace(/\/+$/, '').split('/').pop() ?? p : null)
 const ACTIVE = new Set(['queued', 'running', 'paused', 'failed'])
 

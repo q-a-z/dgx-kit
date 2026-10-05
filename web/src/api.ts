@@ -182,5 +182,8 @@ export type ServiceJob = { kind: string; state: string; error: string | null; ta
 export type Service = {
   name: string; title: string; about: string; state: string; started: number | null; port: number; device: 'cuda' | 'cpu'
   device_in_use: string | null; loaded: string[]; checkpoints: { dir: string | null; found: string[] }; selected: string[]
+  /** What could be picked to run; one entry means there is nothing to pick. */
+  choices: { name: string; about: string; found: boolean }[]
+  has_key: boolean; can_expose: boolean; expose: boolean | null; needs_bytes: number | null
   image: string; image_ready: boolean; build: ServiceJob | null; error: string | null; problems: string[]
 }

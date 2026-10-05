@@ -223,7 +223,7 @@ Measured on one DGX Spark with the GB10 vLLM 0.30 image, one model at a time (ru
 - **Qwen 3.5 and 3.8 want `--reasoning-parser qwen3`** (otherwise the thinking text lands in the answer) **and `--tool-call-parser qwen3_coder`**. `--load-format fastsafetensors` cut loading from about 390 s to 170–250 s.
 - **Prefix caching worked** on Qwen 3.8 with dflash2: a 15,000-token prompt sent three times gave correct, identical answers, the repeat in 9 s against 22 s.
 
-## Laya, a decision model
+## Laya, a decision model (and two spares: Lev and Bekko)
 
 [Laya](https://huggingface.co/convaiinnovations/laya) isn't a chat model. You give it a text (the *state*) and typed questions about it, and it answers each with calibrated probabilities in one forward pass: no text is generated, so there is nothing to parse and nothing to hallucinate. A question is a **choice** (one of several named options), a **score** (an ordered scale) or a **noul** (yes/no). It is a 421M-parameter encoder, about 1.6 GB in memory per checkpoint, and it ships three checkpoints in one Hugging Face repo, `convaiinnovations/laya`: **English** (the repo root), **multilingual** (`multilingual/`, 100+ languages) and **typed-decisions** (`typed-decisions/`, tuned for the typed-decision workflows). Download that repo into your models folder (for example `~/models/laya`); DGX-kit finds it by the `rl_agent_config.json` files and doesn't list it under **Models on disk**.
 
@@ -243,6 +243,15 @@ curl -s http://<this box>:8200/v1/systemone \
 The answer holds, per question, the probabilities (`noul`, or `probabilities` per option), the chosen option and a confidence; `model` picks a checkpoint (left out, the text's language decides between English and multilingual). Questions can reference a field of a JSON state with backticks. The package has ready-made question sets for guardrails, moderation, routing, support triage and email.
 
 **Speed on a GB10** (five guardrail questions about one prompt, the three LLMs running at the same time): about 72 ms on the English checkpoint, 45 ms on multilingual and 75 ms on typed-decisions, against about 1 s on the CPU. Set the device to CPU in its Settings if the GPU memory is needed elsewhere. On the GB10, CUDA needs memory that is truly free, and the page cache can hold nearly all of it while the dashboard still shows gigabytes as available; when the GPU can't be opened Laya starts on the CPU and says so (`sudo sh -c 'sync; echo 3 > /proc/sys/vm/drop_caches'` frees the cache, then restart it).
+
+**Two more decision models can be set up beside Laya**, answering the same `/v1/systemone` so a client switches by changing the address. They are not started by default.
+
+| | Memory on the GPU | Where its files go | Port | Key |
+|---|---|---|---|---|
+| **Lev** (`interfaze-ai/lev`: a LoRA adapter on Qwen3.5-4B) | about 11 GiB | `<models folder>/.lev/hub`, a Hugging Face cache holding the adapter and `Qwen/Qwen3.5-4B` (about 9 GB) | 8201 | none: it listens on this machine only unless you tick **Listen on the network** |
+| **Bekko** (`hotchpotch/bekko-system-one-v0-400m`: a 395M-parameter English encoder) | about 3 GiB | `<models folder>/.bekko/hub` (1.5 GB) | 8202 | yes, like Laya |
+
+Their folders start with a dot so the backbone isn't listed under **Models on disk**. To fetch one, run `snapshot_download(repo, cache_dir='<models folder>/.lev/hub')` from `huggingface_hub` for each repo (for Bekko add `ignore_patterns=['onnx_browser/*']`); until the files are there the panel's Start says what is missing. Both run in the same image, `dgx-kit/decision:gb10`, built on the first Start; Bekko has no server of its own, so the image carries a small one that speaks Laya's request and answer shapes. Lev's server has no API key, and Start is refused while there isn't about 11 GiB of truly free memory (on the GB10 CUDA can't open without it; drop the page cache or stop something first). If the GPU can't be opened Lev stops with a message, because on the CPU a 4B model takes seconds; Bekko starts on the CPU like Laya does and says so.
 
 **Where it fits.** Calls that decide, not generate: screening a prompt before it reaches a model (jailbreak, prompt injection, secrets, harm), choosing which model should answer (difficulty, domain, needs tools), triaging tickets or mail, and checking whether an answer meets stated criteria. Because the probabilities are calibrated, a threshold works: act on the confident cases and send the unsure ones to a person or a bigger model. Check the thresholds on a labelled sample of your own traffic first; the English checkpoint, for instance, rated a harmless "debug my deploy script, here is my key" as a jailbreak with probability 1.0 while the typed-decisions checkpoint was less sure.
 
@@ -289,7 +298,7 @@ Other variables the program reads, mostly for developers: `DGXKIT_STATE_DIR` (st
 | `gateway.key` | A gateway key entered in Settings, if you set one there |
 | `hf.token` | The Hugging Face token entered in Settings (mode 600) |
 | `images.yaml` | Your engine image choices (Settings, Engine images) |
-| `laya.yaml`, `laya.key` | Laya's device, port and folder, and the bearer key its server asks for (mode 600) |
+| `laya.yaml`, `laya.key`, `lev.yaml`, `bekko.yaml`, `bekko.key` | Each decision model's device, port and folder, and the bearer key its server asks for (mode 600; Lev has none) |
 | `models/` | One `<name>.yaml` recipe per model: the engine, its options, and the gateway and sizing settings |
 | `models-history/` | Every earlier version of each recipe, for the version diff and restore |
 | `templates/` | Recipe templates |
@@ -315,10 +324,10 @@ DGX-kit itself sets, for the gateway: `LITELLM_MASTER_KEY`, `DATABASE_URL`, `NUM
 |---|---|
 | The dashboard | container and image `dgx-kit` (the previous image is kept as `dgx-kit:previous`) |
 | One per running model | container `dgxkit-<model name>` |
-| Laya | container `dgxkit-laya` |
+| Laya, Lev, Bekko | containers `dgxkit-laya`, `dgxkit-lev`, `dgxkit-bekko` |
 | The gateway and its database | containers `dgxkit-gateway` and `dgxkit-gateway-db` (Postgres 16, reachable only on this machine, port 5433) |
 | LiteLLM's database | Docker volume `dgxkit-gateway-pg` |
-| Images DGX-kit builds | `dgx-kit/vllm:<series>-gb10`, `dgx-kit/llamacpp:gb10`, `dgx-kit/laya:gb10` |
+| Images DGX-kit builds | `dgx-kit/vllm:<series>-gb10`, `dgx-kit/llamacpp:gb10`, `dgx-kit/laya:gb10`, `dgx-kit/decision:gb10` (Lev and Bekko) |
 
 ### Files outside those folders
 

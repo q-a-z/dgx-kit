@@ -684,12 +684,14 @@ class FakeLaya:
         self.calls.append("stop")
         return True
 
-    def set_config(self, device=None, port=None, dir=None, checkpoints=None):
+    def set_config(self, device=None, port=None, dir=None, checkpoints=None, expose=None):
         self.calls.append(("config", device, port, checkpoints))
         return {"device": device or "cuda", "port": port or 8200, "dir": None, "checkpoints": checkpoints}
 
     def logs(self, tail=200):
         return "line"
+
+    has_key = True
 
     def key(self):
         return "secret-key"
@@ -701,7 +703,9 @@ class FakeLaya:
 def test_the_laya_service_has_status_start_stop_logs_key_and_a_test(env):
     client, s, _ = env
     s.laya = fake = FakeLaya()
-    assert client.get("/api/services").json() == [{"name": "laya", "state": "stopped", "port": 8200}]
+    s.lev, s.bekko = FakeLaya(), FakeLaya()
+    assert [x["name"] for x in client.get("/api/services").json()] == ["laya", "laya", "laya"]  # the fakes all say "laya"
+    assert client.get("/api/services/nothing/logs").status_code == 404
     assert client.post("/api/services/laya/start").json() == {"started": True}
     fake.preparing = True
     r = client.post("/api/services/laya/start")
@@ -717,3 +721,11 @@ def test_the_laya_service_has_status_start_stop_logs_key_and_a_test(env):
     assert client.get("/api/services/laya/key").json() == {"key": "secret-key"}
     assert client.post("/api/services/laya/test").json()["ms"] == 51
     assert [a["action"] for a in client.get("/api/log").json()][-2:] == ["restart", "edit"]
+
+
+def test_a_service_without_a_key_has_none_to_give(env):
+    client, s, _ = env
+    s.laya, s.lev, s.bekko = FakeLaya(), FakeLaya(), FakeLaya()
+    s.lev.has_key, s.lev.title = False, "Lev"
+    assert client.get("/api/services/laya/key").json() == {"key": "secret-key"}
+    assert client.get("/api/services/lev/key").status_code == 404

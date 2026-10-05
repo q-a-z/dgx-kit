@@ -53,7 +53,9 @@ class Services:
     preparing: dict = field(default_factory=dict)  # model name -> the image it waits for before starting
     firmware_probe: object = None  # tests give a fake; normally fwupd is asked through system_info.probe_firmware
     quick_pending: set = field(default_factory=set)  # models DGX-kit just started, waiting for their first answer
-    laya: object = None  # dgxkit.laya.LayaService, made on first use; tests give a fake
+    laya: object = None  # the decision model services (dgxkit/laya.py, lev.py, bekko.py), made on first use; tests give fakes
+    lev: object = None
+    bekko: object = None
 
     def log(self, action: str, detail: str) -> None:
         self.actions.append({"t": time.time(), "action": action, "detail": detail})

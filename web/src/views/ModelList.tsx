@@ -56,7 +56,7 @@ export function ModelList({ switcher, history, entries, orphans, alerts, readonl
               </div>
             ) : e.download ? <DownloadLine d={e.download} free={free} /> : e.service ? (
               <div className="imeta">
-                <span className="tag">{ENGINES.laya}</span>
+                <span className="tag">{ENGINES[e.name] ?? 'Decision model'}</span>
                 <span className={tone === 'bad' ? 'bad' : ''} title={stateTitle(e)}>{stateText(e)}</span>
                 {e.service.state === 'running' && <><span>port <b>{e.service.port}</b></span><span>{e.service.device_in_use === 'cuda' ? 'GPU' : 'CPU'}</span><span>{e.service.loaded.join(' · ')}</span></>}
               </div>

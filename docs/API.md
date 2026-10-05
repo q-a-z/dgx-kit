@@ -175,19 +175,19 @@ Clients use the gateway directly at `http://<host>:4000/v1` with the key (OpenAI
 
 ## Services
 
-Things that run beside the models and aren't models. Today that is Laya, the decision model server. All of these answer `403` in read-only mode except the reading ones.
+Things that run beside the models and aren't models: the decision model servers, Laya, Lev and Bekko. Everywhere below `{name}` is `laya`, `lev` or `bekko`; any other name is `404`. All of these answer `403` in read-only mode except the reading ones.
 
 | Method and path | What it does |
 |---|---|
-| `GET /api/services` | A list with one entry, `laya`: `state` (`running`, `starting`, `preparing` while its image is built, `stopped`, `exited`), `started` (epoch seconds), `port`, `device` (what is asked for, `cuda` or `cpu`), `device_in_use` and `loaded` (what its `/health` says), `checkpoints` (`dir`, `found`: the ones the models folder has), `selected` (the ones that will run), `image`, `image_ready` (built from the files this DGX-kit ships), `build` (progress of the image build), `error`, `problems` |
-| `POST /api/services/laya/start` | Start it. `200 {"started": true}`; `202 {"preparing": {...}}` when the image has to be built first (it starts by itself afterwards); `409 {"detail": {"problems": [...]}}` when there is no checkpoint under the models folder or the port is taken |
-| `POST /api/services/laya/stop`, `POST /api/services/laya/restart` | Stop it (the container is removed), or stop and start |
-| `PUT /api/services/laya` | Body `{"device"?: "cuda" or "cpu", "port"?, "dir"?, "checkpoints"?: ["english", "multilingual", "typed-decisions"]}`: applies at the next start; `checkpoints` is which of them to load (at least one; left unset, every one found). `422` for a bad value |
-| `GET /api/services/laya/logs?tail=200` | `{"logs": "..."}` |
-| `GET /api/services/laya/key` | `{"key": "..."}`: the bearer key the server asks for (made on first use, kept in the state folder) |
-| `POST /api/services/laya/test` | Send the server a sample question; `{"ms", "model", "jailbreak", "topic"}`. `502` when it doesn't answer |
+| `GET /api/services` | A list with one entry per service (`laya`, `lev`, `bekko`), each with: `state` (`running`, `starting`, `preparing` while its image is built, `stopped`, `exited`), `started` (epoch seconds), `port`, `device` (what is asked for, `cuda` or `cpu`), `device_in_use` and `loaded` (what its `/health` says), `checkpoints` (`dir`, `found`: the ones the models folder has), `selected` (the ones that will run), `choices` (`name`, `about`, `found` for each thing that could be picked), `has_key`, `can_expose` and `expose`, `needs_bytes` (memory it wants free to start), `image`, `image_ready` (built from the files this DGX-kit ships), `build` (progress of the image build), `error`, `problems` |
+| `POST /api/services/{name}/start` | Start it. `200 {"started": true}`; `202 {"preparing": {...}}` when the image has to be built first (it starts by itself afterwards); `409 {"detail": {"problems": [...]}}` when there is no checkpoint under the models folder or the port is taken |
+| `POST /api/services/{name}/stop`, `POST /api/services/{name}/restart` | Stop it (the container is removed), or stop and start |
+| `PUT /api/services/{name}` | Body `{"device"?: "cuda" or "cpu", "port"?, "dir"?, "checkpoints"?: [...], "expose"?: true or false}`: applies at the next start. `checkpoints` is which of the entries in `choices` to load (Laya's English, multilingual and typed-decisions; at least one; left unset, every one found); `expose` is Lev's "listen on the network" (it has no key); `422` for anything else. `422` for a bad value |
+| `GET /api/services/{name}/logs?tail=200` | `{"logs": "..."}` |
+| `GET /api/services/{name}/key` | `{"key": "..."}`: the bearer key the server asks for (made on first use, kept in the state folder). `404` for Lev, whose server has none |
+| `POST /api/services/{name}/test` | Send the server a sample question; `{"ms", "model", "jailbreak", "topic"}`. `502` when it doesn't answer |
 
-Laya's own API is on its port: `POST /v1/systemone` with `Authorization: Bearer <key>` and `{"state": ..., "questions": {...}}`, `POST /v1/systemone/batch`, and `GET /health`.
+Each server's own API is on its port (Laya 8200, Lev 8201, Bekko 8202; Laya and Bekko ask for the key, Lev listens on this machine only unless `expose` is set): `POST /v1/systemone` with `Authorization: Bearer <key>` and `{"state": ..., "questions": {...}}`, `POST /v1/systemone/batch`, and `GET /health`.
 
 ## Settings
 

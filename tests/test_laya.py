@@ -26,12 +26,13 @@ class FakeDocker:
     def __init__(self, existing=None, label=None):
         from dgxkit.images import BUILDS
         self.existing, self.runs = existing, []
-        self.label = label or BUILDS[BUILD]["args"]["REV"]  # what the image on the box says it was built from
+        self.label = label  # what the image on the box says it was built from; None: the current recipe's
         outer = self
 
         class Images:
             def get(self, tag):
-                return type("Image", (), {"labels": {"dgxkit.build": outer.label}})()
+                rev = outer.label or next(d["args"]["REV"] for d in BUILDS.values() if d["tag"] == tag)
+                return type("Image", (), {"labels": {"dgxkit.build": rev}})()
 
         self.images = Images()
 
@@ -63,7 +64,6 @@ class FakeImages:
         return self.ready
 
     def start_build(self, build):
-        assert build == BUILD
         self.built += 1
         self.jobs[build] = FakeJob()
         return self.jobs[build]
@@ -178,7 +178,7 @@ def test_settings_are_checked_and_the_key_is_private(svc):
         s.set_config(device="tpu")
     with pytest.raises(ValueError):
         s.set_config(port=80)
-    assert s.set_config(device="cpu", port=8300) == {"device": "cpu", "port": 8300, "dir": None, "checkpoints": None}
+    assert s.set_config(device="cpu", port=8300) == {"device": "cpu", "port": 8300, "dir": None, "checkpoints": None, "expose": True}
     k = s.key()
     assert oct(s.key_file.stat().st_mode)[-3:] == "600" and s.key() == k
 
