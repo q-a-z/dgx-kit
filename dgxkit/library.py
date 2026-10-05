@@ -20,7 +20,7 @@ from .recipes import Recipe, build_recipe
 MAX_DEPTH = 4
 DRAFT_ARCH = re.compile(r"eagle|dflash|dspark|medusa|mtp|draft|speculator", re.I)
 # Only names that can't belong to a main model: a DFlash-trained main model can be called
-# "...-dflash" (ornith-abl-dflash on q's Spark), while EAGLE drafts often keep the base
+# "...-dflash" (ornith-abl-dflash on a Spark), while EAGLE drafts often keep the base
 # architecture (qwen3-coder-eagle reports Qwen3MoeForCausalLM), so the name is what tells.
 DRAFT_NAME = re.compile(r"(^|[-_./])(eagle3?|medusa|draft|speculator|dspark)([-_./\\d]|$)", re.I)
 DRAFT_MAX_LAYERS = 8  # draft heads are one to a few layers deep (DFlash drafts use up to about 5); main models have 16+

@@ -42,7 +42,7 @@ def test_event_bits():
 
 
 class FakeNvml:
-    """Just enough of pynvml to behave like q's GB10 (2026-09-29 check output)."""
+    """Just enough of pynvml to behave like a GB10 (2026-09-29 check output)."""
     NVML_ERROR_NOT_SUPPORTED = 3
     NVML_CLOCK_SM, NVML_CLOCK_MEM, NVML_TEMPERATURE_GPU = 1, 2, 0
 

@@ -36,7 +36,7 @@ The 0.29 and 0.30 copies of a patch make the same change; only their line number
 
 | Patch | What it fixes | Models that need it | 0.29 | 0.30 |
 |---|---|---|---|---|
-| `common/010-nemotron-v3-content` | The Nemotron v3 reasoning parser returned `content: null` when generation stopped inside `<think>` and the client sent no `chat_template_kwargs` | nemotron-3.5 with LiteLLM / Hermes clients | yes | yes |
+| `common/010-nemotron-v3-content` | The Nemotron v3 reasoning parser returned `content: null` when generation stopped inside `<think>` and the client sent no `chat_template_kwargs` | nemotron-3.5 behind LiteLLM | yes | yes |
 | `0.29/`, `0.30/020-eagle-quantized-lm-head` | The EAGLE draft/target `lm_head` sharing check crashed on a quantized `ParallelLMHead` that has no `.weight`. It now skips sharing instead | EAGLE3 drafts on NVFP4 targets, for example qwen3-coder | yes | yes |
 | `common/030-mla-decode-smem-gb10` | Triton MLA decode (Lk=576) at `num_stages=2` needed more shared memory than GB10's 101376-byte limit. It now uses `num_stages=1` | MLA models such as GLM-4.x-Flash on GB10 | yes | yes |
 | `0.29/`, `0.30/040-glm4-moe-lite-eagle3` | `glm4_moe_lite` had no EAGLE3 support. The patch adds the aux hidden-state capture and `SupportsEagle3` | EAGLE3 for GLM-4.x-Flash | yes | yes |

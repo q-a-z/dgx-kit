@@ -18,6 +18,7 @@ Newest first. Every commit adds its entry here.
 - **Model uptime.** A running model's state reads "Serving for 3 h 12 min" in its panel and in the model table, and hovering shows when it started. It counts from the last time its container started, so a restart resets it. Models DGX-kit didn't start show nothing, since Docker's start time isn't theirs to report. The service reports it as `container.started` in `GET /api/models`.
 
 ### Fixed
+- Comments in the source and the vLLM patch notes no longer name a specific machine, user or client application.
 - **A model that is up no longer stays on "Starting".** The model list dropped a model's live stats the moment its container wasn't "running", and that includes the second or two it is "created" right after Start (more likely when several models start at once). Nothing brought the stats back until the dashboard restarted, so a server that already answered still read "Starting". Only a crashed container is dropped now, and a running one that lost its stats is picked up again on the next refresh.
 - **Every time is shown on a 24-hour clock.** Chart axes and hover readouts, the action log, benchmark and firmware dates and the update check no longer follow the browser's language: no more "3:07 PM" or "3pm", always "15:07".
 

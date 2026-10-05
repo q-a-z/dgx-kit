@@ -293,7 +293,7 @@ def test_gateway_settings_keep_the_key_out_of_reads(env):
 
 
 def test_an_existing_litellm_is_never_doubled(env, monkeypatch):
-    """With q's LiteLLM already on the box, publishing goes into it (or waits for its key), never a second container."""
+    """With a LiteLLM already on the box, publishing goes into it (or waits for its key), never a second container."""
     import asyncio
     from dgxkit import api_models
     import time

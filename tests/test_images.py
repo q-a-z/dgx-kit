@@ -102,7 +102,7 @@ def test_clean_only_removes_our_images_nobody_points_at(tmp_path):
 
 
 def test_an_image_already_on_the_box_is_used_instead_of_pulling(tmp_path):
-    """q's Spark has vllm-spark:0.30 and a running litellm, not the pinned tags."""
+    """A Spark can have vllm-spark:0.30 and a running litellm, not the pinned tags."""
     from types import SimpleNamespace as NS
 
     class Docker:

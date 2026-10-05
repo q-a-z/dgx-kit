@@ -80,7 +80,7 @@ class NvmlGpu:
     def _power_w(self):
         """Average power since the last sample, from the energy counter.
 
-        On q's GB10 the instant reading came back as exactly 9999 mW with models
+        On a GB10 the instant reading came back as exactly 9999 mW with models
         loaded, which looks like a placeholder, while the energy counter moves;
         the counter also averages over the whole interval instead of one instant.
         """

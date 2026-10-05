@@ -57,7 +57,7 @@ def test_recipe_from_folder_uses_weights_in_place(tmp_path):
 
 
 def test_drafts_on_q_spark_are_found_and_classed(tmp_path):
-    """Folder names from q's Spark: DFlash/EAGLE/DSpark drafts, some nested under their model."""
+    """Folder names from a Spark: DFlash/EAGLE/DSpark drafts, some nested under their model."""
     import json
     from dgxkit.library import scan
 

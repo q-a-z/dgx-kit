@@ -6,7 +6,7 @@ FIX = Path(__file__).parent / "fixtures" / "ornith.conf"
 
 
 def test_llmctl_conf_becomes_a_recipe():
-    """q's ornith conf: the CMD array is the command; MODEL and OPTS are labels."""
+    """A model's conf: the CMD array is the command; MODEL and OPTS are labels."""
     r, notes = recipe_from_conf("ornith-1.5-vllm-dflash2", parse_conf(FIX.read_text()))
     assert (r.name, r.image, r.engine) == ("ornith-1.5", "vllm-spark:0.29-pfxtest", "vllm")
     assert r.path == "/home/user/models/vllm/ornith-abl-dflash" and r.draft_path == "/home/user/models/vllm/ornith-dflash2"
