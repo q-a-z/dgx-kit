@@ -50,8 +50,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 1. Get the package onto the Spark and unpack it:
 
    ```
-   tar xzf dgx-kit-0.1.10.tar.gz
-   cd dgx-kit-0.1.10
+   tar xzf dgx-kit-0.1.11.tar.gz
+   cd dgx-kit-0.1.11
    ```
 
 2. Look before you leap (changes nothing):
@@ -96,7 +96,7 @@ Enter, and restarts the service on the new code. For updating, the next section 
 ```
 dgx-kit update                      # fetch the latest from git and update
 dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
-dgx-kit update dgx-kit-0.1.10.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit update dgx-kit-0.1.11.tar.gz # from a package, a .tgz, or a GitHub .zip
 dgx-kit version                     # what is running
 ```
 
@@ -251,7 +251,7 @@ The answer holds, per question, the probabilities (`noul`, or `probabilities` pe
 | **Lev** (`interfaze-ai/lev`: a LoRA adapter on Qwen3.5-4B) | about 11 GiB | `<models folder>/.lev/hub`, a Hugging Face cache holding the adapter and `Qwen/Qwen3.5-4B` (about 9 GB) | 8201 | none: it listens on this machine only unless you tick **Listen on the network** |
 | **Bekko** (`hotchpotch/bekko-system-one-v0-400m`: a 395M-parameter English encoder) | about 3 GiB | `<models folder>/.bekko/hub` (1.5 GB) | 8202 | yes, like Laya |
 
-Their folders start with a dot so the backbone isn't listed under **Models on disk**. To fetch one, run `snapshot_download(repo, cache_dir='<models folder>/.lev/hub')` from `huggingface_hub` for each repo (for Bekko add `ignore_patterns=['onnx_browser/*']`); until the files are there the panel's Start says what is missing. Both run in the same image, `dgx-kit/decision:gb10`, built on the first Start; Bekko has no server of its own, so the image carries a small one that speaks Laya's request and answer shapes. Lev's server has no API key, and Start is refused while there isn't about 11 GiB of truly free memory (on the GB10 CUDA can't open without it; drop the page cache or stop something first). If the GPU can't be opened Lev stops with a message, because on the CPU a 4B model takes seconds; Bekko starts on the CPU like Laya does and says so.
+Their folders start with a dot so the backbone isn't listed under **Models on disk**. To fetch one, run `snapshot_download(repo, cache_dir='<models folder>/.lev/hub')` from `huggingface_hub` for each repo (for Bekko add `ignore_patterns=['onnx_browser/*']`); until the files are there the panel's Start says what is missing. Both run in the same image, `dgx-kit/decision:gb10`, built on the first Start (a few minutes; package downloads from some networks are slow); Bekko has no server of its own, so the image carries a small one that speaks Laya's request and answer shapes. Lev's server has no API key, and Start is refused while there isn't about 11 GiB of truly free memory (on the GB10 CUDA can't open without it; drop the page cache or stop something first). If the GPU can't be opened Lev stops with a message, because on the CPU a 4B model takes seconds; Bekko starts on the CPU like Laya does and says so.
 
 **Where it fits.** Calls that decide, not generate: screening a prompt before it reaches a model (jailbreak, prompt injection, secrets, harm), choosing which model should answer (difficulty, domain, needs tools), triaging tickets or mail, and checking whether an answer meets stated criteria. Because the probabilities are calibrated, a threshold works: act on the confident cases and send the unsure ones to a person or a bigger model. Check the thresholds on a labelled sample of your own traffic first; the English checkpoint, for instance, rated a harmless "debug my deploy script, here is my key" as a jailbreak with probability 1.0 while the typed-decisions checkpoint was less sure.
 
