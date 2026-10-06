@@ -3,7 +3,7 @@ import type { Snapshot } from '../api'
 import { PRICES, PRICES_AS_OF } from '../pricing'
 
 const usd = (n: number) => `$${n < 100 ? n.toFixed(2) : Math.round(n).toLocaleString('en-US')}`
-const tok = (n: number) => n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)} K` : `${Math.round(n)}`
+const tok = (n: number) => n >= 1e9 ? `${(n / 1e9).toFixed(2)} B` : n >= 1e6 ? `${(n / 1e6).toFixed(2)} M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)} K` : `${Math.round(n)}`
 
 /** What the tokens served since the models started would have cost at Claude and OpenAI list prices. */
 export function CostModal({ open, onClose, latest }: { open: boolean; onClose: () => void; latest: Snapshot | null }) {

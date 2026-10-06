@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.16
+
+### Fixed
+- **The "$$$" table broke large numbers across lines.** The window is wider now, amounts stay on one line, the price sits under the model name, and billions of tokens show as "B".
+
 ## 0.1.15
 
 ### Added

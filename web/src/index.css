@@ -759,3 +759,6 @@ table.cost { width: 100%; border-collapse: collapse; margin: 8px 0; }
 table.cost th, table.cost td { text-align: right; padding: 4px 8px; }
 table.cost th:first-child, table.cost td:first-child { text-align: left; }
 table.cost td small { margin-left: 4px; }
+dialog.modal:has(table.cost) { width: min(640px, 94vw); }
+table.cost td:not(:first-child), table.cost th { white-space: nowrap; }
+table.cost td small { display: block; margin-left: 0; }
