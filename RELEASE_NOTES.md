@@ -2,6 +2,14 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.14
+
+### Changed
+- Version bump. Everything in 0.1.13 below is released; new changes are listed here from now on.
+
+### Fixed
+- **The download speed was wrong and jumped about.** It was the change since the previous time anything asked for the progress, and the downloads list, a model's status and every open tab each ask on their own schedule, so it often measured a fraction of a second and swung between almost nothing and far too much (the time left with it). It is now measured over the last ten seconds, whoever asks and however often.
+
 ## 0.1.13
 
 ### Changed

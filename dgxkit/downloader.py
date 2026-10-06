@@ -50,15 +50,22 @@ class Job:
     error: str | None = None
     started: float = field(default_factory=time.time)
     proc: asyncio.subprocess.Process | None = None
-    _last: tuple[float, int] | None = None
+    _samples: list = field(default_factory=list)  # (time, bytes) about a second apart; the speed is measured over the last ten seconds of them
 
     def progress(self) -> dict:
         have = dir_bytes(self.dest) if self.dest.exists() else 0
         now = time.time()
+        # Several things ask for the progress, each on its own schedule (the downloads list, a model's status, every open tab),
+        # so the speed can't be the change since the previous call: that is often a fraction of a second, and the speed jumps
+        # between nothing and far too much. It is the change over a window of samples taken a second apart instead.
+        s = self._samples
+        if not s or now - s[-1][0] >= 1.0:
+            s.append((now, have))
+            while len(s) > 2 and now - s[0][0] > 10:
+                s.pop(0)
         speed = None
-        if self._last and now > self._last[0]:
-            speed = max(0.0, (have - self._last[1]) / (now - self._last[0]))
-        self._last = (now, have)
+        if len(s) >= 2 and s[-1][0] - s[0][0] >= 2.0:
+            speed = max(0.0, (s[-1][1] - s[0][1]) / (s[-1][0] - s[0][0]))
         return {"repo": self.repo, "state": self.state, "error": self.error,
                 "bytes": have, "total_bytes": self.total_bytes,
                 "pct": round(100 * have / self.total_bytes, 1) if self.total_bytes else None,
@@ -94,6 +101,7 @@ class Downloader:
                 ",".join(job.allow_patterns or []), ",".join(job.ignore_patterns or []), job.cache_dir or ""]
         env = {**os.environ, **({"HF_TOKEN": self.token} if self.token else {})}
         job.state = "running"
+        job._samples.clear()  # a resumed download starts measuring afresh
         job.proc = await asyncio.create_subprocess_exec(*args, env=env, stderr=asyncio.subprocess.PIPE)
         _, err = await job.proc.communicate()
         if job.state in ("cancelled", "paused"):

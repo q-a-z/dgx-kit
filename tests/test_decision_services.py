@@ -254,3 +254,28 @@ def test_the_downloader_can_fill_a_hugging_face_cache_and_skip_files(tmp_path, m
     d, job, ran = asyncio.run(go())
     assert job.dest == tmp_path / "models" / ".x" / "hub" / "models--org--name" and (job.dest / MARKER).exists()
     assert ran == [(str(tmp_path / "models" / ".x"), ["onnx_browser/*"])]
+
+
+def test_the_download_speed_does_not_depend_on_how_often_it_is_asked(tmp_path, monkeypatch):
+    """Two pollers ask for the progress at different rates; the speed must stay the real one (2 MB/s here)."""
+    from dgxkit import downloader as dl
+
+    now = [1000.0]
+    monkeypatch.setattr(dl.time, "time", lambda: now[0])
+    dest = tmp_path / "repo"
+    dest.mkdir()
+    job = dl.Job("org/name", 100 * 2**20, dest)
+    size = 0
+    speeds = []
+    for tick in range(60):  # 12 seconds in 0.2 s steps; the file grows 2 MB per second, in bursts
+        now[0] += 0.2
+        if tick % 5 == 4:
+            size += 2 * 2**20
+            (dest / "blob").write_bytes(b"x" * size)
+        job.progress()  # the downloads list asks very often...
+        if tick % 20 == 0:
+            speeds.append(job.progress()["bytes_per_s"])  # ...and so does the model's status
+    steady = [s for s in speeds if s is not None][-2:]
+    assert steady and all(1.7 * 2**20 < s < 2.3 * 2**20 for s in steady), steady
+    p = job.progress()
+    assert p["bytes"] == size and p["total_bytes"] == 100 * 2**20
