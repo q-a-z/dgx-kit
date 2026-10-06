@@ -754,3 +754,8 @@ progress.pull { width: 100%; height: 8px; accent-color: var(--accent); }
 .panel .svc-url code { font-size: 12px; }
 .ckpts { border: 0; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; }
 .ckpts legend { padding: 0; margin-bottom: 4px; color: var(--muted); font-size: 12px; }
+button.navlink { background: none; border: 0; font: inherit; cursor: pointer; }
+table.cost { width: 100%; border-collapse: collapse; margin: 8px 0; }
+table.cost th, table.cost td { text-align: right; padding: 4px 8px; }
+table.cost th:first-child, table.cost td:first-child { text-align: left; }
+table.cost td small { margin-left: 4px; }

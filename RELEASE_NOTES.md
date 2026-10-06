@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.15
+
+### Added
+- **A "$$$" button in the top menu.** It opens a table of what the tokens served since the models started would have cost at Claude (Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 4.5) and OpenAI (GPT-5.5, GPT-5, GPT-5 nano) list prices, input and output separately. Prices are in `web/src/pricing.ts` with the date they were taken; caching and batch discounts are not counted.
+
 ## 0.1.14
 
 ### Changed

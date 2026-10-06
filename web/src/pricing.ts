@@ -1,0 +1,14 @@
+/** List prices in US dollars per million tokens, as published on this date. Check the vendors' pages before relying on them. */
+export const PRICES_AS_OF = '2026-10-06'
+
+export type Price = { vendor: 'Claude' | 'OpenAI'; model: string; in: number; out: number }
+
+export const PRICES: Price[] = [
+  { vendor: 'Claude', model: 'Fable 5.1', in: 10, out: 50 },
+  { vendor: 'Claude', model: 'Opus 5.5', in: 4, out: 20 },
+  { vendor: 'Claude', model: 'Sonnet 5.5', in: 2, out: 10 },
+  { vendor: 'Claude', model: 'Haiku 4.5', in: 1, out: 5 },
+  { vendor: 'OpenAI', model: 'GPT-5.5', in: 5, out: 30 },
+  { vendor: 'OpenAI', model: 'GPT-5', in: 1.25, out: 10 },
+  { vendor: 'OpenAI', model: 'GPT-5 nano', in: 0.05, out: 0.4 },
+]

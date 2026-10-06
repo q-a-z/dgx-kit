@@ -14,6 +14,7 @@ import { useStream } from './useStream'
 import { Home } from './views/Home'
 import { Settings } from './views/Settings'
 import { LibraryPage } from './views/Library'
+import { CostModal } from './views/CostModal'
 
 type Me = { auth_required: boolean; signed_in: boolean; readonly?: boolean; version?: string }
 const DEFAULTS: Layout = { model: MODEL_DEFAULTS, hardware: HW_DEFAULTS, panel: PANEL_DEFAULTS, stat: 'p95' }
@@ -54,6 +55,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
   const gwTitle = !g ? 'LiteLLM gateway: checking' : gwUp ? 'LiteLLM gateway: answering' : `LiteLLM gateway: ${g.auth === 'rejected' ? 'rejects the key' : g.problem ?? 'not answering'}`
   const alerts = alertsFor(fleet.entries, latest, gateway.data ?? undefined, readonly)
   const [view, setView] = useView()
+  const [cost, setCost] = useState(false)
 
   return (
     <>
@@ -63,6 +65,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
         {route.page === 'home' && latest && <Health alerts={alerts} entries={fleet.entries} />}
         <span className="grow" />
         {route.page !== 'home' && <a className="navlink" href="#/">Back to dashboard</a>}
+        <button className="navlink" onClick={() => setCost(true)} title="What the tokens served so far would cost at Claude or OpenAI prices">$$$</button>
         <a className={`navlink ${route.page === 'library' ? 'on' : ''}`} href={href({ page: 'library' })}>Models on disk</a>
         <a className={`navlink ${route.page === 'settings' ? 'on' : ''}`} href={href({ page: 'settings' })}>Settings</a>
         {readonly && <span className="pill warn" title="DGX-kit won't start, stop, pull or download anything on this box">Read-only</span>}
@@ -71,6 +74,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
         {canSignOut && <button className="ghost" onClick={onSignOut}>Sign out</button>}
       </header>
       <Toasts />
+      <CostModal open={cost} onClose={() => setCost(false)} latest={latest} />
       <main>
         {route.page === 'settings' ? <Settings canChangePassword={canSignOut} tab={route.arg} />
           : route.page === 'library' ? <LibraryPage />
