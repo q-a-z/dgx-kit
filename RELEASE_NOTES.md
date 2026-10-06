@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.17
+
+### Added
+- **A "90% cached" column in the "$$$" table.** It prices the same tokens with 90% of the input read from the provider's cache at its cache-read price (`cached` in `web/src/pricing.ts`), the case for agents that resend a long shared prefix. The share is `CACHE_SHARE` in the same file; the other columns still pay full price for every input token.
+
 ## 0.1.16
 
 ### Fixed
