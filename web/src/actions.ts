@@ -40,7 +40,7 @@ export function useModelActions(entry: Entry, readonly: boolean, onChanged: () =
       body: 'Clients can no longer reach it through the gateway. It keeps running, and Publish puts it back.' }))) return false
     return call(on ? 'Publishing' : 'Unpublishing', `/api/models/${q}/publish`, 'POST', false, { publish: on })
   }
-  const download = () => call('Starting download', `/api/models/${q}/download`, 'POST', false)
+  const download = () => call('Starting download', `${root}/download`, 'POST', false)
   const cancel = () => {
     const repo = entry.download?.repo
     return repo ? call('Cancelling', `/api/downloads/${repo}`, 'DELETE', false) : Promise.resolve(false)

@@ -2,6 +2,14 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.13
+
+### Changed
+- Version bump. Everything in 0.1.12 below is released; new changes are listed here from now on.
+
+### Fixed
+- **The Download button of a decision model (Laya, Lev, Bekko) answered "not found".** It called the route for ordinary models instead of the service's own. It now starts the download, and shows its progress.
+
 ## 0.1.12
 
 ### Changed
