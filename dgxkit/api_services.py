@@ -20,13 +20,25 @@ def service(request: Request, name: str) -> DecisionService:
         raise HTTPException(404, "no such service")
     s = request.app.state.services
     if getattr(s, name, None) is None:  # made on first use; tests put fakes here
-        setattr(s, name, SERVICES[name](s.state_dir, s.models_root, s.images))
+        setattr(s, name, SERVICES[name](s.state_dir, s.models_root, s.images, downloader=s.downloader))
     return getattr(s, name)
 
 
 @router.get("")
 async def services(request: Request):
     return [await asyncio.to_thread(service(request, n).status) for n in SERVICES]
+
+
+@router.post("/{name}/download", status_code=202)
+async def download(name: str, request: Request):
+    """Fetch everything this service needs that isn't on the box (its files, then its image) without starting it."""
+    s, svc = request.app.state.services, service(request, name)
+    try:
+        out = svc.start_download()
+    except Problems as e:
+        raise HTTPException(409, {"problems": e.problems})
+    s.log("download", name)
+    return out
 
 
 @router.post("/{name}/start")

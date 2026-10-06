@@ -11,6 +11,8 @@ multilingual, typed-decisions) are read from a folder of the models directory, n
 """
 from __future__ import annotations
 
+import asyncio
+import fnmatch
 import json
 import os
 import secrets
@@ -22,6 +24,7 @@ from pathlib import Path
 import yaml
 
 from .control import port_free, started_at
+from .downloader import MARKER
 
 NAME = "dgxkit-laya"
 LABEL = "dgxkit.service"
@@ -51,6 +54,19 @@ class Problems(Exception):
         self.problems = problems
 
 
+def has_checkpoint(folder: Path, sub: str) -> bool:
+    """A Laya checkpoint is there when its config and its weights are, and its folder isn't marked as still downloading."""
+    d = folder / sub if sub else folder
+    return (d / "rl_agent_config.json").is_file() and (d / "model.safetensors").exists() and not (folder / MARKER).exists()
+
+
+def repo_bytes(repo: str, ignore: list[str] | None = None, token: str | None = None) -> int:
+    """How many bytes a download of this Hugging Face repo is (minus the files that match `ignore`)."""
+    from huggingface_hub import HfApi
+    info = HfApi(token=token).model_info(repo, files_metadata=True)
+    return sum((s.size or 0) for s in (info.siblings or []) if not any(fnmatch.fnmatch(s.rfilename, g) for g in (ignore or [])))
+
+
 def find_checkpoints(models_root: str) -> tuple[str | None, list[str]]:
     """The folder under the models directory that holds Laya checkpoints, and which ones it has.
 
@@ -65,7 +81,7 @@ def find_checkpoints(models_root: str) -> tuple[str | None, list[str]]:
         if dirpath.count("/") - base >= MAX_DEPTH:
             dirnames[:] = []
         if "rl_agent_config.json" in filenames or any((Path(dirpath) / sub / "rl_agent_config.json").is_file() for _, sub in CHECKPOINTS if sub):
-            have = [name for name, sub in CHECKPOINTS if (Path(dirpath) / sub / "rl_agent_config.json").is_file()]
+            have = [name for name, sub in CHECKPOINTS if has_checkpoint(Path(dirpath), sub)]
             if len(have) > len(best[1]):
                 best = (dirpath, have)
             dirnames[:] = []  # the checkpoints are inside; nothing below is another bundle
@@ -106,7 +122,7 @@ class DecisionService:
     expose_default = True
     needs_bytes = 0  # memory it wants free to start on the GPU (0: no check)
 
-    def __init__(self, state_dir: str, models_root: str, images, docker=None, health=None, meminfo=None):
+    def __init__(self, state_dir: str, models_root: str, images, docker=None, health=None, meminfo=None, downloader=None, sizer=None):
         self.file = Path(state_dir) / f"{self.name}.yaml"
         self.key_file = Path(state_dir) / f"{self.name}.key"
         self.models_root = models_root
@@ -114,6 +130,10 @@ class DecisionService:
         self._docker = docker  # tests give a fake; otherwise the image manager's client
         self._health = health or self._ask_health
         self._meminfo = meminfo or read_meminfo
+        self.downloader = downloader  # the app's Downloader; without one the service can't fetch its files
+        self._sizer = sizer or (lambda repo, ignore: repo_bytes(repo, ignore, getattr(self.downloader, "token", None)))
+        self.setup: dict | None = None  # the download-and-build job: {state, step, repo, error}
+        self._setup_task = None
         self.error: str | None = None  # why the last start didn't happen (a failed build, for one)
         self._waiter: threading.Thread | None = None
 
@@ -179,7 +199,7 @@ class DecisionService:
         """The folder the checkpoints are in, and which of them it has."""
         chosen = self.config()["dir"]
         if chosen:
-            have = [name for name, sub in CHECKPOINTS if (Path(chosen) / sub / "rl_agent_config.json").is_file()]
+            have = [name for name, sub in CHECKPOINTS if has_checkpoint(Path(chosen), sub)]
             return (chosen if have else None), have
         return find_checkpoints(self.models_root)
 
@@ -190,7 +210,13 @@ class DecisionService:
         return [c for c in have if c in picked] if picked else have
 
     def missing(self) -> str:
-        return "No Laya checkpoint found under the models folder (a folder with rl_agent_config.json). Download convaiinnovations/laya there."
+        return "No Laya checkpoint found under the models folder (a folder with rl_agent_config.json). Press Download to fetch convaiinnovations/laya (about 2.2 GB) there."
+
+    def next_step(self) -> dict | None:
+        """The next repo to fetch for this service to have everything it needs, or None: {repo, local_dir | cache_dir, ignore}."""
+        if self.checkpoints()[0]:
+            return None
+        return {"repo": "convaiinnovations/laya", "local_dir": str(Path(self.models_root) / "laya")}
 
     def env(self, cfg: dict) -> dict:
         chosen = self.selected()
@@ -255,10 +281,16 @@ class DecisionService:
         health = self._health(cfg["port"]) if c is not None and c.status == "running" else None
         job = self.images.jobs.get(self.build)
         building = bool(job and job.state == "running")
+        dl = self.downloader.jobs.get(self.setup["repo"]) if self.downloader and self.setup and self.setup.get("repo") else None
+        failed = bool(self.setup and self.setup["state"] == "failed")
         if building:
             state = "preparing"
+        elif self.setting_up():
+            state = "paused" if dl is not None and dl.state == "paused" else "downloading"
+        elif failed and c is None:
+            state = "failed"
         elif c is None:
-            state = "stopped"
+            state = "stopped" if folder else "missing"
         elif c.status == "running":
             state = "running" if health else "starting"
         elif c.status == "created":
@@ -275,7 +307,10 @@ class DecisionService:
             "needs_bytes": self.needs_bytes or None,
             "image": tag, "image_ready": self.image_current(),
             "build": job.view() if job and job.state in ("running", "failed") else None,
-            "error": self.error, "problems": self.problems() if state in ("stopped", "exited") else [],
+            "error": self.error or (self.setup["error"] if failed else None),
+            "download": dl.progress() if dl is not None else None,
+            "setup": {k: self.setup[k] for k in ("state", "step", "repo")} if self.setup else None,
+            "problems": self.problems() if state in ("stopped", "exited", "missing") else [],
         }
 
     def _tag(self) -> str:
@@ -291,6 +326,59 @@ class DecisionService:
             return (self.docker.images.get(self._tag()).labels or {}).get("dgxkit.build") == BUILDS[self.build]["args"]["REV"]
         except Exception:  # the label can't be read: don't rebuild what may be fine
             return True
+
+    # ---- downloading what it needs, and setting it up
+
+    def setting_up(self) -> bool:
+        return bool(self.setup and self.setup["state"] == "running")
+
+    def ready(self) -> bool:
+        """Everything is on the box: its files, and its image."""
+        return bool(self.checkpoints()[0]) and self.image_current()
+
+    def start_download(self) -> dict:
+        """Fetch what is missing and build the image, in the background (it needs the app's event loop).
+        It doesn't start the model."""
+        if self.downloader is None:
+            raise Problems(["Downloads aren't available here."])
+        if self.setting_up():
+            raise Problems(["Already downloading."])
+        if self.ready():
+            raise Problems([f"{self.title} is already downloaded and set up."])
+        self.error = None
+        self._setup_task = asyncio.get_running_loop().create_task(self._setup())
+        return {"downloading": True}
+
+    async def _setup(self) -> None:
+        self.setup = {"state": "running", "step": 0, "repo": None, "error": None}
+        try:
+            for _ in range(4):  # a repo can name the next one it needs (Lev's adapter names its backbone)
+                step = self.next_step()
+                if not step:
+                    break
+                self.setup.update(repo=step["repo"], step=self.setup["step"] + 1)
+                total = await asyncio.to_thread(self._sizer, step["repo"], step.get("ignore"))
+                job = await self.downloader.start(step["repo"], total, ignore_patterns=step.get("ignore"),
+                                                  cache_dir=step.get("cache_dir"), local_dir=step.get("local_dir"))
+                while job.state in ("queued", "running", "paused"):
+                    await asyncio.sleep(1)
+                if job.state == "cancelled":
+                    self.setup.update(state="cancelled", repo=None)
+                    return
+                if job.state != "done":
+                    raise RuntimeError(job.error or "the download failed")
+            self.setup.update(repo=None)
+            if not self.image_current():
+                job = self.images.jobs.get(self.build)
+                if not (job and job.state == "running"):
+                    self.images.start_build(self.build)
+                while (job := self.images.jobs.get(self.build)) and job.state == "running":
+                    await asyncio.sleep(2)
+                if job is None or job.state != "done":
+                    raise RuntimeError(f"the image didn't build: {job.error if job else 'no build started'}")
+            self.setup.update(state="done")
+        except Exception as e:  # shown on the panel, with a Download button to try again
+            self.setup.update(state="failed", error=str(e))
 
     def start(self) -> dict:
         """Start it, building the image first when this box hasn't got it; that part runs in the background."""

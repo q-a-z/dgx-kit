@@ -216,7 +216,7 @@ def test_readonly_mode_blocks_everything_that_changes_the_box(tmp_path, monkeypa
                              ("post", "/api/models/llama/download"), ("delete", "/api/models/llama"),
                              ("post", "/api/images/vllm/pull"), ("post", "/api/gateway/sync"),
                              ("post", "/api/images/clean"), ("post", "/api/system/firmware/check"), ("post", "/api/system/update"),
-                             ("post", "/api/services/laya/start"), ("post", "/api/services/laya/stop"), ("put", "/api/services/laya")]:
+                             ("post", "/api/services/laya/start"), ("post", "/api/services/laya/stop"), ("post", "/api/services/laya/download"), ("put", "/api/services/laya")]:
             assert getattr(client, method)(path).status_code == 403, path
         assert s.runner.started == [] and s.gateway.synced == []
         assert client.get("/api/models").status_code == 200
@@ -680,6 +680,13 @@ class FakeLaya:
 
     preparing = False
 
+    def start_download(self):
+        from dgxkit.laya import Problems
+        if self.problems:
+            raise Problems(self.problems)
+        self.calls.append("download")
+        return {"downloading": True}
+
     def stop(self):
         self.calls.append("stop")
         return True
@@ -714,6 +721,12 @@ def test_the_laya_service_has_status_start_stop_logs_key_and_a_test(env):
     r = client.post("/api/services/laya/start")
     assert r.status_code == 409 and r.json()["detail"]["problems"] == ["No Laya checkpoint found"]
     assert client.post("/api/services/laya/stop").json() == {"stopped": True}
+    fake.problems = ["Laya is already downloaded and set up."]
+    r = client.post("/api/services/laya/download")
+    assert r.status_code == 409 and r.json()["detail"]["problems"] == fake.problems
+    fake.problems = None
+    r = client.post("/api/services/laya/download")
+    assert r.status_code == 202 and r.json() == {"downloading": True} and fake.calls[-1] == "download"
     fake.problems, fake.preparing = None, False
     assert client.post("/api/services/laya/restart").status_code == 200 and fake.calls[-2:] == ["stop", "start"]
     assert client.put("/api/services/laya", json={"device": "cpu", "port": 8300, "checkpoints": ["english"]}).json() == {"device": "cpu", "port": 8300, "dir": None, "checkpoints": ["english"]}

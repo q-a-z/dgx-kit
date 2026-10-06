@@ -44,6 +44,8 @@ class Job:
     dest: Path
     allow_patterns: list[str] | None = None
     revision: str | None = None
+    ignore_patterns: list[str] | None = None
+    cache_dir: str | None = None  # download into a Hugging Face cache folder (hub/models--org--name) instead of a plain folder
     state: str = "queued"  # queued | running | paused | done | failed | cancelled
     error: str | None = None
     started: float = field(default_factory=time.time)
@@ -70,21 +72,26 @@ class Downloader:
         self.jobs: dict[str, Job] = {}
 
     async def start(self, repo: str, total_bytes: int, allow_patterns: list[str] | None = None,
-                    revision: str | None = None) -> Job:
-        dest = Path(model_dir(self.models_root, repo))
+                    revision: str | None = None, ignore_patterns: list[str] | None = None,
+                    cache_dir: str | None = None, local_dir: str | None = None) -> Job:
+        """Fetch a repo: into its own folder under the models folder, or into `local_dir`, or into a Hugging Face cache."""
+        if cache_dir:
+            dest = Path(cache_dir) / "hub" / ("models--" + repo.replace("/", "--"))
+        else:
+            dest = Path(local_dir) if local_dir else Path(model_dir(self.models_root, repo))
         already = dir_bytes(dest) if dest.exists() else 0
         if not fits_on_disk(self.models_root, total_bytes, already):
             raise RuntimeError("not enough free disk for this download")
         dest.mkdir(parents=True, exist_ok=True)
         (dest / MARKER).touch()
-        job = Job(repo, total_bytes, dest, allow_patterns, revision)
+        job = Job(repo, total_bytes, dest, allow_patterns, revision, ignore_patterns, cache_dir)
         self.jobs[repo] = job
         asyncio.create_task(self._run(job))
         return job
 
     async def _run(self, job: Job):
         args = [sys.executable, "-m", "dgxkit.downloader", job.repo, str(job.dest), job.revision or "",
-                ",".join(job.allow_patterns or [])]
+                ",".join(job.allow_patterns or []), ",".join(job.ignore_patterns or []), job.cache_dir or ""]
         env = {**os.environ, **({"HF_TOKEN": self.token} if self.token else {})}
         job.state = "running"
         job.proc = await asyncio.create_subprocess_exec(*args, env=env, stderr=asyncio.subprocess.PIPE)
@@ -124,12 +131,13 @@ class Downloader:
         return True
 
 
-def _worker(repo: str, dest: str, revision: str, patterns: str):
+def _worker(repo: str, dest: str, revision: str, patterns: str, ignore: str = "", cache_dir: str = ""):
     from huggingface_hub import snapshot_download
 
-    snapshot_download(repo, local_dir=dest, revision=revision or None,
-                      allow_patterns=patterns.split(",") if patterns else None)
+    where = {"cache_dir": str(Path(cache_dir) / "hub")} if cache_dir else {"local_dir": dest}
+    snapshot_download(repo, revision=revision or None, allow_patterns=patterns.split(",") if patterns else None,
+                      ignore_patterns=ignore.split(",") if ignore else None, **where)
 
 
 if __name__ == "__main__":
-    _worker(*sys.argv[1:5])
+    _worker(*sys.argv[1:7])

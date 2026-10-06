@@ -2,6 +2,15 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.12 (in progress)
+
+### Added
+- **A Download button for each decision model.** Laya, Lev and Bekko each get their own: one press fetches everything that model needs and sets it up, and starts nothing. It downloads the model's repos in order (for Lev, the adapter and then the Qwen3.5-4B backbone the adapter names; for Bekko, without its 1.4 GB browser model), shows the progress with pause and cancel like any model download, then builds the model's image so that Start is immediate. A model that isn't downloaded shows **Not downloaded** with a download arrow beside it in the map and the list and a Download button in its panel; a failed download says why and Download continues from where it stopped. The service API has `POST /api/services/{name}/download`, and a service's status carries `download` and `setup`.
+- The downloader can fill a Hugging Face cache folder and skip files, which Lev and Bekko need.
+
+### Fixed
+- A Laya folder that is still downloading, or has a config without its weights, is no longer taken for a ready checkpoint.
+
 ## 0.1.11
 
 ### Changed

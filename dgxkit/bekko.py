@@ -32,13 +32,17 @@ class BekkoService(DecisionService):
         ok = bool(snap and (snap / "inference_v0.py").is_file() and (snap / "0_BekkoInference" / "model.safetensors").exists())
         return (str(cache) if ok else None), (["bekko-system-one-v0-400m"] if ok else [])
 
+    def next_step(self):
+        if self.checkpoints()[0]:
+            return None
+        return {"repo": REPO, "cache_dir": str(self.cache()), "ignore": ["onnx_browser/*"]}  # the browser model is 1.4 GB a server doesn't need
+
     def choices(self):
         _, have = self.checkpoints()
         return [{"name": "bekko-system-one-v0-400m", "about": "395M parameters, English", "found": bool(have)}]
 
     def missing(self):
-        return (f"Bekko isn't on this box: put {REPO} in a Hugging Face cache under {self.cache()}/hub "
-                f"(huggingface_hub: snapshot_download('{REPO}', cache_dir='{self.cache()}/hub', ignore_patterns=['onnx_browser/*'])).")
+        return f"Bekko isn't on this box. Press Download to fetch {REPO} (about 1.5 GB) into a Hugging Face cache under {self.cache()}/hub."
 
     def env(self, cfg):
         return {"BEKKO_DEVICE": cfg["device"], "BEKKO_PORT": str(cfg["port"]), "BEKKO_API_KEY": self.key()}

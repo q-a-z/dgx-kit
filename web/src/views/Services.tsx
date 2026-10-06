@@ -6,6 +6,7 @@ import { stateText, stateTitle, STATE_TONE, type Entry } from '../fleet'
 import { select } from '../nav'
 import { toast } from '../toast'
 import { usePoll } from '../usePoll'
+import { DownloadProgress } from './Models'
 import { PullProgress } from './Other'
 
 type Result = { ms: number; model: string | null; jailbreak: number | null; topic: string | null }
@@ -61,6 +62,8 @@ export function ServicePanel({ entry, tab, setTab, readonly, onChanged }: {
       <p className="model-notes">{s.about}</p>
       {s.problems.map((p) => <p key={p} className="advice bad"><span aria-hidden>● </span>{p}</p>)}
       {s.error && <p className="advice bad"><span aria-hidden>● </span>{s.error}</p>}
+      {entry.download && <DownloadProgress d={entry.download} onChange={onChanged} />}
+      {s.setup?.state === 'running' && !entry.download && !s.build && <p className="muted small">Setting up…</p>}
       {s.build && <PullProgress job={s.build} />}
 
       <div className="tabs" role="tablist">
@@ -78,7 +81,7 @@ export function ServicePanel({ entry, tab, setTab, readonly, onChanged }: {
           <p className="muted small">Ask it with <code>POST /v1/systemone</code>{s.has_key ? ' and the key above' : ''}: a <code>state</code> (text or JSON) and typed <code>questions</code> (yes/no, choice, score){s.choices.length > 1 ? <>; <code>model</code> picks a checkpoint</> : null}.</p>
         </div>
       ) : (
-        <p className="empty-note">{s.state === 'preparing' ? 'Building its image; it starts by itself when that is done.' : s.state === 'starting' ? 'Loading the checkpoints.' : s.state === 'exited' ? 'It stopped on its own. The Logs tab says why; Start tries again.' : 'Stopped. Start it to ask it questions.'}</p>
+        <p className="empty-note">{s.state === 'missing' ? 'Not on this box yet. Press Download: it fetches what it needs and builds its image, and starts nothing.' : s.state === 'downloading' || s.state === 'paused' ? 'Downloading its files; then its image is built. It is not started.' : s.state === 'failed' ? 'The download failed (see above). Download tries again from where it stopped.' : s.state === 'preparing' ? 'Building its image; when that is done it is ready to start.' : s.state === 'starting' ? 'Loading the checkpoints.' : s.state === 'exited' ? 'It stopped on its own. The Logs tab says why; Start tries again.' : 'Stopped. Start it to ask it questions.'}</p>
       ))}
 
       {tab === 'settings' && (

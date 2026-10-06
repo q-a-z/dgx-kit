@@ -47,13 +47,23 @@ class LevService(DecisionService):
                   and base and (base / "config.json").is_file() and any(base.glob("*.safetensors")))
         return (str(cache) if ok else None), (["lev"] if ok else [])
 
+    def next_step(self):
+        cache = str(self.cache())
+        adapter = hub_snapshot(cache, REPO)
+        if not (adapter and (adapter / "lev_release.json").is_file() and (adapter / "adapter_model.safetensors").exists()):
+            return {"repo": REPO, "cache_dir": cache}
+        base = hub_snapshot(cache, self.base_repo())  # named by the adapter's manifest
+        if not (base and (base / "config.json").is_file() and any(base.glob("*.safetensors"))):
+            return {"repo": self.base_repo(), "cache_dir": cache}
+        return None
+
     def choices(self):
         _, have = self.checkpoints()
         return [{"name": "lev", "about": "adapter on Qwen3.5-4B, about 11 GiB", "found": bool(have)}]
 
     def missing(self):
-        return (f"Lev isn't on this box: put {REPO} and {self.base_repo()} in a Hugging Face cache under {self.cache()}/hub "
-                f"(huggingface_hub: snapshot_download(repo, cache_dir='{self.cache()}/hub') for each).")
+        return (f"Lev isn't on this box. Press Download to fetch {REPO} and {self.base_repo()} (about 9 GB) into a Hugging Face cache "
+                f"under {self.cache()}/hub.")
 
     def env(self, cfg):
         return {"LEV_DEVICE": cfg["device"], "LEV_PORT": str(cfg["port"]), "LEV_HOST": "0.0.0.0" if cfg["expose"] else "127.0.0.1"}

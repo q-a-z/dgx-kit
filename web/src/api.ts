@@ -185,5 +185,7 @@ export type Service = {
   /** What could be picked to run; one entry means there is nothing to pick. */
   choices: { name: string; about: string; found: boolean }[]
   has_key: boolean; can_expose: boolean; expose: boolean | null; needs_bytes: number | null
+  /** The transfer in progress, and the setup it belongs to (a download of a repo or two, then the image build). */
+  download: Download | null; setup: { state: string; step: number; repo: string | null } | null
   image: string; image_ready: boolean; build: ServiceJob | null; error: string | null; problems: string[]
 }

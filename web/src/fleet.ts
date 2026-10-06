@@ -92,7 +92,7 @@ export function useFleet(latest: Snapshot | null) {
       live: latest?.models[row.name] ?? row.live ?? undefined, download: dl(row.repo, row.draft_repo), memBytes: mem(row.name, true),
     })),
     ...(running.data ?? []).map((ext) => make({ name: ext.name, managed: false, ext, running: true, live: latest?.models[ext.name] ?? ext.live ?? undefined, memBytes: mem(ext.name, false) })),
-    ...(services.data ?? []).map((service) => make({ name: service.name, managed: true, service, running: service.state === 'running' || service.state === 'starting', memBytes: mem(service.name, true) })),
+    ...(services.data ?? []).map((service) => make({ name: service.name, managed: true, service, running: service.state === 'running' || service.state === 'starting', download: service.download ?? undefined, memBytes: mem(service.name, true) })),
   ]
   // A model can be live in the stream before the lists load.
   for (const [n, live] of Object.entries(latest?.models ?? {}))
