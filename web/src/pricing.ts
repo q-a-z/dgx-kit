@@ -1,6 +1,6 @@
 /** List prices in US dollars per million tokens, as published on this date. Check the vendors' pages before relying on them. */
-/** Share of input tokens assumed to be cache reads in the "with cache" column. */
-export const CACHE_SHARE = 0.9
+/** Shares of input tokens assumed to be cache reads, one extra column each. */
+export const CACHE_SHARES = [0.5, 0.9]
 export const PRICES_AS_OF = '2026-10-06'
 
 export type Price = { vendor: 'Claude' | 'OpenAI'; model: string; in: number; cached: number; out: number }

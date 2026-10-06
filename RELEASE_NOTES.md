@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.18
+
+### Added
+- **A "50% cached" column beside "90% cached" in the "$$$" table.** The shares are `CACHE_SHARES` in `web/src/pricing.ts`.
+
 ## 0.1.17
 
 ### Added
