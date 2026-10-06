@@ -50,8 +50,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 1. Get the package onto the Spark and unpack it:
 
    ```
-   tar xzf dgx-kit-0.1.11.tar.gz
-   cd dgx-kit-0.1.11
+   tar xzf dgx-kit-0.1.12.tar.gz
+   cd dgx-kit-0.1.12
    ```
 
 2. Look before you leap (changes nothing):
@@ -96,7 +96,7 @@ Enter, and restarts the service on the new code. For updating, the next section 
 ```
 dgx-kit update                      # fetch the latest from git and update
 dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
-dgx-kit update dgx-kit-0.1.11.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit update dgx-kit-0.1.12.tar.gz # from a package, a .tgz, or a GitHub .zip
 dgx-kit version                     # what is running
 ```
 
@@ -225,7 +225,7 @@ Measured on one DGX Spark with the GB10 vLLM 0.30 image, one model at a time (ru
 
 ## Laya, a decision model (and two spares: Lev and Bekko)
 
-[Laya](https://huggingface.co/convaiinnovations/laya) isn't a chat model. You give it a text (the *state*) and typed questions about it, and it answers each with calibrated probabilities in one forward pass: no text is generated, so there is nothing to parse and nothing to hallucinate. A question is a **choice** (one of several named options), a **score** (an ordered scale) or a **noul** (yes/no). It is a 421M-parameter encoder, about 1.6 GB in memory per checkpoint, and it ships three checkpoints in one Hugging Face repo, `convaiinnovations/laya`: **English** (the repo root), **multilingual** (`multilingual/`, 100+ languages) and **typed-decisions** (`typed-decisions/`, tuned for the typed-decision workflows). Download that repo into your models folder (for example `~/models/laya`); DGX-kit finds it by the `rl_agent_config.json` files and doesn't list it under **Models on disk**.
+[Laya](https://huggingface.co/convaiinnovations/laya) isn't a chat model. You give it a text (the *state*) and typed questions about it, and it answers each with calibrated probabilities in one forward pass: no text is generated, so there is nothing to parse and nothing to hallucinate. A question is a **choice** (one of several named options), a **score** (an ordered scale) or a **noul** (yes/no). It is a 421M-parameter encoder, about 1.6 GB in memory per checkpoint, and it ships three checkpoints in one Hugging Face repo, `convaiinnovations/laya`: **English** (the repo root), **multilingual** (`multilingual/`, 100+ languages) and **typed-decisions** (`typed-decisions/`, tuned for the typed-decision workflows). Press **Download** on its entry to fetch that repo (about 2.2 GB) into your models folder; or put it there yourself and DGX-kit finds it by the `rl_agent_config.json` files, and doesn't list it under **Models on disk**.
 
 It can't run on vLLM and can't sit behind the gateway, so it runs as its own container, but the dashboard lists it with the models: it has a block in the memory map and a row in the model list, shows how long it has been up and on which device, and has Restart, Stop and Logs. Its panel has **Test** (a sample question, timed), **copy** for its address and its API key, and in **Settings** a tick box for each checkpoint it found (English, multilingual, typed-decisions; only the ticked ones are loaded), the device and the port. The first **Start** builds its image (`dgx-kit/laya:gb10`, on the vLLM image DGX-kit already uses) and starts the server by itself afterwards. It listens on port 8200 and asks for a bearer key.
 
