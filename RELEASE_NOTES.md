@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.20
+
+### Changed
+- **The logo is in the dashboard's sand colors**, in the header, on the sign-in page and as the browser tab icon (`web/public/favicon.svg`), instead of green.
+
 ## 0.1.19
 
 ### Added
