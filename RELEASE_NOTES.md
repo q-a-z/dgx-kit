@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.23
+
+### Changed
+- **The tab icon has no frame.** Just the mark on a transparent background, larger in the tab; the unlit cores are a faded sand so it reads on light and dark tab bars. The home-screen icon keeps its dark tile (it needs a background).
+
 ## 0.1.22
 
 ### Fixed
