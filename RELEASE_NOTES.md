@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.21
+
+### Fixed
+- **The tab icon never showed.** The server answered every address that wasn't a known route, `/favicon.svg` included, with the dashboard page itself, so browsers got HTML instead of an icon. Real files in the page folder are now served as themselves. If your tab still shows the old icon after the update, reload with the cache cleared (browsers hold on to tab icons).
+
 ## 0.1.20
 
 ### Changed

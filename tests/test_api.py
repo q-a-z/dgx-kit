@@ -161,6 +161,7 @@ def page_dir(tmp_path, monkeypatch):
     (web / "assets").mkdir(parents=True)
     (web / "index.html").write_text("<title>DGX-kit</title>")
     (web / "assets" / "app.js").write_text("ok")
+    (web / "favicon.svg").write_text("<svg/>")
     monkeypatch.setenv("DGXKIT_WEB_DIR", str(web))
 
 
@@ -169,6 +170,9 @@ def test_page_is_served_without_hiding_api_404s(page_dir, env):
     assert "DGX-kit" in client.get("/").text
     assert "DGX-kit" in client.get("/models").text
     assert client.get("/assets/app.js").text == "ok"
+    icon = client.get("/favicon.svg")
+    assert icon.text == "<svg/>" and "svg" in icon.headers["content-type"]
+    assert "DGX-kit" in client.get("/../index.html").text
     assert client.get("/api/nope").status_code == 404
     assert client.post("/nope").status_code == 404
 

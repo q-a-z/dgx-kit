@@ -304,6 +304,10 @@ def create_app(services: Services | None = None) -> FastAPI:
             # Unknown API paths stay 404s; any other GET is the single-page app.
             if path.startswith("api/") or request.method != "GET":
                 raise HTTPException(404)
+            # A real file in the page folder (the tab icon) is served as itself.
+            f = (web / path).resolve()
+            if path and f.is_file() and f.is_relative_to(web.resolve()):
+                return FileResponse(f)
             return FileResponse(web / "index.html")
 
     return app
