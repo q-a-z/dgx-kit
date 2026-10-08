@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from './api'
 import { toast } from './toast'
+import { Logo } from './Logo'
 
 export function Login({ onDone, version }: { onDone: () => void; version?: string }) {
   const [pw, setPw] = useState('')
@@ -16,7 +17,7 @@ export function Login({ onDone, version }: { onDone: () => void; version?: strin
   }
   return (
     <form className="card login" onSubmit={submit}>
-      <h2>DGX-kit{version && <span className="ver">{/^\d/.test(version) ? `v${version}` : version}</span>}</h2>
+      <h2><Logo size={28} />DGX-kit{version && <span className="ver">{/^\d/.test(version) ? `v${version}` : version}</span>}</h2>
       <label>Admin password<input type="password" autoFocus value={pw} onChange={(e) => setPw(e.target.value)} /></label>
       {err && <p className="bad">{err}</p>}
       <button className="primary" type="submit" disabled={!pw}>Sign in</button>

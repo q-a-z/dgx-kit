@@ -4,6 +4,7 @@ import { Toasts } from './toast'
 import { useFleet, type Entry } from './fleet'
 import { alertsFor, type Alert } from './health'
 import { Login } from './Login'
+import { Logo } from './Logo'
 import { href, select, useRoute } from './nav'
 import { HW_DEFAULTS } from './tiles/hardwareTiles'
 import { useLayout, type Layout } from './tiles/layout'
@@ -60,7 +61,7 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
   return (
     <>
       <header>
-        <a className="brand" href="#/"><b>DGX</b>-kit{boxName && <span className="brand-gpu" title={boxTitle}>{boxName}</span>}{version && <span className="ver" title="DGX-kit version">{/^\d/.test(version) ? `v${version}` : version}</span>}</a>
+        <a className="brand" href="#/"><Logo /><b>DGX</b>-kit{boxName && <span className="brand-gpu" title={boxTitle}>{boxName}</span>}{version && <span className="ver" title="DGX-kit version">{/^\d/.test(version) ? `v${version}` : version}</span>}</a>
         {newer.data?.available && !readonly && <a className="pill warn" href={href({ page: 'settings', arg: 'system' })} title="A newer DGX-kit is on GitHub">Update {newer.data.latest?.version}</a>}
         {route.page === 'home' && latest && <Health alerts={alerts} entries={fleet.entries} />}
         <span className="grow" />

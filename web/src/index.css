@@ -762,3 +762,4 @@ table.cost td small { margin-left: 4px; }
 dialog.modal:has(table.cost) { width: min(760px, 94vw); }
 table.cost td:not(:first-child), table.cost th { white-space: nowrap; }
 table.cost td small { display: block; margin-left: 0; }
+.logo { vertical-align: -5px; margin-right: 8px; }

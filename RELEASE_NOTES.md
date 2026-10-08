@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.19
+
+### Added
+- **A logo.** A grid of GPU cores with a lit signal path through it, in NVIDIA green on black. It is the browser tab icon (replacing the placeholder one), sits beside the name in the header and tops the sign-in page. One drawing in two places: `web/public/favicon.svg` and `web/src/Logo.tsx`.
+
 ## 0.1.18
 
 ### Added
