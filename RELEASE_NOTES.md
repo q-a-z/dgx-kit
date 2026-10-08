@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.22
+
+### Fixed
+- **Safari showed no tab icon.** Safari doesn't take an SVG tab icon, so the page now also offers a 32 px PNG, a `favicon.ico` (which Safari asks for by default) and an `apple-touch-icon.png` for the home screen and bookmarks. Safari keeps tab icons in its own cache; if it still shows none, quit and reopen it once after the update.
+
 ## 0.1.21
 
 ### Fixed
