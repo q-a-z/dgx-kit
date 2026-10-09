@@ -113,7 +113,7 @@ function HfToken() {
   )
 }
 
-type SlotsConf = { enabled: boolean; quantum: number; active: boolean; owner: string | null; backend: string | null }
+type SlotsConf = { enabled: boolean; quantum: number; active: boolean; owner: string | null; backend: string | null; error: string | null }
 
 /** The GPU time slot switch and the slot length. The engines of waiting models are frozen in place (their cache and open
  *  streams survive), so this never restarts anything; it takes effect at once and is kept across dashboard restarts. */
@@ -139,6 +139,7 @@ function GpuSlots() {
         <small className="muted">2 s measured best on a DGX Spark: first tokens in well under a second, about 20% more output than without slots.</small>
       </label>
       {c.enabled && <p className="muted small">{c.active ? (c.owner ? `${c.owner} has the GPU now` : 'On; no model is busy') : 'On, but not running (read-only mode?)'}{c.backend ? ` · freezing via ${c.backend}` : ''}</p>}
+      {c.error && <p className="bad">▲ {c.error}</p>}
       {msg && <p className="bad">{msg}</p>}
     </section>
   )

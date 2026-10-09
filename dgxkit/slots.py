@@ -70,6 +70,7 @@ class SlotScheduler:
         self.freezer = Freezer(services.runner, services.root)
         self.owner: str | None = None
         self.since = 0.0
+        self.error: str | None = None  # the last failed tick, shown in Settings; cleared by the next good one
         self.task: asyncio.Task | None = None
 
     @property
@@ -95,28 +96,38 @@ class SlotScheduler:
     async def _run(self) -> None:
         ids: dict[str, str] = {}
         ids_at = 0.0
+        log.info("GPU slots on: %.1f s each", self.quantum)
         try:
             while True:
-                now = time.monotonic()
-                if now - ids_at >= 5 or not ids:  # which of our containers run (ids change on restart)
-                    st = await asyncio.to_thread(self.s.runner.status)
-                    ids = {n: c["id"] for n, c in st.items() if c["state"] == "running" and c.get("engine")}
-                    ids_at = now
-                live = self.s.sampler.latest["models"]
-                busy = [n for n in ids if ids[n] in self.freezer.frozen or has_work(live.get(n))]
-                if self.owner not in busy or now - self.since >= self.quantum:
-                    nxt = self._next(list(ids), busy)
-                    if nxt != self.owner:
-                        log.debug("slot %s -> %s", self.owner, nxt)
-                    self.owner, self.since = nxt, now
-                for n in ids:  # freeze first, then thaw: never two engines running
-                    if n != self.owner and n in busy:
-                        await asyncio.to_thread(self.freezer.set, ids[n], True)
-                for n in ids:
-                    if n == self.owner or n not in busy:
-                        await asyncio.to_thread(self.freezer.set, ids[n], False)
-                self.s.sampler.slots = {n: "running" if n == self.owner else "waiting" for n in ids
-                                        if n == self.owner or ids[n] in self.freezer.frozen}
+                try:
+                    now = time.monotonic()
+                    if now - ids_at >= 5 or not ids:  # which of our containers run (ids change on restart)
+                        st = await asyncio.to_thread(self.s.runner.status)
+                        ids = {n: c["id"] for n, c in st.items() if c["state"] == "running" and c.get("engine")}
+                        ids_at = now
+                    live = self.s.sampler.latest["models"]
+                    busy = [n for n in ids if ids[n] in self.freezer.frozen or has_work(live.get(n))]
+                    if self.owner not in busy or now - self.since >= self.quantum:
+                        nxt = self._next(list(ids), busy)
+                        if nxt != self.owner:
+                            log.debug("slot %s -> %s (busy %s)", self.owner, nxt, busy)
+                        self.owner, self.since = nxt, now
+                    for n in ids:  # freeze first, then thaw: never two engines running
+                        if n != self.owner and n in busy:
+                            await asyncio.to_thread(self.freezer.set, ids[n], True)
+                    for n in ids:
+                        if n == self.owner or n not in busy:
+                            await asyncio.to_thread(self.freezer.set, ids[n], False)
+                    self.s.sampler.slots = {n: "running" if n == self.owner else "waiting" for n in ids
+                                            if n == self.owner or ids[n] in self.freezer.frozen}
+                    self.error = None
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # Docker hiccup, a container restarting mid-tick: say so and keep going
+                    self.error = f"{type(e).__name__}: {str(e)[:160]}"
+                    log.warning("GPU slots: %s", self.error)
+                    ids = {}
+                    await asyncio.sleep(1)
                 await asyncio.sleep(self.tick)
         finally:
             self.s.sampler.slots = {}

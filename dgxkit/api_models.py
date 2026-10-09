@@ -1300,7 +1300,8 @@ class SlotsBody(BaseModel):
 def _slots_view(s) -> dict:
     sch = s.slots
     on = bool(sch and sch.running)
-    return {**s.settings.slots, "active": on, "owner": sch.owner if on else None, "backend": sch.freezer.backend if on else None}
+    return {**s.settings.slots, "active": on, "owner": sch.owner if on else None, "backend": sch.freezer.backend if on else None,
+            "error": sch.error if on else None}
 
 
 async def apply_slots(s) -> None:

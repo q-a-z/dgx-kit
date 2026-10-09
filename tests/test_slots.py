@@ -75,7 +75,7 @@ async def _rotation():
 
 def test_settings_switch_starts_and_stops_the_scheduler(env):
     client, s, _ = env
-    assert client.get("/api/settings/slots").json() == {"enabled": False, "quantum": 2.0, "active": False, "owner": None, "backend": None}
+    assert client.get("/api/settings/slots").json() == {"enabled": False, "quantum": 2.0, "active": False, "owner": None, "backend": None, "error": None}
     r = client.put("/api/settings/slots", json={"enabled": True, "quantum": 3}).json()
     assert r["enabled"] and r["quantum"] == 3.0 and r["active"] and s.slots.running
     assert client.put("/api/settings/slots", json={"quantum": 0.1}).status_code == 422
@@ -83,3 +83,19 @@ def test_settings_switch_starts_and_stops_the_scheduler(env):
     assert not r["enabled"] and not r["active"] and r["quantum"] == 3.0 and not s.slots.running
     assert s.settings.slots == {"enabled": False, "quantum": 3.0}
     assert [a["detail"] for a in client.get("/api/log").json() if a["action"] == "settings"] == ["GPU slots on, 3 s each", "GPU slots off, 3 s each"]
+
+
+def test_scheduler_survives_a_failing_tick():
+    asyncio.run(_failing_tick())
+
+
+async def _failing_tick():
+    class BrokenRunner(FakeRunner):
+        def status(self):
+            raise RuntimeError("docker down")
+    s = SimpleNamespace(runner=BrokenRunner({}), sampler=SimpleNamespace(latest={"models": {}}, slots={}), root="/nonexistent")
+    sch = SlotScheduler(s, quantum=0.1, tick=0.01)
+    sch.start()
+    await asyncio.sleep(0.03)
+    assert sch.running and sch.error == "RuntimeError: docker down"
+    await sch.stop()
