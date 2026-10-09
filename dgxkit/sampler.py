@@ -24,6 +24,7 @@ class Sampler:
         self._subscribers: set[asyncio.Queue] = set()
         self._tasks: list[asyncio.Task] = []
         self._engine_tasks: dict[str, asyncio.Task] = {}
+        self.slots: dict[str, str] = {}  # set by the slot scheduler: model -> running | waiting
 
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=4)
@@ -50,13 +51,20 @@ class Sampler:
 
     async def _engine_loop(self, name: str, adapter):
         while True:
+            if self.slots.get(name) == "waiting":  # frozen for another model's slot: can't answer, and isn't down
+                prev = self.latest["models"].get(name, {})
+                self.latest["models"][name] = {**prev, "slot": "waiting", "decode_tps": 0.0, "prefill_tps": 0.0}
+                await asyncio.sleep(self.interval)
+                continue
             try:
                 stats = await adapter.scrape()
                 first = not self.latest["models"].get(name, {}).get("was_up")
-                self.latest["models"][name] = {"up": True, "was_up": True, **adapter.static, **stats}
+                self.latest["models"][name] = {"up": True, "was_up": True, **adapter.static, **stats, "slot": self.slots.get(name)}
                 if first and self.on_up:
                     self.on_up(name)
             except Exception as e:  # a dead server shows as down, not as a crash; was_up stays, so "never answered yet" reads as still starting
+                if self.slots.get(name) == "waiting":  # it froze while we were asking
+                    continue
                 prev = self.latest["models"].get(name, {})
                 self.latest["models"][name] = {**prev, "up": False, "error": type(e).__name__}
             await asyncio.sleep(self.interval)

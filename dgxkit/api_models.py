@@ -1292,6 +1292,43 @@ async def set_update_check(body: UpdateCheckBody, request: Request):
     return {"frequency": value}
 
 
+class SlotsBody(BaseModel):
+    enabled: bool | None = None
+    quantum: float | None = None
+
+
+def _slots_view(s) -> dict:
+    sch = s.slots
+    on = bool(sch and sch.running)
+    return {**s.settings.slots, "active": on, "owner": sch.owner if on else None, "backend": sch.freezer.backend if on else None}
+
+
+async def apply_slots(s) -> None:
+    """Start or stop the GPU slot scheduler so it matches Settings (at boot and after a change)."""
+    from .slots import SlotScheduler
+    if s.slots and s.slots.running:
+        await s.slots.stop()
+    conf = s.settings.slots
+    if conf["enabled"] and os.environ.get("DGXKIT_READONLY") != "1":
+        s.slots = SlotScheduler(s, conf["quantum"])
+        s.slots.start()
+
+
+@router.get("/settings/slots")
+async def slots_state(request: Request):
+    """GPU time slots: the setting, and whether the scheduler runs and which model has the GPU now."""
+    return _slots_view(svc(request))
+
+
+@router.put("/settings/slots")
+async def set_slots(body: SlotsBody, request: Request):
+    s = svc(request)
+    conf = s.settings.set_slots(body.enabled, body.quantum)
+    await apply_slots(s)
+    s.log("settings", f"GPU slots {'on' if conf['enabled'] else 'off'}, {conf['quantum']:g} s each")
+    return _slots_view(s)
+
+
 @router.post("/system/update/check")
 async def update_check(request: Request):
     from .app import app_version

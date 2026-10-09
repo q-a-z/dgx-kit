@@ -122,6 +122,22 @@ class Settings:
             f.write(token.strip())
 
     @property
+    def slots(self) -> dict:
+        """GPU time slots: whether running models take turns on the GPU, and how long a turn is (seconds)."""
+        v = self._load().get("slots") or {}
+        return {"enabled": bool(v.get("enabled")), "quantum": float(v.get("quantum") or 2.0)}
+
+    def set_slots(self, enabled: bool | None = None, quantum: float | None = None) -> dict:
+        cur = self.slots
+        if quantum is not None and not 0.5 <= quantum <= 60:
+            raise ValueError("a slot is 0.5 to 60 seconds")
+        data = self._load()
+        data["slots"] = {"enabled": cur["enabled"] if enabled is None else bool(enabled),
+                         "quantum": cur["quantum"] if quantum is None else float(quantum)}
+        self._save(data)
+        return self.slots
+
+    @property
     def slo(self) -> dict[str, float]:
         """Latency targets in seconds for SLO goodput (ttft, itl, tpot, e2e)."""
         from .engines.base import DEFAULT_SLO

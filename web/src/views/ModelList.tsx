@@ -51,6 +51,7 @@ export function ModelList({ switcher, history, entries, orphans, alerts, readonl
                 <span><b>{fmtNum(l.decode_tps, (l.decode_tps ?? 0) < 100 ? 1 : 0)}</b> tok/s</span>
                 {l.ttft_p95_s != null && <span>p95 <b>{fmtNum(l.ttft_p95_s * 1000)}</b> ms</span>}
                 <span className={(l.waiting ?? 0) > 0 ? 'warn' : ''}>{(l.waiting ?? 0) > 0 && '▲ '}queue <b>{fmtNum(l.waiting ?? 0)}</b></span>
+                {l.slot && <span className={l.slot === 'waiting' ? 'muted' : ''} title={l.slot === 'waiting' ? 'Frozen until its GPU slot; its cache and streams are kept' : 'Has the GPU now'}>{l.slot === 'waiting' ? '○ waiting' : '● GPU'}</span>}
                 {(l.kv_used_pct ?? 0) >= KV_WARN && <span className="warn">▲ KV <b>{fmtNum(l.kv_used_pct)}</b>%</span>}
                 <span className="ispark"><Spark times={times} values={h.map((s) => (s.models[e.name]?.decode_tps as number | undefined) ?? null)} height={18} label="Decode" fmt={(v) => `${fmtNum(v, 1)} tok/s`} /></span>
               </div>
