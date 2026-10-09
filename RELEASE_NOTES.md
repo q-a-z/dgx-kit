@@ -2,6 +2,12 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.24
+
+### Added
+- **GPU slots** (Settings, GPU slots): a switch so running models take turns on the GPU, each for a slot of a few seconds (2 s by default), instead of all decoding at once. The engines of waiting models are frozen in place, so their KV cache and open streams survive and resume mid-token; a model with nothing to do is never frozen, and a slot ends early when its model runs out of work. On a DGX Spark with three MoE models this gave about 20% more tokens per second, first tokens in well under a second, and an even share for every model. Nothing sits in the request path: clients, LiteLLM and the engine ports stay as they are.
+- The memory map and model list show **○ waiting** / **● GPU** next to a model's queue while slots are on; a waiting model's speed reads 0 and its card never goes grey.
+
 ## 0.1.23
 
 ### Changed
