@@ -103,10 +103,11 @@ class Updater:
         try:
             with httpx.Client(timeout=timeout, follow_redirects=True) as c:
                 raw = f"https://raw.githubusercontent.com/{slug}/main"
-                p = c.get(f"{raw}/pyproject.toml")
+                fresh = {"t": str(int(time.time()))}  # GitHub's CDN keeps raw files up to 5 min; a new query string skips its copy
+                p = c.get(f"{raw}/pyproject.toml", params=fresh)
                 p.raise_for_status()
                 out["version"] = parse_version(p.text)
-                n = c.get(f"{raw}/RELEASE_NOTES.md")
+                n = c.get(f"{raw}/RELEASE_NOTES.md", params=fresh)
                 out["notes"] = first_notes(n.text) if n.status_code == 200 else ""
                 g = c.get(f"https://api.github.com/repos/{slug}/commits/main", headers={"Accept": "application/vnd.github+json"})
                 if g.status_code == 200:
