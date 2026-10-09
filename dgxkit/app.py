@@ -56,6 +56,7 @@ class Services:
     laya: object = None  # the decision model services (dgxkit/laya.py, lev.py, bekko.py), made on first use; tests give fakes
     lev: object = None
     bekko: object = None
+    slots: object = None  # dgxkit.slots.SlotScheduler while GPU time slots are on
 
     def log(self, action: str, detail: str) -> None:
         self.actions.append({"t": time.time(), "action": action, "detail": detail})
@@ -175,6 +176,8 @@ def create_app(services: Services | None = None) -> FastAPI:
         s.sampler.on_up = lambda name: asyncio.create_task(quick_after_up(s, name))
         s.downloader.token = s.settings.hf_token or s.downloader.token
         s.sampler.start()
+        from .api_models import apply_slots
+        await apply_slots(s)
         setup = asyncio.create_task(first_run(s))
         from .api_models import watch_external
         watcher = asyncio.create_task(watch_external(s))
@@ -185,6 +188,8 @@ def create_app(services: Services | None = None) -> FastAPI:
         watcher.cancel()
         fw_watch.cancel()
         up_watch.cancel()
+        if s.slots:
+            await s.slots.stop()  # thaws every engine it froze
         await s.sampler.stop()
 
     app = FastAPI(title="DGX-kit", lifespan=lifespan)

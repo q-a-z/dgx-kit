@@ -33,6 +33,7 @@ export type System = {
 export type Live = {
   up: boolean
   was_up?: boolean  // has answered at least once since it was started
+  slot?: 'running' | 'waiting' | null  // GPU time slots on: has the GPU now, or frozen until its turn
   error?: string
   context_tokens?: number
   kv_pool_tokens?: number

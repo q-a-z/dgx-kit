@@ -71,6 +71,7 @@ export function MemoryMap({ switcher, latest, history, entries, orphans, alerts,
                     {l.ttft_p95_s != null && <span>p95 <b>{fmtNum(l.ttft_p95_s * 1000)}</b> ms</span>}
                     <span className={(l.waiting ?? 0) > 0 ? 'warn' : ''}>{(l.waiting ?? 0) > 0 && '▲ '}queue <b>{fmtNum(l.waiting ?? 0)}</b></span>
                     {l.kv_used_pct != null && <span className={l.kv_used_pct >= KV_WARN ? 'warn' : ''}>{l.kv_used_pct >= KV_WARN && '▲ '}KV <b>{fmtNum(l.kv_used_pct)}</b>%</span>}
+                    {l.slot && <span className={l.slot === 'waiting' ? 'muted' : ''} title={l.slot === 'waiting' ? 'Frozen until its GPU slot; its cache and streams are kept' : 'Has the GPU now'}>{l.slot === 'waiting' ? '○ waiting' : '● GPU'}</span>}
                   </div>
                 ) : <div className="bs"><span className={tone === 'bad' ? 'bad' : ''} title={stateTitle(e)}>{stateText(e)}</span></div>}
                 {on && (

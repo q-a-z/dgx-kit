@@ -228,7 +228,8 @@ class DockerRunner:
 
     def status(self) -> dict[str, dict]:
         try:
-            return {c.labels[LABEL]: {"state": c.status, "port": int(c.labels.get("dgxkit.port", 0)), "id": c.id,
+            # A container the slot scheduler froze is paused to Docker but serving to us: it resumes within a slot.
+            return {c.labels[LABEL]: {"state": "running" if c.status == "paused" else c.status, "port": int(c.labels.get("dgxkit.port", 0)), "id": c.id,
                                       "exit_code": ((getattr(c, "attrs", None) or {}).get("State") or {}).get("ExitCode"),
                                       "engine": c.labels.get("dgxkit.engine"),
                                       "started": started_at(c),

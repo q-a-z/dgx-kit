@@ -15,6 +15,7 @@ type Lib = Parameters<typeof Folders>[0]['lib']
 const TABS = [
   { id: 'system', label: 'System' },
   { id: 'gateway', label: 'Gateway' },
+  { id: 'slots', label: 'GPU slots' },
   { id: 'hf', label: 'Hugging Face' },
   { id: 'images', label: 'Engine images' },
   { id: 'folders', label: 'Model folders' },
@@ -46,6 +47,10 @@ export function Settings({ canChangePassword, tab }: { canChangePassword: boolea
         {current === 'gateway' && (<>
           <p className="muted lead">Clients use one OpenAI-compatible address for every running model.</p>
           <div className="bare-head"><GatewayCard /></div>
+        </>)}
+        {current === 'slots' && (<>
+          <p className="muted lead">Running models take turns on the GPU instead of all decoding at once. More tokens per second overall, and every model gets an even share.</p>
+          <GpuSlots />
         </>)}
         {current === 'hf' && (<>
           <p className="muted lead">A token lets DGX-kit look up and download gated or private models. Without one, public models still work.</p>
@@ -104,6 +109,37 @@ function HfToken() {
         <small className="muted">Kept in DGX-kit’s state folder, readable only by its service. It is checked with Hugging Face when you save.</small>
       </label>
       {msg && <p className={msg.bad ? 'bad' : 'muted'}>{msg.text}</p>}
+    </section>
+  )
+}
+
+type SlotsConf = { enabled: boolean; quantum: number; active: boolean; owner: string | null; backend: string | null }
+
+/** The GPU time slot switch and the slot length. The engines of waiting models are frozen in place (their cache and open
+ *  streams survive), so this never restarts anything; it takes effect at once and is kept across dashboard restarts. */
+function GpuSlots() {
+  const conf = usePoll<SlotsConf>('/api/settings/slots', 2000)
+  const [q, setQ] = useState<string | null>(null)
+  const [msg, setMsg] = useState<string | null>(null)
+  if (!conf.data) return <Pending error={conf.error} what="the GPU slot settings" />
+  const c = conf.data
+  const put = (json: object) => api<SlotsConf>('/api/settings/slots', { method: 'PUT', json })
+    .then((r) => { setQ(null); setMsg(null); toast(r.enabled ? `GPU slots on, ${r.quantum} s each.` : 'GPU slots off.'); conf.reload() })
+    .catch((e: Error) => setMsg(e.message))
+  const dirty = q != null && q.trim() !== '' && Number(q) !== c.quantum
+  return (
+    <section className="card wide">
+      <label className="check"><input type="checkbox" checked={c.enabled} onChange={(e) => put({ enabled: e.target.checked })} /> Running models take turns on the GPU</label>
+      <p className="muted small">On a GB10 every model shares one memory bus, so three models decoding together give fewer tokens per second than one at a time. With slots on, one model runs while the others that have work wait, frozen with their cache intact; a model with nothing to do is never frozen. Short slots keep first tokens quick; longer ones switch less.</p>
+      <label>Slot length, seconds
+        <span className="row">
+          <input className="grow" type="number" min={0.5} max={60} step={0.5} value={q ?? String(c.quantum)} onChange={(e) => setQ(e.target.value)} />
+          <button className="primary" disabled={!dirty} onClick={() => put({ quantum: Number(q) })}>Save</button>
+        </span>
+        <small className="muted">2 s measured best on a DGX Spark: first tokens in well under a second, about 20% more output than without slots.</small>
+      </label>
+      {c.enabled && <p className="muted small">{c.active ? (c.owner ? `${c.owner} has the GPU now` : 'On; no model is busy') : 'On, but not running (read-only mode?)'}{c.backend ? ` · freezing via ${c.backend}` : ''}</p>}
+      {msg && <p className="bad">{msg}</p>}
     </section>
   )
 }
