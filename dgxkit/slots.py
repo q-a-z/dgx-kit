@@ -8,6 +8,12 @@ work, and idle engines stay thawed so they keep answering health checks and acce
 
 Which engines are busy comes from the sampler's own /metrics scrape (running + waiting). A frozen engine
 can't be scraped, so it keeps the numbers it had, marked `slot: waiting`, and is still counted as busy.
+
+Slots only pay when a model decodes several requests in a turn, and every new request waits up to two
+slots for its first token, so they engage only once at least two models are busy and `min_requests`
+requests are in flight between them; below that the engines run concurrently as they would without
+the switch. The threshold has hysteresis (engage at the threshold, let go at half of it) so a load that
+hovers around it doesn't flap.
 """
 from __future__ import annotations
 
@@ -19,8 +25,12 @@ import time
 log = logging.getLogger("dgxkit.slots")
 
 
+def in_flight(live: dict | None) -> int:
+    return int((live.get("running") or 0) + (live.get("waiting") or 0)) if live and live.get("up") else 0
+
+
 def has_work(live: dict | None) -> bool:
-    return bool(live and live.get("up") and ((live.get("running") or 0) + (live.get("waiting") or 0)) > 0)
+    return in_flight(live) > 0
 
 
 class Freezer:
@@ -65,8 +75,9 @@ class Freezer:
 
 
 class SlotScheduler:
-    def __init__(self, services, quantum: float, tick: float = 0.25):
-        self.s, self.quantum, self.tick = services, quantum, tick
+    def __init__(self, services, quantum: float, min_requests: int = 4, tick: float = 0.25):
+        self.s, self.quantum, self.min_requests, self.tick = services, quantum, min_requests, tick
+        self.engaged = False  # under the threshold the engines run concurrently
         self.freezer = Freezer(services.runner, services.root)
         self.owner: str | None = None
         self.since = 0.0
@@ -107,6 +118,10 @@ class SlotScheduler:
                         ids_at = now
                     live = self.s.sampler.latest["models"]
                     busy = [n for n in ids if ids[n] in self.freezer.frozen or has_work(live.get(n))]
+                    load = sum(in_flight(live.get(n)) for n in busy)
+                    self.engaged = len(busy) >= 2 and load >= (self.min_requests if not self.engaged else max(1, self.min_requests // 2))
+                    if not self.engaged:
+                        busy = []  # everyone runs: the loop below thaws what is frozen and marks nothing
                     if self.owner not in busy or now - self.since >= self.quantum:
                         nxt = self._next(list(ids), busy)
                         if nxt != self.owner:

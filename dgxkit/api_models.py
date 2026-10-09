@@ -1295,13 +1295,14 @@ async def set_update_check(body: UpdateCheckBody, request: Request):
 class SlotsBody(BaseModel):
     enabled: bool | None = None
     quantum: float | None = None
+    min_requests: int | None = None
 
 
 def _slots_view(s) -> dict:
     sch = s.slots
     on = bool(sch and sch.running)
-    return {**s.settings.slots, "active": on, "owner": sch.owner if on else None, "backend": sch.freezer.backend if on else None,
-            "error": sch.error if on else None}
+    return {**s.settings.slots, "active": on, "engaged": bool(on and sch.engaged), "owner": sch.owner if on else None,
+            "backend": sch.freezer.backend if on else None, "error": sch.error if on else None}
 
 
 async def apply_slots(s) -> None:
@@ -1311,7 +1312,7 @@ async def apply_slots(s) -> None:
         await s.slots.stop()
     conf = s.settings.slots
     if conf["enabled"] and os.environ.get("DGXKIT_READONLY") != "1":
-        s.slots = SlotScheduler(s, conf["quantum"])
+        s.slots = SlotScheduler(s, conf["quantum"], conf["min_requests"])
         s.slots.start()
 
 
@@ -1324,9 +1325,9 @@ async def slots_state(request: Request):
 @router.put("/settings/slots")
 async def set_slots(body: SlotsBody, request: Request):
     s = svc(request)
-    conf = s.settings.set_slots(body.enabled, body.quantum)
+    conf = s.settings.set_slots(body.enabled, body.quantum, body.min_requests)
     await apply_slots(s)
-    s.log("settings", f"GPU slots {'on' if conf['enabled'] else 'off'}, {conf['quantum']:g} s each")
+    s.log("settings", f"GPU slots {'on' if conf['enabled'] else 'off'}, {conf['quantum']:g} s each from {conf['min_requests']} requests")
     return _slots_view(s)
 
 

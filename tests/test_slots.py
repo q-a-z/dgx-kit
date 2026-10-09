@@ -58,7 +58,7 @@ async def _rotation():
     live["a"] = {"up": True, "running": 2}
     live["b"] = {"up": True, "running": 0, "waiting": 0}
     live["c"] = {"up": True, "running": 1}
-    sch = SlotScheduler(s, quantum=0.1, tick=0.01)
+    sch = SlotScheduler(s, quantum=0.1, min_requests=1, tick=0.01)
     sch.start()
     await asyncio.sleep(0.03)
     assert sch.owner == "a" and sampler.slots == {"a": "running", "c": "waiting"}  # b idle: left alone
@@ -66,23 +66,24 @@ async def _rotation():
     await asyncio.sleep(0.1)  # quantum over: c's turn, a frozen (frozen before c is thawed)
     assert sch.owner == "c" and runner.paused[-2:] == [("aaa", True), ("ccc", False)]
     assert sampler.slots == {"a": "waiting", "c": "running"}
-    live["c"] = {"up": True, "running": 0, "waiting": 0}  # c ran out of work: back to a at once, c thawed and idle
+    live["c"] = {"up": True, "running": 0, "waiting": 0}  # c ran out of work: a is the only busy model, so nobody is frozen
     await asyncio.sleep(0.03)
-    assert sch.owner == "a" and sampler.slots == {"a": "running"} and runner.paused[-1] == ("aaa", False)
+    assert not sch.engaged and sch.owner is None and sampler.slots == {} and runner.paused[-1] == ("aaa", False)
     await sch.stop()
     assert not sch.running and sch.owner is None and sampler.slots == {} and sch.freezer.frozen == set()
 
 
 def test_settings_switch_starts_and_stops_the_scheduler(env):
     client, s, _ = env
-    assert client.get("/api/settings/slots").json() == {"enabled": False, "quantum": 2.0, "active": False, "owner": None, "backend": None, "error": None}
-    r = client.put("/api/settings/slots", json={"enabled": True, "quantum": 3}).json()
-    assert r["enabled"] and r["quantum"] == 3.0 and r["active"] and s.slots.running
+    assert client.get("/api/settings/slots").json() == {"enabled": False, "quantum": 2.0, "min_requests": 4, "active": False, "engaged": False, "owner": None, "backend": None, "error": None}
+    r = client.put("/api/settings/slots", json={"enabled": True, "quantum": 3, "min_requests": 6}).json()
+    assert r["enabled"] and r["quantum"] == 3.0 and r["min_requests"] == 6 and r["active"] and s.slots.running
     assert client.put("/api/settings/slots", json={"quantum": 0.1}).status_code == 422
+    assert client.put("/api/settings/slots", json={"min_requests": 0}).status_code == 422
     r = client.put("/api/settings/slots", json={"enabled": False}).json()
     assert not r["enabled"] and not r["active"] and r["quantum"] == 3.0 and not s.slots.running
-    assert s.settings.slots == {"enabled": False, "quantum": 3.0}
-    assert [a["detail"] for a in client.get("/api/log").json() if a["action"] == "settings"] == ["GPU slots on, 3 s each", "GPU slots off, 3 s each"]
+    assert s.settings.slots == {"enabled": False, "quantum": 3.0, "min_requests": 6}
+    assert [a["detail"] for a in client.get("/api/log").json() if a["action"] == "settings"] == ["GPU slots on, 3 s each from 6 requests", "GPU slots off, 3 s each from 6 requests"]
 
 
 def test_scheduler_survives_a_failing_tick():
@@ -98,4 +99,31 @@ async def _failing_tick():
     sch.start()
     await asyncio.sleep(0.03)
     assert sch.running and sch.error == "RuntimeError: docker down"
+    await sch.stop()
+
+
+def test_under_the_threshold_everyone_runs_concurrently():
+    asyncio.run(_threshold())
+
+
+async def _threshold():
+    runner = FakeRunner({"a": "aaa", "b": "bbb"})
+    sampler = SimpleNamespace(latest={"models": {}}, slots={})
+    s = SimpleNamespace(runner=runner, sampler=sampler, root="/nonexistent")
+    live = sampler.latest["models"]
+    live["a"] = {"up": True, "running": 1}
+    live["b"] = {"up": True, "running": 1}
+    sch = SlotScheduler(s, quantum=0.1, min_requests=4, tick=0.01)
+    sch.start()
+    await asyncio.sleep(0.03)
+    assert not sch.engaged and sch.owner is None and runner.paused == [] and sampler.slots == {}  # 2 in flight: concurrent
+    live["a"] = {"up": True, "running": 3}
+    await asyncio.sleep(0.03)
+    assert sch.engaged and sch.owner == "a" and runner.paused == [("bbb", True)]  # 4 in flight: slots engage
+    live["a"] = {"up": True, "running": 1}
+    await asyncio.sleep(0.03)
+    assert sch.engaged  # 2 in flight: still above half the threshold, keeps going (hysteresis)
+    live["a"] = {"up": True, "running": 0, "waiting": 0}
+    await asyncio.sleep(0.03)
+    assert not sch.engaged and sch.owner is None and runner.paused[-1] == ("bbb", False) and sampler.slots == {}
     await sch.stop()

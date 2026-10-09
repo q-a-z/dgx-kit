@@ -2,6 +2,13 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.25
+
+### Changed
+- **GPU slots engage only under load.** Slots pay when a model decodes several requests in a turn, and every new request waits up to two slots for its first token, so with one request per model they only made streams bursty. Now they engage once at least two models are busy and a set number of requests (4 by default, Settings, GPU slots) are in flight between them; under that the engines run concurrently as before. The card says which it is doing.
+- The update check skips GitHub's raw-file cache, so **Check now** sees a new version right after it is pushed.
+- The slot scheduler survives a failing tick (Docker busy, a container restarting) and shows the error on the card.
+
 ## 0.1.24
 
 ### Added

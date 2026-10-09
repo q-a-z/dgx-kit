@@ -113,20 +113,22 @@ function HfToken() {
   )
 }
 
-type SlotsConf = { enabled: boolean; quantum: number; active: boolean; owner: string | null; backend: string | null; error: string | null }
+type SlotsConf = { enabled: boolean; quantum: number; min_requests: number; active: boolean; engaged: boolean; owner: string | null; backend: string | null; error: string | null }
 
 /** The GPU time slot switch and the slot length. The engines of waiting models are frozen in place (their cache and open
  *  streams survive), so this never restarts anything; it takes effect at once and is kept across dashboard restarts. */
 function GpuSlots() {
   const conf = usePoll<SlotsConf>('/api/settings/slots', 2000)
   const [q, setQ] = useState<string | null>(null)
+  const [m, setM] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   if (!conf.data) return <Pending error={conf.error} what="the GPU slot settings" />
   const c = conf.data
   const put = (json: object) => api<SlotsConf>('/api/settings/slots', { method: 'PUT', json })
-    .then((r) => { setQ(null); setMsg(null); toast(r.enabled ? `GPU slots on, ${r.quantum} s each.` : 'GPU slots off.'); conf.reload() })
+    .then((r) => { setQ(null); setM(null); setMsg(null); toast(r.enabled ? `GPU slots on, ${r.quantum} s each.` : 'GPU slots off.'); conf.reload() })
     .catch((e: Error) => setMsg(e.message))
-  const dirty = q != null && q.trim() !== '' && Number(q) !== c.quantum
+  const dirty = (q != null && q.trim() !== '' && Number(q) !== c.quantum) || (m != null && m.trim() !== '' && Number(m) !== c.min_requests)
+  const save = () => put({ ...(q != null && q.trim() !== '' ? { quantum: Number(q) } : {}), ...(m != null && m.trim() !== '' ? { min_requests: Number(m) } : {}) })
   return (
     <section className="card wide">
       <label className="check"><input type="checkbox" checked={c.enabled} onChange={(e) => put({ enabled: e.target.checked })} /> Running models take turns on the GPU</label>
@@ -134,11 +136,17 @@ function GpuSlots() {
       <label>Slot length, seconds
         <span className="row">
           <input className="grow" type="number" min={0.5} max={60} step={0.5} value={q ?? String(c.quantum)} onChange={(e) => setQ(e.target.value)} />
-          <button className="primary" disabled={!dirty} onClick={() => put({ quantum: Number(q) })}>Save</button>
         </span>
         <small className="muted">2 s measured best on a DGX Spark: first tokens in well under a second, about 20% more output than without slots.</small>
       </label>
-      {c.enabled && <p className="muted small">{c.active ? (c.owner ? `${c.owner} has the GPU now` : 'On; no model is busy') : 'On, but not running (read-only mode?)'}{c.backend ? ` · freezing via ${c.backend}` : ''}</p>}
+      <label>Only from this many requests in flight
+        <span className="row">
+          <input className="grow" type="number" min={1} max={64} step={1} value={m ?? String(c.min_requests)} onChange={(e) => setM(e.target.value)} />
+          <button className="primary" disabled={!dirty} onClick={save}>Save</button>
+        </span>
+        <small className="muted">Slots pay when a model decodes several requests in a turn, and each new request waits up to two slots for its first token. Under this many requests across the busy models (and with fewer than two models busy) the engines run concurrently as before.</small>
+      </label>
+      {c.enabled && <p className="muted small">{!c.active ? 'On, but not running (read-only mode?)' : !c.engaged ? 'On; running concurrently, under the threshold' : c.owner ? `${c.owner} has the GPU now` : 'On; no model is busy'}{c.active && c.backend ? ` · freezing via ${c.backend}` : ''}</p>}
       {c.error && <p className="bad">▲ {c.error}</p>}
       {msg && <p className="bad">{msg}</p>}
     </section>
