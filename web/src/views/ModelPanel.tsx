@@ -210,7 +210,7 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
   useEffect(() => setNote(model.notes || describeModel(model)), [model.name, model.notes]) // eslint-disable-line react-hooks/exhaustive-deps
   const [title, setTitle] = useState(model.title ?? '')
   useEffect(() => setTitle(model.title ?? ''), [model.name, model.title])
-  const save = async (changes: Partial<ModelRow>, done: string) => {
+  const saveFields = async (changes: Partial<ModelRow>, done: string) => {
     try {
       const { container: _c, live: _l, downloaded: _d, ...rest } = { ...model, ...changes } as ModelRow
       await api(`/api/models/${q}`, { method: 'PUT', json: rest })
@@ -220,8 +220,8 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
       toast((e as Error).message, true)
     }
   }
-  const saveNote = () => save({ notes: note }, 'Note saved.')
-  const saveTitle = () => save({ title: title.trim() }, title.trim() ? 'Display name saved.' : 'Display name reset.')
+  const saveNote = () => saveFields({ notes: note }, 'Note saved.')
+  const saveTitle = () => saveFields({ title: title.trim() }, title.trim() ? 'Display name saved.' : 'Display name reset.')
   const own = entry.running ? entry.memBytes ?? 0 : 0
   const changed = FIELDS.filter((f) => r[f.key] !== model[f.key])
   const fillChanged = !!r.fill_memory !== !!model.fill_memory

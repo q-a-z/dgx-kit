@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.31
+
+### Fixed
+- **0.1.30 didn't build.** A name clash in the model panel stopped the page build, so 0.1.30 never ran anywhere; its display name feature (below) ships in this version.
+
 ## 0.1.30
 
 ### Added
