@@ -472,6 +472,22 @@ TEST_ORDER = _ALL.split(",")
 BENCH_TESTS = {"decode", "complex", "hardcore", "conc", "prefill", "stall", "needle", "tools", "sanity"}
 
 
+@router.post("/stats/reset")
+async def reset_stats(request: Request, model: str | None = None):
+    """Start the token and request totals (and per-request averages) of one model, or every running one, from zero.
+    The model's own counters keep going; a restart of it or of this dashboard goes back to counting from its start."""
+    s = svc(request)
+    names = [model] if model else list(s.sampler.engines)
+    if model and model not in s.sampler.engines:
+        raise HTTPException(404, "that model isn't running")
+    for n in names:
+        reset = getattr(s.sampler.engines[n], "reset_stats", None)
+        if reset:
+            reset()
+    s.log("reset stats", model or "all running models")
+    return {"reset": names}
+
+
 @router.get("/bench")
 async def list_bench(request: Request, model: str | None = None):
     return await asyncio.to_thread(svc(request).bench.list, model)

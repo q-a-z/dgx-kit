@@ -147,6 +147,22 @@ def test_a_display_title_is_kept_and_listed(env):
     assert next(m for m in client.get("/api/models").json())["title"] == ""
 
 
+def test_reset_stats_asks_each_running_model(env):
+    client, s, _ = env
+
+    class Adapter:
+        resets = 0
+
+        def reset_stats(self):
+            self.resets += 1
+    a, b = Adapter(), Adapter()
+    s.sampler.engines.update({"a": a, "b": b})
+    assert client.post("/api/stats/reset").json() == {"reset": ["a", "b"]}
+    assert client.post("/api/stats/reset?model=a").json() == {"reset": ["a"]}
+    assert (a.resets, b.resets) == (2, 1)
+    assert client.post("/api/stats/reset?model=nope").status_code == 404
+
+
 def test_rename_refuses_bad_names_and_running_models(env):
     client, s, _ = env
     client.post("/api/models", json=model_body())

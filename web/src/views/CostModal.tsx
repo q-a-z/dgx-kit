@@ -1,5 +1,6 @@
 import { Modal } from '../components/Confirm'
-import type { Snapshot } from '../api'
+import { fmtTime, resetStats, type Snapshot } from '../api'
+import { toast } from '../toast'
 import { CACHE_SHARES, PRICES, PRICES_AS_OF } from '../pricing'
 
 const usd = (n: number) => `$${n < 100 ? n.toFixed(2) : Math.round(n).toLocaleString('en-US')}`
@@ -11,10 +12,11 @@ export function CostModal({ open, onClose, latest }: { open: boolean; onClose: (
   const total = (k: string) => up.reduce((a, x) => a + (typeof x[k] === 'number' ? (x[k] as number) : 0), 0)
   const tin = total('prompt_tokens_total')
   const tout = total('gen_tokens_total')
+  const since = Math.max(0, ...up.map((x) => (typeof x.stats_since === 'number' ? x.stats_since : 0)))
   return (
     <Modal open={open} onClose={onClose} title="What this would cost elsewhere">
       <div className="modal-body">
-        <p className="muted small">{tok(tin)} tokens in · {tok(tout)} tokens out since the models started.</p>
+        <p className="muted small">{tok(tin)} tokens in · {tok(tout)} tokens out since the models started{since ? ` or were reset (${fmtTime(since)})` : ''}.</p>
         <table className="cost">
           <thead><tr><th>Model</th><th>In</th><th>Out</th><th>Total</th>{CACHE_SHARES.map((s) => <th key={s} title="Share of input read from the provider's cache">{s * 100}% cached</th>)}</tr></thead>
           <tbody>
@@ -25,9 +27,13 @@ export function CostModal({ open, onClose, latest }: { open: boolean; onClose: (
             })}
           </tbody>
         </table>
-        <p className="muted small">List prices per million tokens (in / out) as of {PRICES_AS_OF}, no batch discounts. The first Total pays full price for every input token; the cached columns assume 50% and 90% of input is read from the provider's cache at its cache-read price. Counters restart with each model, so this is the cost of the current runs only.</p>
+        <p className="muted small">List prices per million tokens (in / out) as of {PRICES_AS_OF}, no batch discounts. The first Total pays full price for every input token; the cached columns assume 50% and 90% of input is read from the provider's cache at its cache-read price. Counters restart with each model and with Reset stats, so this is the cost since then only.</p>
       </div>
-      <div className="row modal-actions"><button autoFocus onClick={onClose}>Close</button></div>
+      <div className="row modal-actions">
+        <button onClick={() => resetStats().then(() => toast('Stats reset.')).catch((e: Error) => toast(e.message, true))}
+          title="Start the token and request totals from zero">Reset stats</button>
+        <button autoFocus onClick={onClose}>Close</button>
+      </div>
     </Modal>
   )
 }

@@ -38,6 +38,14 @@ class PromAdapter:
         self._prev_t: float | None = None
         self._window: deque = deque()  # (time, counters)
         self.static: dict = {}
+        self._last: dict = {}   # the counters of the latest scrape
+        self._base: dict = {}   # the counters when the stats were last reset
+        self._since: float | None = None
+
+    def reset_stats(self) -> None:
+        """Count totals and per-request averages from now on, as if the model had just started."""
+        self._base = dict(self._last)
+        self._since = time.time()
 
     async def health(self) -> bool:
         try:
@@ -74,7 +82,10 @@ class PromAdapter:
         acc_len = self._gauge(m, "accept_len")
         if acc_len is not None:
             out["draft_accept_len"] = round(acc_len, 2)
-        self._lifetime(cur, out)
+        self._last = cur
+        self._lifetime(self._since_reset(cur), out)
+        if self._since is not None:
+            out["stats_since"] = self._since
 
         # live: since the previous scrape
         prev, dt = self._prev, (now - self._prev_t) if self._prev_t is not None else None
@@ -95,6 +106,25 @@ class PromAdapter:
 
         self._prev, self._prev_t = cur, now
         return out
+
+    def _since_reset(self, cur: dict) -> dict:
+        """The counters minus what they read at the last reset. A counter below its baseline means the server
+        restarted (counters begin again at zero), so the reset no longer applies."""
+        if not self._base:
+            return cur
+        net = {}
+        for k, v in cur.items():
+            b = self._base.get(k)
+            if isinstance(v, (int, float)) and isinstance(b, (int, float)):
+                if v < b:
+                    self._base, self._since = {}, None
+                    return cur
+                net[k] = v - b
+            elif k.endswith(":sc") and isinstance(v, tuple) and isinstance(b, tuple) and len(v) == len(b):
+                net[k] = tuple(x - y for x, y in zip(v, b))
+            else:
+                net[k] = v
+        return net
 
     def _lifetime(self, cur: dict, out: dict) -> None:
         for key, total_key in (("prompt", "prompt_tokens_total"), ("gen", "gen_tokens_total"),

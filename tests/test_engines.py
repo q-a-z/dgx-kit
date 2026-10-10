@@ -41,6 +41,18 @@ def test_sglang_gauges_rates_and_percentiles():
     assert second["ttft_goodput"] == pytest.approx(0.444)  # 4 new requests between 0.1 and 1 s, target 0.5 s
 
 
+def test_reset_stats_counts_from_now_and_survives_a_restart():
+    a = SglangAdapter("http://x")
+    first = a.compute(P.parse(fill(SGLANG, 1000.0)), now=0.0)
+    assert first["gen_tokens_total"] == 1000.0 and first["prompt_tokens_total"] == 5000.0 and "stats_since" not in first
+    a.reset_stats()
+    again = a.compute(P.parse(fill(SGLANG, 1300.0)), now=2.0)
+    assert again["gen_tokens_total"] == 300.0 and again["prompt_tokens_total"] == 0.0 and again["stats_since"]
+    assert again["decode_tps"] == 150.0  # the live rate doesn't care
+    restarted = a.compute(P.parse(fill(SGLANG, 40.0)), now=4.0)  # the server began counting again
+    assert restarted["gen_tokens_total"] == 40.0 and "stats_since" not in restarted
+
+
 def test_llamacpp_has_rates_but_no_percentiles():
     a = LlamaCppAdapter("http://x")
     a.compute(P.parse(fill(LLAMA, 100)), now=0.0)

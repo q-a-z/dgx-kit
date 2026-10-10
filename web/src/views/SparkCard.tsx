@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
-import { fmtNum, sum as rateSum, type Live, type Snapshot } from '../api'
+import { fmtNum, fmtTime, resetStats, sum as rateSum, type Live, type Snapshot } from '../api'
+import { toast } from '../toast'
 import { Donut } from '../components/Donut'
 
 // GB10 GPU power scale; the zones above 80 W are where the box runs hot and loud.
@@ -36,18 +37,23 @@ function TrafficStats({ latest }: { latest: Snapshot }) {
   const dec = avgSpeed(up, 'gen_tokens_total', 'decode_tps_req')
   const pre = avgSpeed(up, 'prompt_tokens_total', 'prefill_tps_req')
   const waiting = sum(up, 'waiting')
+  const since = Math.max(0, ...up.map((x) => (typeof x.stats_since === 'number' ? x.stats_since : 0)))
   const stat = (k: string, v: string, sub?: string, tip?: string, arrow?: ReactNode) =>
     <div title={tip}><dt>{k}</dt><dd><b className="n">{v}</b>{arrow}{sub && <small className="muted"> {sub}</small>}</dd></div>
   return (
     <div className="traffic-wrap">
       <dl className="traffic">
-        {stat('In', compact(sum(up, 'prompt_tokens_total')), 'tokens', 'Prompt tokens since the models started')}
-        {stat('Out', compact(sum(up, 'gen_tokens_total')), 'tokens', 'Generated tokens since the models started')}
-        {stat('Requests', compact(sum(up, 'requests_total')), undefined, 'Finished requests since the models started')}
+        {stat('In', compact(sum(up, 'prompt_tokens_total')), 'tokens', 'Prompt tokens since the models started, or since the last reset')}
+        {stat('Out', compact(sum(up, 'gen_tokens_total')), 'tokens', 'Generated tokens since the models started, or since the last reset')}
+        {stat('Requests', compact(sum(up, 'requests_total')), undefined, 'Finished requests since the models started, or since the last reset')}
         {stat('Decode', fmtNum(sum(up, 'decode_tps')), dec != null ? `/ avg ${fmtNum(dec)} t/s` : 't/s', 'Output tokens per second now, and the average per request. The arrow compares now with the average.', pace(sum(up, 'decode_tps'), dec))}
         {stat('Prefill', fmtNum(sum(up, 'prefill_tps')), pre != null ? `/ avg ${fmtNum(pre)} t/s` : 't/s', 'Prompt tokens per second now, and the average per request. The arrow compares now with the average.', pace(sum(up, 'prefill_tps'), pre))}
         {stat('Busy', String(sum(up, 'running')), waiting ? `+${waiting} waiting` : undefined, 'Requests running now')}
       </dl>
+      <button className="ghost small reset-stats" title={since ? `Counting since ${fmtTime(since)}. Start the totals from zero again.` : 'Start the token and request totals from zero'}
+        onClick={() => resetStats().then(() => toast('Stats reset.')).catch((e: Error) => toast(e.message, true))}>
+        Reset stats{since ? ` · since ${fmtTime(since)}` : ''}
+      </button>
     </div>
   )
 }

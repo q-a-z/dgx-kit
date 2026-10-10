@@ -36,6 +36,7 @@ export type Live = {
   slot?: 'running' | 'waiting' | null  // GPU time slots on: has the GPU now, or frozen until its turn
   error?: string
   context_tokens?: number
+  stats_since?: number  // totals count from this time (a reset), not from the model's start
   kv_pool_tokens?: number
   max_concurrency?: number
   running?: number
@@ -136,6 +137,9 @@ export const fmtBytes = (b: number | null | undefined) => {
 
 export const fmtNum = (n: number | null | undefined, digits = 0) =>
   n == null ? '–' : n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits })
+
+/** Start the token and request totals of every running model from zero. */
+export const resetStats = () => api('/api/stats/reset', { method: 'POST' })
 
 /** Times are always shown on a 24-hour clock, whatever the browser's language is set to. */
 export const fmtTime = (t: number, seconds = false) =>

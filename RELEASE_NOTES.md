@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.32
+
+### Added
+- **Reset stats.** A button under the traffic figures on the dashboard, and in the "$$$" window, starts the In, Out and Requests totals (and the per-request average speeds) from zero for every running model, and shows when they were reset. The models keep running. Totals go back to counting from a model's start when that model restarts. API: `POST /api/stats/reset` (`?model=name` for one).
+
 ## 0.1.31
 
 ### Fixed

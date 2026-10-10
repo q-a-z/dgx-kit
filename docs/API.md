@@ -38,6 +38,7 @@ curl -b jar localhost:3000/api/models
 | `GET /api/history` | The recent readings the charts draw, oldest first |
 | `GET /api/stream` | Server-sent events: one `data: <snapshot JSON>` about every second, `: keep-alive` comments in between |
 | `GET /api/layout`, `PUT /api/layout` | The dashboard's tile layout, shared by every browser. `PUT` body is the layout object |
+| `POST /api/stats/reset` | Starts the token and request totals of every running model (`?model=name` for one) from zero; `404` if that model isn't running |
 | `GET /api/log` | What DGX-kit has done on this machine (the Activity tab): start, stop, create, password, … |
 
 ## Models
