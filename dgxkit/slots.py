@@ -156,9 +156,12 @@ class SlotScheduler:
         ids_at = 0.0
         log.info("GPU slots on: %.1f s each", self.quantum)
         try:
-            stale = await asyncio.to_thread(self.freezer.thaw_stale)
-            if stale:
-                log.warning("GPU slots: thawed %s, left frozen by an earlier dashboard", ", ".join(stale))
+            try:
+                stale = await asyncio.to_thread(self.freezer.thaw_stale)
+                if stale:
+                    log.warning("GPU slots: thawed %s, left frozen by an earlier dashboard", ", ".join(stale))
+            except Exception as e:  # Docker not answering yet: the loop below keeps trying
+                log.warning("GPU slots: could not check for frozen models: %s", e)
             while True:
                 try:
                     now = time.monotonic()

@@ -177,14 +177,17 @@ async def sync_gateway(s) -> None:
                 return
             url = f"http://127.0.0.1:{found.get('port') or 4000}/v1"
             host = lan_ip()
+    pub = published(s)
+    qp = queue_port(s)
+    if qp is not None:  # queue mode: LiteLLM sends every model to the queue proxy, which forwards by name
+        pub = {n: qp for n in pub}
     if url:
         from urllib.parse import urlparse
         from .gateway import sync_remote
-        pub = published(s)
         s.gateway.published = dict(pub)
         s.gateway.problem = s.gateway.remote_problem = await asyncio.to_thread(sync_remote, url, gateway_key(s), pub, host or urlparse(url).hostname or "127.0.0.1")
         return
-    await asyncio.to_thread(s.gateway.sync, published(s))
+    await asyncio.to_thread(s.gateway.sync, pub)
     if s.gateway.problem and "isn't pulled" in s.gateway.problem:
         asyncio.create_task(_pull_gateway_image(s))
 
@@ -1298,25 +1301,39 @@ class SlotsBody(BaseModel):
     min_requests: int | None = None
     end_on_finish: bool | None = None
     min_slot: float | None = None
+    mode: str | None = None
+
+
+def queue_port(s) -> int | None:
+    """The queue proxy's port while queue mode runs, else None."""
+    sch = getattr(s, "slots", None)
+    return sch.port if sch is not None and hasattr(sch, "turn") and sch.running else None
 
 
 def _slots_view(s) -> dict:
     sch = s.slots
     on = bool(sch and sch.running)
+    freeze = on and hasattr(sch, "freezer")
     return {**s.settings.slots, "active": on, "engaged": bool(on and sch.engaged), "owner": sch.owner if on else None,
-            "backend": sch.freezer.backend if on else None, "error": sch.error if on else None}
+            "backend": sch.freezer.backend if freeze else None, "error": sch.error if on else None,
+            "queue_port": sch.port if on and not freeze else None}
 
 
 async def apply_slots(s) -> None:
     """Start or stop the GPU slot scheduler so it matches Settings (at boot and after a change)."""
     from .slots import Freezer, SlotScheduler
+    from . import turns
     if s.slots and s.slots.running:
         await s.slots.stop()
     conf = s.settings.slots
     if conf["enabled"] and os.environ.get("DGXKIT_READONLY") != "1":
-        s.slots = SlotScheduler(s, conf["quantum"], conf["min_requests"], conf["end_on_finish"], conf["min_slot"])
+        if conf["mode"] == "queue":
+            s.slots = turns.QueueProxy(s, conf["quantum"], conf["min_requests"], port=turns.QUEUE_PORT,
+                                       host=os.environ.get("DGXKIT_BIND", "0.0.0.0"))
+        else:
+            s.slots = SlotScheduler(s, conf["quantum"], conf["min_requests"], conf["end_on_finish"], conf["min_slot"])
         s.slots.start()
-    elif os.environ.get("DGXKIT_READONLY") != "1":  # off: make sure nothing stays frozen from before
+    if (not conf["enabled"] or conf["mode"] != "freeze") and os.environ.get("DGXKIT_READONLY") != "1":  # nothing may stay frozen
         try:
             stale = await asyncio.to_thread(Freezer(s.runner, s.root).thaw_stale)
             if stale:
@@ -1334,10 +1351,13 @@ async def slots_state(request: Request):
 @router.put("/settings/slots")
 async def set_slots(body: SlotsBody, request: Request):
     s = svc(request)
-    conf = s.settings.set_slots(body.enabled, body.quantum, body.min_requests, body.end_on_finish, body.min_slot)
+    before = queue_port(s)
+    conf = s.settings.set_slots(body.enabled, body.quantum, body.min_requests, body.end_on_finish, body.min_slot, body.mode)
     await apply_slots(s)
-    s.log("settings", f"GPU slots {'on' if conf['enabled'] else 'off'}, {conf['quantum']:g} s each from {conf['min_requests']} requests"
-          + (f", ending when a request finishes (after {conf['min_slot']:g} s)" if conf["end_on_finish"] else ""))
+    s.log("settings", f"GPU slots {'on' if conf['enabled'] else 'off'} ({conf['mode']}), {conf['quantum']:g} s each from {conf['min_requests']} requests"
+          + (f", ending when a request finishes (after {conf['min_slot']:g} s)" if conf["end_on_finish"] and conf["mode"] == "freeze" else ""))
+    if queue_port(s) != before:  # LiteLLM must point at the queue, or back at the engines
+        await sync_gateway(s)
     return _slots_view(s)
 
 

@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.28
+
+### Added
+- **GPU slots can queue instead of freeze** (Settings, GPU slots: *Freeze them* / *Queue them*). In queue mode nothing is frozen: requests for a model that isn't up wait in the dashboard until the model's turn, and a stream, once started, runs at full speed to the end. The wait moves to before the first token, up to a whole turn of the others. LiteLLM is pointed at the dashboard's queue (port 4010, `DGXKIT_QUEUE_PORT`), which forwards each request to its engine by name; it is re-pointed at the engines when the mode is switched back. Clients change nothing. The slot length and the load threshold apply to both modes.
+
 ## 0.1.27
 
 ### Fixed

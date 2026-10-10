@@ -81,19 +81,19 @@ async def _rotation():
 
 def test_settings_switch_starts_and_stops_the_scheduler(env):
     client, s, _ = env
-    assert client.get("/api/settings/slots").json() == {"enabled": False, "quantum": 2.0, "min_requests": 4, "end_on_finish": False, "min_slot": 0.5, "active": False, "engaged": False, "owner": None, "backend": None, "error": None}
+    assert client.get("/api/settings/slots").json() == {"enabled": False, "quantum": 2.0, "min_requests": 4, "end_on_finish": False, "min_slot": 0.5, "mode": "freeze", "active": False, "engaged": False, "owner": None, "backend": None, "error": None, "queue_port": None}
     r = client.put("/api/settings/slots", json={"enabled": True, "quantum": 3, "min_requests": 6}).json()
     assert r["enabled"] and r["quantum"] == 3.0 and r["min_requests"] == 6 and r["active"] and s.slots.running
     assert client.put("/api/settings/slots", json={"quantum": 0.1}).status_code == 422
     assert client.put("/api/settings/slots", json={"min_requests": 0}).status_code == 422
     r = client.put("/api/settings/slots", json={"enabled": False}).json()
     assert not r["enabled"] and not r["active"] and r["quantum"] == 3.0 and not s.slots.running
-    assert s.settings.slots == {"enabled": False, "quantum": 3.0, "min_requests": 6, "end_on_finish": False, "min_slot": 0.5}
+    assert s.settings.slots == {"enabled": False, "quantum": 3.0, "min_requests": 6, "end_on_finish": False, "min_slot": 0.5, "mode": "freeze"}
     r = client.put("/api/settings/slots", json={"end_on_finish": True, "min_slot": 1}).json()
     assert r["end_on_finish"] and r["min_slot"] == 1.0
     assert client.put("/api/settings/slots", json={"min_slot": 0}).status_code == 422
-    assert [a["detail"] for a in client.get("/api/log").json() if a["action"] == "settings"] == ["GPU slots on, 3 s each from 6 requests", "GPU slots off, 3 s each from 6 requests",
-            "GPU slots off, 3 s each from 6 requests, ending when a request finishes (after 1 s)"]
+    assert [a["detail"] for a in client.get("/api/log").json() if a["action"] == "settings"] == ["GPU slots on (freeze), 3 s each from 6 requests", "GPU slots off (freeze), 3 s each from 6 requests",
+            "GPU slots off (freeze), 3 s each from 6 requests, ending when a request finishes (after 1 s)"]
 
 
 def test_scheduler_survives_a_failing_tick():

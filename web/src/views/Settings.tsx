@@ -113,7 +113,7 @@ function HfToken() {
   )
 }
 
-type SlotsConf = { enabled: boolean; quantum: number; min_requests: number; end_on_finish: boolean; min_slot: number; active: boolean; engaged: boolean; owner: string | null; backend: string | null; error: string | null }
+type SlotsConf = { enabled: boolean; quantum: number; min_requests: number; end_on_finish: boolean; min_slot: number; mode: 'freeze' | 'queue'; active: boolean; engaged: boolean; owner: string | null; backend: string | null; error: string | null; queue_port: number | null }
 
 /** The GPU time slot switch and the slot length. The engines of waiting models are frozen in place (their cache and open
  *  streams survive), so this never restarts anything; it takes effect at once and is kept across dashboard restarts. */
@@ -134,7 +134,14 @@ function GpuSlots() {
   return (
     <section className="card wide">
       <label className="check"><input type="checkbox" checked={c.enabled} onChange={(e) => put({ enabled: e.target.checked })} /> Running models take turns on the GPU</label>
-      <p className="muted small">On a GB10 every model shares one memory bus, so three models decoding together give fewer tokens per second than one at a time. With slots on, one model runs while the others that have work wait, frozen with their cache intact; a model with nothing to do is never frozen. Short slots keep first tokens quick; longer ones switch less.</p>
+      <p className="muted small">On a GB10 every model shares one memory bus, so three models decoding together give fewer tokens per second than one at a time. With slots on, one model runs at a time while the others that have work wait. Short slots keep first tokens quick; longer ones switch less.</p>
+      <div className="row" role="radiogroup" aria-label="How the others wait">
+        <label className="check"><input type="radio" name="slot-mode" checked={c.mode === 'freeze'} onChange={() => put({ mode: 'freeze' })} /> Freeze them</label>
+        <label className="check"><input type="radio" name="slot-mode" checked={c.mode === 'queue'} onChange={() => put({ mode: 'queue' })} /> Queue them</label>
+      </div>
+      <p className="muted small">{c.mode === 'queue'
+        ? 'Queue: requests for a model that isn’t up wait in the dashboard until the model’s turn; a stream, once started, runs at full speed to the end. The wait is before the first token, up to a whole turn of the others. LiteLLM is pointed at the queue; clients change nothing.'
+        : 'Freeze: the waiting models’ engines are frozen in place with their cache intact and resume mid-token; a model with nothing to do is never frozen. Streams come in bursts; first tokens arrive within two slots.'}</p>
       <label>Slot length, seconds
         <span className="row">
           <input className="grow" type="number" min={0.5} max={60} step={0.5} value={q ?? String(c.quantum)} onChange={(e) => setQ(e.target.value)} />
@@ -147,15 +154,15 @@ function GpuSlots() {
         </span>
         <small className="muted">Slots pay when a model decodes several requests in a turn, and each new request waits up to two slots for its first token. Under this many requests across the busy models (and with fewer than two models busy) the engines run concurrently as before.</small>
       </label>
-      <label className="check"><input type="checkbox" checked={c.end_on_finish} onChange={(e) => put({ end_on_finish: e.target.checked })} /> End a slot as soon as the model finishes a request</label>
+      {c.mode === 'freeze' && <label className="check"><input type="checkbox" checked={c.end_on_finish} onChange={(e) => put({ end_on_finish: e.target.checked })} /> End a slot as soon as the model finishes a request</label>}
       <label>…but not before this many seconds
         <span className="row">
-          <input className="grow" type="number" min={0.1} max={60} step={0.1} value={ms ?? String(c.min_slot)} onChange={(e) => setMs(e.target.value)} disabled={!c.end_on_finish} />
+          <input className="grow" type="number" min={0.1} max={60} step={0.1} value={ms ?? String(c.min_slot)} onChange={(e) => setMs(e.target.value)} disabled={!c.end_on_finish || c.mode !== 'freeze'} />
           <button className="primary" disabled={!dirty} onClick={save}>Save</button>
         </span>
         <small className="muted">Off: every slot lasts the slot length. On: a slot ends at the first finished request after this minimum, and never later than the slot length, so slots stretch for long answers and shorten for short ones. The agent whose request just finished sends its next one while its model still has the GPU. It changes who waits, not how much the box produces.</small>
       </label>
-      {c.enabled && <p className="muted small">{!c.active ? 'On, but not running (read-only mode?)' : !c.engaged ? 'On; running concurrently, under the threshold' : c.owner ? `${c.owner} has the GPU now` : 'On; no model is busy'}{c.active && c.backend ? ` · freezing via ${c.backend}` : ''}</p>}
+      {c.enabled && <p className="muted small">{!c.active ? 'On, but not running (read-only mode?)' : !c.engaged ? 'On; running concurrently, under the threshold' : c.owner ? `${c.owner} has the GPU now` : 'On; no model is busy'}{c.active && c.backend ? ` · freezing via ${c.backend}` : ''}{c.active && c.queue_port ? ` · queue on port ${c.queue_port}` : ''}</p>}
       {c.error && <p className="bad">▲ {c.error}</p>}
       {msg && <p className="bad">{msg}</p>}
     </section>

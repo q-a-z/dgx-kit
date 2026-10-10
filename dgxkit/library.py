@@ -127,11 +127,16 @@ class Settings:
         v = self._load().get("slots") or {}
         return {"enabled": bool(v.get("enabled")), "quantum": float(v.get("quantum") or 2.0),
                 "min_requests": int(v.get("min_requests") or 4),
-                "end_on_finish": bool(v.get("end_on_finish")), "min_slot": float(v.get("min_slot") or 0.5)}
+                "end_on_finish": bool(v.get("end_on_finish")), "min_slot": float(v.get("min_slot") or 0.5),
+                "mode": v.get("mode") if v.get("mode") in self.SLOT_MODES else "freeze"}
+
+    SLOT_MODES = ("freeze", "queue")
 
     def set_slots(self, enabled: bool | None = None, quantum: float | None = None, min_requests: int | None = None,
-                  end_on_finish: bool | None = None, min_slot: float | None = None) -> dict:
+                  end_on_finish: bool | None = None, min_slot: float | None = None, mode: str | None = None) -> dict:
         cur = self.slots
+        if mode is not None and mode not in self.SLOT_MODES:
+            raise ValueError(f"mode is one of {', '.join(self.SLOT_MODES)}")
         if quantum is not None and not 0.5 <= quantum <= 60:
             raise ValueError("a slot is 0.5 to 60 seconds")
         if min_requests is not None and not 1 <= min_requests <= 64:
@@ -143,7 +148,8 @@ class Settings:
                          "quantum": cur["quantum"] if quantum is None else float(quantum),
                          "min_requests": cur["min_requests"] if min_requests is None else int(min_requests),
                          "end_on_finish": cur["end_on_finish"] if end_on_finish is None else bool(end_on_finish),
-                         "min_slot": cur["min_slot"] if min_slot is None else float(min_slot)}
+                         "min_slot": cur["min_slot"] if min_slot is None else float(min_slot),
+                         "mode": cur["mode"] if mode is None else mode}
         self._save(data)
         return self.slots
 
