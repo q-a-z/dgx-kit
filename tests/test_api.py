@@ -114,6 +114,46 @@ def test_create_edit_and_version_history(env):
     assert client.post("/api/models/llama/restore/..%2F..%2Fetc").status_code == 404
 
 
+def test_rename_moves_settings_versions_and_history(env):
+    import json as _json
+    client, s, _ = env
+    client.post("/api/models", json=model_body())
+    client.put("/api/models/llama", json=model_body(max_context=32768))  # leaves one saved version
+    from dgxkit import quickcheck
+    quickcheck.save(s.state_dir, "llama", {"decode_mean_tps": 50})
+    from dgxkit.benchmarks import Benchmarks
+    s.bench = Benchmarks(s.state_dir)
+    s.bench.dir.mkdir(parents=True, exist_ok=True)
+    (s.bench.dir / "llama-20260101-000000.meta").write_text(_json.dumps({"id": "llama-20260101-000000", "model": "llama", "started": 1, "pid": 1}))
+    r = client.post("/api/models/llama/rename", json={"name": "chat-8b"})
+    assert r.status_code == 200 and r.json() == {"name": "chat-8b"}
+    assert client.get("/api/models/llama/versions").json() == []
+    versions = client.get("/api/models/chat-8b/versions").json()
+    assert len(versions) == 1 and versions[0].startswith("chat-8b.")
+    assert client.post(f"/api/models/chat-8b/restore/{versions[0]}").json()["name"] == "chat-8b"
+    names = [m["name"] for m in client.get("/api/models").json()]
+    assert names == ["chat-8b"]
+    assert quickcheck.load(s.state_dir, "chat-8b") == {"decode_mean_tps": 50} and quickcheck.load(s.state_dir, "llama") is None
+    assert [b["model"] for b in client.get("/api/bench").json()] == ["chat-8b"]
+
+
+def test_rename_refuses_bad_names_and_running_models(env):
+    client, s, _ = env
+    client.post("/api/models", json=model_body())
+    client.post("/api/models", json=model_body(name="other"))
+    from dgxkit.benchmarks import Benchmarks
+    s.bench = Benchmarks(s.state_dir)
+    assert client.post("/api/models/llama/rename", json={"name": "other"}).status_code == 409
+    assert client.post("/api/models/llama/rename", json={"name": "laya"}).status_code == 409
+    assert client.post("/api/models/llama/rename", json={"name": "Bad Name"}).status_code == 422
+    assert client.post("/api/models/llama/rename", json={"name": "llama"}).status_code == 422
+    assert client.post("/api/models/nope/rename", json={"name": "x"}).status_code == 404
+    s.runner.running["llama"] = 8100
+    r = client.post("/api/models/llama/rename", json={"name": "chat"})
+    assert r.status_code == 409 and "stop it first" in r.json()["detail"]
+    assert client.get("/api/models/chat/versions").json() == [] and client.get("/api/models").status_code == 200
+
+
 def test_start_refuses_until_downloaded_then_runs(env):
     client, s, models = env
     client.post("/api/models", json=model_body())

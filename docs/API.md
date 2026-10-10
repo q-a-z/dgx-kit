@@ -72,6 +72,7 @@ A model is a **recipe**: the engine, the weights, and its options. Fields (all o
 | `PUT /api/models/{name}` | Replace a recipe. The old one goes to the version history |
 | `DELETE /api/models/{name}` | Forget the model. Its files on disk are never touched |
 | `GET /api/models/{name}/versions` | Saved earlier versions of the recipe |
+| `POST /api/models/{name}/rename` | Body `{"name"}`. Gives a stopped model a new name, with its saved versions, benchmark history and speed check. `409` if the name exists or the model is running, `422` for a bad name |
 | `POST /api/models/{name}/restore/{version}` | Go back to one of them |
 | `GET /api/models/{name}/plan` | The memory plan for the saved recipe: `context_tokens`, `kv_pool_tokens`, `kv_bytes`, `concurrency`, `fits`, `reason`, and `total_bytes` (weights, KV cache and headroom: what the model should take in all). A GGUF model is sized from its file's header |
 | `POST /api/models/{name}/plan?own_bytes=N` | The same for unsaved edits in the body. `own_bytes` is memory the model holds now and would give back on restart |

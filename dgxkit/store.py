@@ -57,5 +57,23 @@ class ModelStore:
         self.save(r)
         return r
 
+    def rename(self, old: str, new: str) -> None:
+        """Move a model's file and its saved versions to a new name (the name is also inside each file)."""
+        src, dst = self._path(old), self._path(new)
+        if dst.exists():
+            raise ValueError("a model with that name exists")
+        for v in self.versions(old):
+            f = self.history / v
+            data = yaml.safe_load(f.read_text()) or {}
+            data["name"] = new
+            (self.history / v.replace(f"{old}.", f"{new}.", 1)).write_text(yaml.safe_dump(data, sort_keys=False))
+            f.unlink()
+        data = yaml.safe_load(src.read_text()) or {}
+        data["name"] = new
+        tmp = dst.with_suffix(".tmp")
+        tmp.write_text(yaml.safe_dump(data, sort_keys=False))
+        tmp.replace(dst)
+        src.unlink()
+
     def delete(self, name: str) -> None:
         self._path(name).unlink(missing_ok=True)

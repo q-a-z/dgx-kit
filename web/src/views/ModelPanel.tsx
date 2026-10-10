@@ -6,6 +6,7 @@ import { PullProgress } from './Other'
 import { api, copyText, fmtBytes, fmtNum, type ModelRow, type Plan, type Recipe, type Snapshot } from '../api'
 import type { Mark } from '../components/Chart'
 import { Icon } from '../components/Icon'
+import { Modal } from '../components/Confirm'
 import { ModelActions, type Tab } from '../components/ModelActions'
 import { base, describeModel, ENGINES, prettyName, STATE_TONE, stateText, stateTitle, type Entry } from '../fleet'
 import type { Alert } from '../health'
@@ -116,7 +117,13 @@ export function ModelPanel({ entry, tab, setTab, latest, history, readonly, layo
 function More({ entry, readonly, onChanged }: { entry: Entry; readonly: boolean; onChanged: () => void }) {
   const a = useModelActions(entry, readonly, onChanged)
   const [fit, setFit] = useState<string | null>(null)
+  const [renaming, setRenaming] = useState(false)
+  const [next, setNext] = useState('')
+  const [err, setErr] = useState<string | null>(null)
   const menu = useRef<HTMLDetailsElement>(null)
+  const rename = () => api<{ name: string }>(`/api/models/${encodeURIComponent(entry.name)}/rename`, { method: 'POST', json: { name: next.trim() } })
+    .then((r) => { setRenaming(false); toast(`Renamed to ${r.name}.`); onChanged(); select(r.name) })
+    .catch((e: Error) => setErr(e.message))
   const close = () => { if (menu.current) menu.current.open = false }
   // A <details> stays open until its own summary is clicked again; a menu should also close when you click
   // anywhere else, press Escape, or pick an item.
@@ -138,11 +145,26 @@ function More({ entry, readonly, onChanged }: { entry: Entry; readonly: boolean;
         <summary aria-label="More actions" title="More actions"><Icon name="more" /></summary>
         <div className="menu">
           <button onClick={() => { close(); check() }}>Check it fits now</button>
+          <button disabled={a.locked || entry.running} title={entry.running ? 'Stop it first' : undefined}
+            onClick={() => { close(); setNext(entry.name); setErr(null); setRenaming(true) }}>Rename…</button>
           <button className="danger" disabled={a.locked || entry.running} title={entry.running ? 'Stop it first' : undefined}
             onClick={async () => { close(); if (await a.remove()) select(undefined) }}>Remove…</button>
         </div>
       </details>
       {fit && <p className="fit-note">{fit} <button className="link" onClick={() => setFit(null)}>OK</button></p>}
+      <Modal open={renaming} onClose={() => setRenaming(false)} title={`Rename ${entry.name}`}>
+        <form onSubmit={(e) => { e.preventDefault(); if (next.trim() && next.trim() !== entry.name) rename() }}>
+          <div className="modal-body">
+            <label>New name<input autoFocus value={next} onChange={(e) => { setNext(e.target.value); setErr(null) }} spellCheck={false} /></label>
+            <p className="muted small">Lowercase letters, digits, dot, dash and underscore. Settings, saved versions, benchmarks and the speed check move with it. The name is what clients ask for through the gateway, so they have to switch to the new one.</p>
+            {err && <p className="bad">{err}</p>}
+          </div>
+          <div className="row modal-actions">
+            <button type="button" onClick={() => setRenaming(false)}>Cancel</button>
+            <button type="submit" className="primary" disabled={!next.trim() || next.trim() === entry.name}>Rename</button>
+          </div>
+        </form>
+      </Modal>
     </>
   )
 }

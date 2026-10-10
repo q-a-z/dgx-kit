@@ -22,6 +22,7 @@ from .paths import expand_home
 from .control import check_start, engine_command, gguf_path, model_dir, pick_port, weights_path
 from .engines import adapter_for
 from .recipes import Recipe, inspect_repo
+from .store import NAME
 from .sizing import plan
 from .discover import container_models, discover
 from .library import recipe_from_folder, scan
@@ -301,6 +302,54 @@ async def edit_model(name: str, body: dict, request: Request):
     s.log("edit", name)
     await sync_gateway(s)  # publish may have changed
     return {"saved": True, "applies_on_next_start": name in s.runner.status()}
+
+
+class RenameBody(BaseModel):
+    name: str
+
+
+@router.post("/models/{name}/rename")
+async def rename_model(name: str, body: RenameBody, request: Request):
+    """Give a stopped model a new name: its settings, saved versions, benchmark history and speed check go with it.
+    The name is also what clients ask for through the gateway, so they have to switch to the new one."""
+    s = svc(request)
+    new = body.name.strip()
+    if not _exists(s, name):
+        raise HTTPException(404)
+    if new == name:
+        raise HTTPException(422, "that is already its name")
+    if not NAME.match(new):
+        raise HTTPException(422, "model names use lowercase letters, digits, dot, dash and underscore")
+    from .api_services import SERVICES
+    if _exists(s, new) or new in SERVICES or new in s.external:
+        raise HTTPException(409, "a model with that name exists")
+    c = (await asyncio.to_thread(s.runner.status)).get(name)
+    if (c and c["state"] in ("running", "restarting", "created")) or name in s.sampler.engines:
+        raise HTTPException(409, "stop it first: a running model keeps the name it started with")
+    if name in s.preparing:
+        raise HTTPException(409, "it is waiting for its image; wait for that to finish, or stop it first")
+    if any(r["model"] == name and r["state"] == "running" for r in await asyncio.to_thread(s.bench.list)):
+        raise HTTPException(409, "a benchmark of it is still running")
+    if c:  # a stopped container that still carries the old name: clear it
+        await asyncio.to_thread(s.runner.stop, name)
+    s.store.rename(name, new)
+    quick = Path(s.state_dir) / "quick"
+    if (quick / f"{name}.json").exists():
+        (quick / f"{name}.json").replace(quick / f"{new}.json")
+    for f in s.bench.dir.glob("*.meta") if s.bench.dir.exists() else []:
+        try:
+            meta = json.loads(f.read_text())
+            if meta.get("model") == name:
+                f.write_text(json.dumps({**meta, "model": new}))
+        except (OSError, ValueError):
+            pass
+    stopped = stopped_by_user(s)
+    if name in stopped:
+        stopped.pop(name)
+        _stopped_file(s).write_text(json.dumps(stopped))
+    s.log("rename", f"{name} -> {new}")
+    await sync_gateway(s)
+    return {"name": new}
 
 
 @router.get("/models/{name}/versions")
