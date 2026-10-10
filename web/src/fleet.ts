@@ -112,6 +112,7 @@ const SPECIAL: Record<string, string> = { gpt: 'GPT', oss: 'OSS', glm: 'GLM', ll
 /** A readable name for people: "Qwen/Qwen3-Coder-30B-A3B-Instruct-FP8" becomes "Qwen3 Coder 30B A3B". */
 export function prettyName(e: Entry): string {
   if (e.service) return e.service.title
+  if (e.row?.title?.trim()) return e.row.title.trim()
   const src = base(e.row?.repo ?? e.ext?.model ?? e.ext?.served_name) ?? e.name
   const words = src.replace(/\.gguf$/i, '').split(/[-_\s]+/).filter((w) => w && !DROP.test(w))
   if (!words.length) return e.name

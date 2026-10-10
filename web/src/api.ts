@@ -77,6 +77,7 @@ export type Recipe = {
   options?: string | null  // vLLM models: every engine setting as text, one flag per line
   speculative_extra?: Record<string, unknown>
   env?: Record<string, string>
+  title?: string
   notes?: string
   path?: string | null
   draft_path?: string | null

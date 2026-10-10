@@ -145,6 +145,9 @@ export function Editor({ model, onDone }: { model: ModelRow; onDone: (msg: strin
   return (
     <div className="editor">
       <TemplateBar model={model} onDone={onDone} />
+      <label className="full">Display name
+        <input value={r.title ?? ''} maxLength={80} placeholder="made from the repo" onChange={(e) => set('title', e.target.value)} />
+      </label>
       <label>Engine
         <select value={r.engine} onChange={(e) => set('engine', e.target.value)}>
           <option value="vllm">vLLM</option><option value="sglang">SGLang</option><option value="llamacpp">llama.cpp</option>

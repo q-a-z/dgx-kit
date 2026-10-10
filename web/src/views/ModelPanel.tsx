@@ -208,16 +208,20 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
   const summary = describeModel(model)
   const [note, setNote] = useState(model.notes || summary)  // an empty note starts as the settings in one line; saving is explicit
   useEffect(() => setNote(model.notes || describeModel(model)), [model.name, model.notes]) // eslint-disable-line react-hooks/exhaustive-deps
-  const saveNote = async () => {
+  const [title, setTitle] = useState(model.title ?? '')
+  useEffect(() => setTitle(model.title ?? ''), [model.name, model.title])
+  const save = async (changes: Partial<ModelRow>, done: string) => {
     try {
-      const { container: _c, live: _l, downloaded: _d, ...rest } = { ...model, notes: note } as ModelRow
+      const { container: _c, live: _l, downloaded: _d, ...rest } = { ...model, ...changes } as ModelRow
       await api(`/api/models/${q}`, { method: 'PUT', json: rest })
-      toast('Note saved.')
+      toast(done)
       onChanged()
     } catch (e) {
       toast((e as Error).message, true)
     }
   }
+  const saveNote = () => save({ notes: note }, 'Note saved.')
+  const saveTitle = () => save({ title: title.trim() }, title.trim() ? 'Display name saved.' : 'Display name reset.')
   const own = entry.running ? entry.memBytes ?? 0 : 0
   const changed = FIELDS.filter((f) => r[f.key] !== model[f.key])
   const fillChanged = !!r.fill_memory !== !!model.fill_memory
@@ -298,6 +302,15 @@ function QuickSettings({ entry, model, readonly, onChanged, onPreview }: {
         <button className="ghost" aria-expanded={all} onClick={() => setAll(!all)}>{all ? 'Hide all settings' : 'All settings and flags'}</button>
       </div>
       {msg && <p className={msg.bad ? 'bad' : 'muted'}>{msg.text}</p>}
+      <label className="note-edit">
+        <span>Display name</span>
+        <input value={title} disabled={readonly} placeholder={prettyName({ ...entry, row: { ...model, title: '' } })} maxLength={80}
+          onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && title.trim() !== (model.title ?? '')) saveTitle() }} />
+      </label>
+      <div className="row">
+        <button disabled={readonly || title.trim() === (model.title ?? '')} onClick={saveTitle}>Save name</button>
+        <span className="muted small">What the dashboard shows. Clients still use <code>{model.name}</code>; Rename… in the ⋯ menu changes that.</span>
+      </div>
       <label className="note-edit">
         <span>Notes</span>
         <textarea rows={2} value={note} disabled={readonly} onChange={(e) => setNote(e.target.value)} />

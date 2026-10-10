@@ -37,6 +37,7 @@ class Recipe:
     speculative_extra: dict = field(default_factory=dict)  # more --speculative-config keys, e.g. draft_sample_method
     env: dict = field(default_factory=dict)  # extra environment for the engine container
     docker: dict = field(default_factory=dict)  # container settings: mem_limit, shm_size, volumes ["src:dst[:mode]"]
+    title: str = ""                  # the name the dashboard shows; empty lets it make one from the repo
     notes: str = ""                  # the user's own notes (imported from llmctl's OPTS)
     path: str | None = None          # weights already on disk (from the library) instead of a download
     draft_path: str | None = None

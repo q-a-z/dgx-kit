@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.30
+
+### Added
+- **A display name for each model.** The name the dashboard shows, kept apart from the name clients use on the gateway (which **Rename…** changes). Set it in the model's **Settings**: the first field of *All settings and flags*, or **Display name** above the notes. Empty keeps the name made from the repo. API: `title` on the recipe.
+
 ## 0.1.29
 
 ### Added

@@ -137,6 +137,16 @@ def test_rename_moves_settings_versions_and_history(env):
     assert [b["model"] for b in client.get("/api/bench").json()] == ["chat-8b"]
 
 
+def test_a_display_title_is_kept_and_listed(env):
+    client, _, _ = env
+    client.post("/api/models", json=model_body())
+    assert client.put("/api/models/llama", json=model_body(title="Llama, the small one")).status_code == 200
+    row = next(m for m in client.get("/api/models").json() if m["name"] == "llama")
+    assert row["title"] == "Llama, the small one"
+    client.put("/api/models/llama", json=model_body(title=""))
+    assert next(m for m in client.get("/api/models").json())["title"] == ""
+
+
 def test_rename_refuses_bad_names_and_running_models(env):
     client, s, _ = env
     client.post("/api/models", json=model_body())
