@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.33
+
+### Changed
+- **Reset stats is a small icon** (a circular arrow) next to the traffic figures, and in the "$$$" window, instead of a text button. Hover it to see when the totals were last reset.
+
 ## 0.1.32
 
 ### Added

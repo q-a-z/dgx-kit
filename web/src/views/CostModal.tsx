@@ -1,4 +1,5 @@
 import { Modal } from '../components/Confirm'
+import { Icon } from '../components/Icon'
 import { fmtTime, resetStats, type Snapshot } from '../api'
 import { toast } from '../toast'
 import { CACHE_SHARES, PRICES, PRICES_AS_OF } from '../pricing'
@@ -30,8 +31,8 @@ export function CostModal({ open, onClose, latest }: { open: boolean; onClose: (
         <p className="muted small">List prices per million tokens (in / out) as of {PRICES_AS_OF}, no batch discounts. The first Total pays full price for every input token; the cached columns assume 50% and 90% of input is read from the provider's cache at its cache-read price. Counters restart with each model and with Reset stats, so this is the cost since then only.</p>
       </div>
       <div className="row modal-actions">
-        <button onClick={() => resetStats().then(() => toast('Stats reset.')).catch((e: Error) => toast(e.message, true))}
-          title="Start the token and request totals from zero">Reset stats</button>
+        <button className="ghost icon-only" aria-label="Reset stats" title="Reset stats: start the token and request totals from zero"
+          onClick={() => resetStats().then(() => toast('Stats reset.')).catch((e: Error) => toast(e.message, true))}><Icon name="restart" size={14} /></button>
         <button autoFocus onClick={onClose}>Close</button>
       </div>
     </Modal>

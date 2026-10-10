@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { fmtNum, fmtTime, resetStats, sum as rateSum, type Live, type Snapshot } from '../api'
 import { toast } from '../toast'
 import { Donut } from '../components/Donut'
+import { Icon } from '../components/Icon'
 
 // GB10 GPU power scale; the zones above 80 W are where the box runs hot and loud.
 const POWER_MAX = 120
@@ -50,9 +51,10 @@ function TrafficStats({ latest }: { latest: Snapshot }) {
         {stat('Prefill', fmtNum(sum(up, 'prefill_tps')), pre != null ? `/ avg ${fmtNum(pre)} t/s` : 't/s', 'Prompt tokens per second now, and the average per request. The arrow compares now with the average.', pace(sum(up, 'prefill_tps'), pre))}
         {stat('Busy', String(sum(up, 'running')), waiting ? `+${waiting} waiting` : undefined, 'Requests running now')}
       </dl>
-      <button className="ghost small reset-stats" title={since ? `Counting since ${fmtTime(since)}. Start the totals from zero again.` : 'Start the token and request totals from zero'}
+      <button className="ghost icon-only reset-stats" aria-label="Reset stats"
+        title={since ? `Counting since ${fmtTime(since)}. Click to start the totals from zero again.` : 'Reset stats: start the token and request totals from zero'}
         onClick={() => resetStats().then(() => toast('Stats reset.')).catch((e: Error) => toast(e.message, true))}>
-        Reset stats{since ? ` · since ${fmtTime(since)}` : ''}
+        <Icon name="restart" size={14} />
       </button>
     </div>
   )
