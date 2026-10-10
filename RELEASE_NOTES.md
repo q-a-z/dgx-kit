@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.26
+
+### Added
+- **GPU slots can end when a request finishes** (Settings, GPU slots; off by default). With it on, a slot ends at the first request the model finishes after a minimum (0.5 s by default), and never later than the slot length, so slots stretch for long answers and shorten for short ones; the agent whose request just finished sends its next one while its model still has the GPU. It changes who waits, not how much the box produces.
+
 ## 0.1.25
 
 ### Changed

@@ -14,6 +14,11 @@ slots for its first token, so they engage only once at least two models are busy
 requests are in flight between them; below that the engines run concurrently as they would without
 the switch. The threshold has hysteresis (engage at the threshold, let go at half of it) so a load that
 hovers around it doesn't flap.
+
+With `end_on_finish` a slot also ends as soon as the owner finishes a request (after `min_slot` seconds),
+so slots stretch for long answers and shorten for short ones; the scheduler then reads the owner's
+finished-requests counter from its /metrics every tick. Off by default: measured against fixed slots it
+changes latency, not throughput.
 """
 from __future__ import annotations
 
@@ -21,6 +26,8 @@ import asyncio
 import logging
 import os
 import time
+
+from .engines import prometheus as P
 
 log = logging.getLogger("dgxkit.slots")
 
@@ -75,9 +82,12 @@ class Freezer:
 
 
 class SlotScheduler:
-    def __init__(self, services, quantum: float, min_requests: int = 4, tick: float = 0.25):
+    def __init__(self, services, quantum: float, min_requests: int = 4, end_on_finish: bool = False, min_slot: float = 0.5,
+                 tick: float = 0.25):
         self.s, self.quantum, self.min_requests, self.tick = services, quantum, min_requests, tick
+        self.end_on_finish, self.min_slot = end_on_finish, min_slot
         self.engaged = False  # under the threshold the engines run concurrently
+        self.done_at_start: float | None = None  # the owner's finished-requests counter when its slot began
         self.freezer = Freezer(services.runner, services.root)
         self.owner: str | None = None
         self.since = 0.0
@@ -96,6 +106,25 @@ class SlotScheduler:
             self.task.cancel()
             await asyncio.gather(self.task, return_exceptions=True)
             self.task = None
+
+    async def _finished(self, name: str) -> float | None:
+        """The engine's lifetime count of finished requests, read now (not the sampler's second-old copy)."""
+        ad = self.s.sampler.engines.get(name)
+        if ad is None:
+            return None
+        try:
+            text = (await ad.client.get(ad.base_url + "/metrics")).text
+            return P.total(P.parse(text), *ad.COUNTERS.get("done", ()))
+        except Exception:
+            return None
+
+    async def _slot_over(self, now: float) -> bool:
+        if now - self.since >= self.quantum:
+            return True
+        if not self.end_on_finish or self.owner is None or now - self.since < self.min_slot or self.done_at_start is None:
+            return False
+        done = await self._finished(self.owner)
+        return done is not None and done > self.done_at_start
 
     def _next(self, names: list[str], busy: list[str]) -> str | None:
         """Round robin over the busy models, starting after the current owner."""
@@ -122,10 +151,12 @@ class SlotScheduler:
                     self.engaged = len(busy) >= 2 and load >= (self.min_requests if not self.engaged else max(1, self.min_requests // 2))
                     if not self.engaged:
                         busy = []  # everyone runs: the loop below thaws what is frozen and marks nothing
-                    if self.owner not in busy or now - self.since >= self.quantum:
+                    switched = False
+                    if self.owner not in busy or await self._slot_over(now):
                         nxt = self._next(list(ids), busy)
                         if nxt != self.owner:
                             log.debug("slot %s -> %s (busy %s)", self.owner, nxt, busy)
+                            switched = True
                         self.owner, self.since = nxt, now
                     for n in ids:  # freeze first, then thaw: never two engines running
                         if n != self.owner and n in busy:
@@ -133,6 +164,8 @@ class SlotScheduler:
                     for n in ids:
                         if n == self.owner or n not in busy:
                             await asyncio.to_thread(self.freezer.set, ids[n], False)
+                    if switched or self.done_at_start is None:
+                        self.done_at_start = await self._finished(self.owner) if self.end_on_finish and self.owner else None
                     self.s.sampler.slots = {n: "running" if n == self.owner else "waiting" for n in ids
                                             if n == self.owner or ids[n] in self.freezer.frozen}
                     self.error = None

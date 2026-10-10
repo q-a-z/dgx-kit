@@ -113,7 +113,7 @@ function HfToken() {
   )
 }
 
-type SlotsConf = { enabled: boolean; quantum: number; min_requests: number; active: boolean; engaged: boolean; owner: string | null; backend: string | null; error: string | null }
+type SlotsConf = { enabled: boolean; quantum: number; min_requests: number; end_on_finish: boolean; min_slot: number; active: boolean; engaged: boolean; owner: string | null; backend: string | null; error: string | null }
 
 /** The GPU time slot switch and the slot length. The engines of waiting models are frozen in place (their cache and open
  *  streams survive), so this never restarts anything; it takes effect at once and is kept across dashboard restarts. */
@@ -121,14 +121,16 @@ function GpuSlots() {
   const conf = usePoll<SlotsConf>('/api/settings/slots', 2000)
   const [q, setQ] = useState<string | null>(null)
   const [m, setM] = useState<string | null>(null)
+  const [ms, setMs] = useState<string | null>(null)
   const [msg, setMsg] = useState<string | null>(null)
   if (!conf.data) return <Pending error={conf.error} what="the GPU slot settings" />
   const c = conf.data
   const put = (json: object) => api<SlotsConf>('/api/settings/slots', { method: 'PUT', json })
-    .then((r) => { setQ(null); setM(null); setMsg(null); toast(r.enabled ? `GPU slots on, ${r.quantum} s each.` : 'GPU slots off.'); conf.reload() })
+    .then((r) => { setQ(null); setM(null); setMs(null); setMsg(null); toast(r.enabled ? `GPU slots on, ${r.quantum} s each.` : 'GPU slots off.'); conf.reload() })
     .catch((e: Error) => setMsg(e.message))
-  const dirty = (q != null && q.trim() !== '' && Number(q) !== c.quantum) || (m != null && m.trim() !== '' && Number(m) !== c.min_requests)
-  const save = () => put({ ...(q != null && q.trim() !== '' ? { quantum: Number(q) } : {}), ...(m != null && m.trim() !== '' ? { min_requests: Number(m) } : {}) })
+  const changed = (v: string | null, cur: number) => v != null && v.trim() !== '' && Number(v) !== cur
+  const dirty = changed(q, c.quantum) || changed(m, c.min_requests) || changed(ms, c.min_slot)
+  const save = () => put({ ...(changed(q, c.quantum) ? { quantum: Number(q) } : {}), ...(changed(m, c.min_requests) ? { min_requests: Number(m) } : {}), ...(changed(ms, c.min_slot) ? { min_slot: Number(ms) } : {}) })
   return (
     <section className="card wide">
       <label className="check"><input type="checkbox" checked={c.enabled} onChange={(e) => put({ enabled: e.target.checked })} /> Running models take turns on the GPU</label>
@@ -142,9 +144,16 @@ function GpuSlots() {
       <label>Only from this many requests in flight
         <span className="row">
           <input className="grow" type="number" min={1} max={64} step={1} value={m ?? String(c.min_requests)} onChange={(e) => setM(e.target.value)} />
-          <button className="primary" disabled={!dirty} onClick={save}>Save</button>
         </span>
         <small className="muted">Slots pay when a model decodes several requests in a turn, and each new request waits up to two slots for its first token. Under this many requests across the busy models (and with fewer than two models busy) the engines run concurrently as before.</small>
+      </label>
+      <label className="check"><input type="checkbox" checked={c.end_on_finish} onChange={(e) => put({ end_on_finish: e.target.checked })} /> End a slot as soon as the model finishes a request</label>
+      <label>…but not before this many seconds
+        <span className="row">
+          <input className="grow" type="number" min={0.1} max={60} step={0.1} value={ms ?? String(c.min_slot)} onChange={(e) => setMs(e.target.value)} disabled={!c.end_on_finish} />
+          <button className="primary" disabled={!dirty} onClick={save}>Save</button>
+        </span>
+        <small className="muted">Off: every slot lasts the slot length. On: a slot ends at the first finished request after this minimum, and never later than the slot length, so slots stretch for long answers and shorten for short ones. The agent whose request just finished sends its next one while its model still has the GPU. It changes who waits, not how much the box produces.</small>
       </label>
       {c.enabled && <p className="muted small">{!c.active ? 'On, but not running (read-only mode?)' : !c.engaged ? 'On; running concurrently, under the threshold' : c.owner ? `${c.owner} has the GPU now` : 'On; no model is busy'}{c.active && c.backend ? ` · freezing via ${c.backend}` : ''}</p>}
       {c.error && <p className="bad">▲ {c.error}</p>}

@@ -126,18 +126,24 @@ class Settings:
         """GPU time slots: whether running models take turns on the GPU, and how long a turn is (seconds)."""
         v = self._load().get("slots") or {}
         return {"enabled": bool(v.get("enabled")), "quantum": float(v.get("quantum") or 2.0),
-                "min_requests": int(v.get("min_requests") or 4)}
+                "min_requests": int(v.get("min_requests") or 4),
+                "end_on_finish": bool(v.get("end_on_finish")), "min_slot": float(v.get("min_slot") or 0.5)}
 
-    def set_slots(self, enabled: bool | None = None, quantum: float | None = None, min_requests: int | None = None) -> dict:
+    def set_slots(self, enabled: bool | None = None, quantum: float | None = None, min_requests: int | None = None,
+                  end_on_finish: bool | None = None, min_slot: float | None = None) -> dict:
         cur = self.slots
         if quantum is not None and not 0.5 <= quantum <= 60:
             raise ValueError("a slot is 0.5 to 60 seconds")
         if min_requests is not None and not 1 <= min_requests <= 64:
             raise ValueError("the threshold is 1 to 64 requests")
+        if min_slot is not None and not 0.1 <= min_slot <= 60:
+            raise ValueError("the shortest slot is 0.1 to 60 seconds")
         data = self._load()
         data["slots"] = {"enabled": cur["enabled"] if enabled is None else bool(enabled),
                          "quantum": cur["quantum"] if quantum is None else float(quantum),
-                         "min_requests": cur["min_requests"] if min_requests is None else int(min_requests)}
+                         "min_requests": cur["min_requests"] if min_requests is None else int(min_requests),
+                         "end_on_finish": cur["end_on_finish"] if end_on_finish is None else bool(end_on_finish),
+                         "min_slot": cur["min_slot"] if min_slot is None else float(min_slot)}
         self._save(data)
         return self.slots
 

@@ -75,15 +75,19 @@ async def _rotation():
 
 def test_settings_switch_starts_and_stops_the_scheduler(env):
     client, s, _ = env
-    assert client.get("/api/settings/slots").json() == {"enabled": False, "quantum": 2.0, "min_requests": 4, "active": False, "engaged": False, "owner": None, "backend": None, "error": None}
+    assert client.get("/api/settings/slots").json() == {"enabled": False, "quantum": 2.0, "min_requests": 4, "end_on_finish": False, "min_slot": 0.5, "active": False, "engaged": False, "owner": None, "backend": None, "error": None}
     r = client.put("/api/settings/slots", json={"enabled": True, "quantum": 3, "min_requests": 6}).json()
     assert r["enabled"] and r["quantum"] == 3.0 and r["min_requests"] == 6 and r["active"] and s.slots.running
     assert client.put("/api/settings/slots", json={"quantum": 0.1}).status_code == 422
     assert client.put("/api/settings/slots", json={"min_requests": 0}).status_code == 422
     r = client.put("/api/settings/slots", json={"enabled": False}).json()
     assert not r["enabled"] and not r["active"] and r["quantum"] == 3.0 and not s.slots.running
-    assert s.settings.slots == {"enabled": False, "quantum": 3.0, "min_requests": 6}
-    assert [a["detail"] for a in client.get("/api/log").json() if a["action"] == "settings"] == ["GPU slots on, 3 s each from 6 requests", "GPU slots off, 3 s each from 6 requests"]
+    assert s.settings.slots == {"enabled": False, "quantum": 3.0, "min_requests": 6, "end_on_finish": False, "min_slot": 0.5}
+    r = client.put("/api/settings/slots", json={"end_on_finish": True, "min_slot": 1}).json()
+    assert r["end_on_finish"] and r["min_slot"] == 1.0
+    assert client.put("/api/settings/slots", json={"min_slot": 0}).status_code == 422
+    assert [a["detail"] for a in client.get("/api/log").json() if a["action"] == "settings"] == ["GPU slots on, 3 s each from 6 requests", "GPU slots off, 3 s each from 6 requests",
+            "GPU slots off, 3 s each from 6 requests, ending when a request finishes (after 1 s)"]
 
 
 def test_scheduler_survives_a_failing_tick():
@@ -126,4 +130,35 @@ async def _threshold():
     live["a"] = {"up": True, "running": 0, "waiting": 0}
     await asyncio.sleep(0.03)
     assert not sch.engaged and sch.owner is None and runner.paused[-1] == ("bbb", False) and sampler.slots == {}
+    await sch.stop()
+
+
+def test_end_on_finish_hands_over_at_the_first_finished_request_after_the_minimum():
+    asyncio.run(_end_on_finish())
+
+
+async def _end_on_finish():
+    runner = FakeRunner({"a": "aaa", "b": "bbb"})
+    sampler = SimpleNamespace(latest={"models": {}}, slots={}, engines={})
+    s = SimpleNamespace(runner=runner, sampler=sampler, root="/nonexistent")
+    live = sampler.latest["models"]
+    live["a"] = {"up": True, "running": 2}
+    live["b"] = {"up": True, "running": 2}
+    done = {"a": 10.0, "b": 10.0}
+
+    class Sched(SlotScheduler):
+        async def _finished(self, name):
+            return done[name]
+
+    sch = Sched(s, quantum=1.0, min_requests=1, end_on_finish=True, min_slot=0.05, tick=0.01)
+    sch.start()
+    await asyncio.sleep(0.03)
+    assert sch.owner == "a" and sch.done_at_start == 10.0
+    done["a"] = 11.0  # a finishes a request before the minimum: nothing yet
+    await asyncio.sleep(0.01)
+    assert sch.owner == "a"
+    await asyncio.sleep(0.06)  # past the minimum: hands over to b long before the 1 s maximum
+    assert sch.owner == "b" and sch.done_at_start == 10.0
+    await asyncio.sleep(0.1)  # b finishes nothing: it keeps the slot until the maximum
+    assert sch.owner == "b"
     await sch.stop()
