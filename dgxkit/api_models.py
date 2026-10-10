@@ -1309,13 +1309,20 @@ def _slots_view(s) -> dict:
 
 async def apply_slots(s) -> None:
     """Start or stop the GPU slot scheduler so it matches Settings (at boot and after a change)."""
-    from .slots import SlotScheduler
+    from .slots import Freezer, SlotScheduler
     if s.slots and s.slots.running:
         await s.slots.stop()
     conf = s.settings.slots
     if conf["enabled"] and os.environ.get("DGXKIT_READONLY") != "1":
         s.slots = SlotScheduler(s, conf["quantum"], conf["min_requests"], conf["end_on_finish"], conf["min_slot"])
         s.slots.start()
+    elif os.environ.get("DGXKIT_READONLY") != "1":  # off: make sure nothing stays frozen from before
+        try:
+            stale = await asyncio.to_thread(Freezer(s.runner, s.root).thaw_stale)
+            if stale:
+                s.log("GPU slots", "thawed " + ", ".join(stale))
+        except Exception:  # Docker down, or a test without it: nothing to thaw anyway
+            pass
 
 
 @router.get("/settings/slots")

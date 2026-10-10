@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.27
+
+### Fixed
+- **A dashboard restart could leave models frozen.** When the dashboard restarted (an update) while GPU slots had models frozen, the new scheduler didn't know about them and never thawed them, so they looked alive but served nothing. The scheduler now thaws any of its models it finds frozen when it starts, turning the switch off does the same, and shutdown thaws synchronously.
+
 ## 0.1.26
 
 ### Added

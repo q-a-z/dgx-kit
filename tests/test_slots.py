@@ -17,13 +17,19 @@ class FakeContainer:
 
 
 class FakeRunner:
-    def __init__(self, running):
+    def __init__(self, running, stale=()):
         self.running = running  # name -> container id
         self.paused = []
+        self.stale = set(stale)  # names Docker reports as paused when the scheduler starts
         self.docker = SimpleNamespace(containers=SimpleNamespace(get=lambda cid: FakeContainer(self.paused, cid)))
 
     def status(self):
         return {n: {"state": "running", "id": cid, "engine": "vllm"} for n, cid in self.running.items()}
+
+    def _ours(self):
+        return [SimpleNamespace(id=cid, status="paused" if n in self.stale else "running", labels={"dgxkit.model": n},
+                                unpause=lambda cid=cid: self.paused.append((cid, False)))
+                for n, cid in self.running.items()]
 
 
 def test_freezer_writes_cgroup_file_when_it_can_else_asks_docker(tmp_path):
@@ -161,4 +167,18 @@ async def _end_on_finish():
     assert sch.owner == "b" and sch.done_at_start == 10.0
     await asyncio.sleep(0.1)  # b finishes nothing: it keeps the slot until the maximum
     assert sch.owner == "b"
+    await sch.stop()
+
+
+def test_a_restarted_dashboard_thaws_what_the_old_one_left_frozen():
+    asyncio.run(_stale())
+
+
+async def _stale():
+    runner = FakeRunner({"a": "aaa", "b": "bbb"}, stale={"b"})
+    s = SimpleNamespace(runner=runner, sampler=SimpleNamespace(latest={"models": {}}, slots={}, engines={}), root="/nonexistent")
+    sch = SlotScheduler(s, quantum=0.1, tick=0.01)
+    sch.start()
+    await asyncio.sleep(0.03)
+    assert ("bbb", False) in runner.paused and sch.freezer.frozen == set()  # b thawed at start, nothing else touched
     await sch.stop()

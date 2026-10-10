@@ -80,6 +80,24 @@ class Freezer:
             except Exception as e:
                 log.warning("could not thaw %s: %s", cid[:12], e)
 
+    def thaw_stale(self) -> list[str]:
+        """Thaw DGX-kit's model containers that are frozen without this scheduler knowing: a dashboard that
+        restarted (an update) while it had models frozen. Returns the names thawed."""
+        names = []
+        for c in self.runner._ours():
+            frozen = c.status == "paused"
+            if not frozen:
+                try:
+                    with open(self._path(c.id)) as f:
+                        frozen = f.read().strip() == "1"
+                except OSError:
+                    pass
+            if frozen:
+                self.frozen.add(c.id)
+                self.set(c.id, False)
+                names.append(c.labels.get("dgxkit.model", c.id[:12]))
+        return names
+
 
 class SlotScheduler:
     def __init__(self, services, quantum: float, min_requests: int = 4, end_on_finish: bool = False, min_slot: float = 0.5,
@@ -138,6 +156,9 @@ class SlotScheduler:
         ids_at = 0.0
         log.info("GPU slots on: %.1f s each", self.quantum)
         try:
+            stale = await asyncio.to_thread(self.freezer.thaw_stale)
+            if stale:
+                log.warning("GPU slots: thawed %s, left frozen by an earlier dashboard", ", ".join(stale))
             while True:
                 try:
                     now = time.monotonic()
@@ -180,4 +201,4 @@ class SlotScheduler:
         finally:
             self.s.sampler.slots = {}
             self.owner = None
-            await asyncio.to_thread(self.freezer.thaw_all)
+            self.freezer.thaw_all()  # synchronous: this also runs while the dashboard is shutting down
