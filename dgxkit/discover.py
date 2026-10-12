@@ -12,7 +12,7 @@ import shlex
 
 from .control import LABEL
 
-DEFAULT_PORTS = {"vllm": 8000, "sglang": 30000, "llamacpp": 8080}
+DEFAULT_PORTS = {"vllm": 8000, "sglang": 30000, "llamacpp": 8080, "atlas": 8888}
 
 
 def _opt(args: list[str], *names: str) -> str | None:
@@ -34,6 +34,8 @@ def _engine(args: list[str], image: str) -> str | None:
         return "sglang"
     if any(a.endswith("llama-server") for a in args) or "llama.cpp" in image:
         return "llamacpp"
+    if ("atlas" in image or any(a.endswith("/spark") or a == "spark" for a in args[:1])) and "serve" in args:
+        return "atlas"
     if "vllm" in joined or "vllm" in image:
         if "serve" in args or "vllm.entrypoints" in joined:
             return "vllm"
@@ -54,6 +56,8 @@ def _draft(engine: str, args: list[str]) -> str | None:
         return _opt(args, "--speculative-draft-model-path")
     if engine == "llamacpp":
         return _opt(args, "-md", "--model-draft")
+    if engine == "atlas":
+        return _opt(args, "--draft-model")
     return None
 
 
@@ -69,6 +73,11 @@ def parse(args: list[str], image: str = "") -> dict | None:
             model = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("-") else None
     elif engine == "sglang":
         model = _opt(args, "--model-path", "--model")
+    elif engine == "atlas":
+        model = _opt(args, "--model-from-path")
+        if not model and "serve" in args:
+            i = args.index("serve")
+            model = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("-") else None
     else:
         model = _opt(args, "-m", "--model")
     port = _opt(args, "--port")
@@ -76,7 +85,7 @@ def parse(args: list[str], image: str = "") -> dict | None:
         "engine": engine,
         "port": int(port) if port and port.isdigit() else DEFAULT_PORTS[engine],
         "model": model,
-        "served_name": _opt(args, "--served-model-name", "--alias"),
+        "served_name": _opt(args, "--served-model-name", "--alias", "--model-name"),
         "draft": _draft(engine, args),
     }
 

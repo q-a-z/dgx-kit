@@ -13,7 +13,7 @@ Release notes: [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 - **Watch the machine:** gauges for temperature, power, clock, load, network, disk and every CPU core, a stats line (tokens in and out, requests, decode and prefill speed against their averages), and the models laid out in unified memory. The logo carries the box's real model, read from its firmware (for example ASUS GX10).
 - **Keep track of firmware:** Settings → System lists the BIOS, GPU VBIOS, kernel, driver and every firmware device fwupd manages, says when an update is available, and remembers when any version changed.
-- **Run models:** start and stop them, edit their engine options as one block of text, and see speed and cache numbers live. A model takes the memory its context needs, not all that is free (it says how much), and Start fetches a missing engine image by itself. GGUF models run on llama.cpp with nothing to build.
+- **Run models:** start and stop them, edit their engine options as one block of text, and see speed and cache numbers live. A model takes the memory its context needs, not all that is free (it says how much), and Start fetches a missing engine image by itself. GGUF models run on llama.cpp with nothing to build. Atlas (`avarok/atlas-gb10`, a Rust and CUDA engine, AGPL-3.0) is available as an engine too; nothing runs on it until you add a model and press Start.
 - **Decision models:** Laya, which answers typed yes/no, choice and score questions about a text with calibrated probabilities in about 20 ms, runs beside the models and is listed with them (see below).
 - **One gateway:** every running model is published on one OpenAI-compatible address through a built-in LiteLLM, and you can publish or unpublish each one.
 - **Bring your setup over:** import llmctl `.conf` files, including models whose weights are already on disk.
@@ -50,8 +50,8 @@ A plain Ubuntu machine is not enough: the installer does not install the NVIDIA 
 1. Get the package onto the Spark and unpack it:
 
    ```
-   tar xzf dgx-kit-0.1.33.tar.gz
-   cd dgx-kit-0.1.33
+   tar xzf dgx-kit-0.1.34.tar.gz
+   cd dgx-kit-0.1.34
    ```
 
 2. Look before you leap (changes nothing):
@@ -96,7 +96,7 @@ Enter, and restarts the service on the new code. For updating, the next section 
 ```
 dgx-kit update                      # fetch the latest from git and update
 dgx-kit update ~/dgx-kit            # from a git clone (or any unpacked package folder)
-dgx-kit update dgx-kit-0.1.33.tar.gz # from a package, a .tgz, or a GitHub .zip
+dgx-kit update dgx-kit-0.1.34.tar.gz # from a package, a .tgz, or a GitHub .zip
 dgx-kit version                     # what is running
 ```
 
@@ -397,7 +397,7 @@ service reads there is read-only. Build the release package from the last commit
 Layout:
 
 - `dgxkit/collectors`: GPU (one NVML session, no `nvidia-smi`), CPU, memory, storage, network, sensors.
-- `dgxkit/engines`: metrics parsers for vLLM, SGLang and llama.cpp.
+- `dgxkit/engines`: metrics parsers for vLLM, SGLang, llama.cpp and Atlas.
 - `dgxkit/control.py`, `dgxkit/api_models.py`: start, stop, edit, logs, downloads over HTTP. Only containers labelled `dgxkit.model` are touched.
 - `dgxkit/options.py`, `dgxkit/importer.py`: a model's settings as text, and llmctl `.conf` import.
 - `dgxkit/gateway.py`: the bundled LiteLLM and its Postgres.

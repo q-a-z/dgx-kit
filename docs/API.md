@@ -37,7 +37,7 @@ curl -b jar localhost:3000/api/models
 | `GET /api/snapshot` | The latest reading: GPU, CPU, memory, disk, and each running model's live numbers (`models`) |
 | `GET /api/history` | The recent readings the charts draw, oldest first |
 | `GET /api/stream` | Server-sent events: one `data: <snapshot JSON>` about every second, `: keep-alive` comments in between |
-| `GET /api/layout`, `PUT /api/layout` | The dashboard's tile layout, shared by every browser. `PUT` body is the layout object |
+| `GET /api/layout`, `PUT /api/layout` | The dashboard's tile layout, shared by every browser (the page saves a drag-and-drop arrangement with `PUT`, 400 ms after the last move). `GET` answers `{"layout": {...} \| null}`; the `PUT` body is `{"layout": {...}}`, or `{"layout": null}` to go back to the default arrangement |
 | `POST /api/stats/reset` | Starts the token and request totals of every running model (`?model=name` for one) from zero; `404` if that model isn't running |
 | `GET /api/log` | What DGX-kit has done on this machine (the Activity tab): start, stop, create, password, … |
 
@@ -49,7 +49,7 @@ A model is a **recipe**: the engine, the weights, and its options. Fields (all o
 |---|---|
 | `name`, `repo` | Its name here, and the Hugging Face repo |
 | `title` | The name the dashboard shows (empty: made from the repo). Clients still use `name` |
-| `engine` | `vllm` (default), `sglang` or `llamacpp` |
+| `engine` | `vllm` (default), `sglang`, `llamacpp` or `atlas` |
 | `image` | The Docker image; empty uses the engine's default |
 | `revision` | A repo revision |
 | `quantization` | `nvfp4`, `fp8`, `gguf` or none (detected from the repo) |

@@ -2,6 +2,17 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.34
+
+### Added
+- **Atlas as a fourth engine** ([Avarok's Atlas](https://github.com/Avarok-Cybersecurity/atlas), a Rust and CUDA engine for the GB10). Pick **Atlas** as a model's engine; DGX-kit starts it with `spark serve` on the `avarok/atlas-gb10:latest` image (`DGXKIT_IMAGE_ATLAS` changes it), passes the context, concurrency, KV type, a DFlash draft (`--dflash --draft-model`) or MTP (`--speculative`), and reads its `/metrics` (requests, tokens, TTFT, prefix-cache hit rate) for the live numbers. Atlas servers started outside DGX-kit are recognised too.
+- Nothing starts by itself: no model runs on Atlas until you add one and press Start. Atlas counts weights, buffers and KV against `--gpu-memory-utilization`, so set **GPU memory share** on the model rather than trusting the sized default, and read the notes below first.
+
+### Good to know
+- **Licence:** Atlas is AGPL-3.0 (a commercial edition exists). Running it is fine; changing and distributing it is not.
+- **Memory:** a trial of a derived engine with the same flags used about 1.5× the memory of vLLM for the same model, because it kept the raw weights beside its repacked copy. Atlas itself is untested here.
+- **Metrics names** were read from the binary's strings, not from a running server; an unexpected name shows as a missing number, not an error.
+
 ## 0.1.33
 
 ### Changed

@@ -23,6 +23,8 @@ DEFAULTS = {
     "vllm": os.environ.get("DGXKIT_IMAGE_VLLM", "vllm/vllm-openai:v0.30.0"),
     "sglang": os.environ.get("DGXKIT_IMAGE_SGLANG", "lmsysorg/sglang:v0.5.20-cu130"),
     "llamacpp": os.environ.get("DGXKIT_IMAGE_LLAMACPP", "ghcr.io/ggml-org/llama.cpp:server-cuda13"),  # CUDA 13 build, which has kernels for the GB10 (12.1); arm64 is published
+    # Atlas (Avarok, AGPL-3.0): a Rust and CUDA engine for the GB10 whose binary is `spark`. Not run by anything here until asked for.
+    "atlas": os.environ.get("DGXKIT_IMAGE_ATLAS", "avarok/atlas-gb10:latest"),
     "litellm": os.environ.get("DGXKIT_IMAGE_LITELLM", "ghcr.io/berriai/litellm:main-stable"),
 }
 CATALOG = DEFAULTS  # kept for callers that only need the default names

@@ -1,6 +1,7 @@
 import pytest
 
 from dgxkit.engines import LlamaCppAdapter, SglangAdapter, adapter_for
+from dgxkit.engines.atlas import AtlasAdapter
 from dgxkit.engines import prometheus as P
 
 SGLANG = """
@@ -51,6 +52,24 @@ def test_reset_stats_counts_from_now_and_survives_a_restart():
     assert again["decode_tps"] == 150.0  # the live rate doesn't care
     restarted = a.compute(P.parse(fill(SGLANG, 40.0)), now=4.0)  # the server began counting again
     assert restarted["gen_tokens_total"] == 40.0 and "stats_since" not in restarted
+
+
+ATLAS = """
+atlas_requests_active 2
+atlas_requests_total 40
+atlas_prompt_tokens_total 5000
+atlas_generation_tokens_total GEN
+atlas_prefix_cache_hit_rate 0.25
+"""
+
+
+def test_atlas_reads_the_metric_names_it_registers():
+    a = AtlasAdapter("http://x")
+    a.compute(P.parse(fill(ATLAS, 1000)), now=0.0)
+    out = a.compute(P.parse(fill(ATLAS, 1200)), now=2.0)
+    assert out["running"] == 2.0 and out["requests_total"] == 40.0 and out["prompt_tokens_total"] == 5000.0
+    assert out["gen_tokens_total"] == 1200.0 and out["decode_tps"] == 100.0 and out["prefix_hit_rate"] == 0.25
+    assert adapter_for("atlas", "http://x").engine == "atlas"
 
 
 def test_llamacpp_has_rates_but_no_percentiles():

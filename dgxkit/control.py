@@ -62,7 +62,7 @@ def jit_caches(engine: str) -> tuple[dict, dict]:
     jobs: uncapped, ninja and nvcc run one compiler per core and the container hits its memory limit and is
     killed mid-build (seen on a Nemotron start). Shared with llmctl's caches when it left them in ~/.cache.
     """
-    if engine == "llamacpp":
+    if engine in ("llamacpp", "atlas"):  # llama.cpp is built ahead; Atlas ships its kernels precompiled, no runtime compilation
         return {}, {}
     root = Path(os.environ.get("DGXKIT_CACHE_DIR") or Path.home() / ".cache")
     vols = {}
@@ -140,6 +140,23 @@ def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]
                # llama.cpp splits -c across slots, so ask for context x slots.
                "-c", str(p.context_tokens * slots), "--parallel", str(slots),
                "-ngl", "999", "--metrics", "--slots"]
+    elif r.engine == "atlas":
+        # `spark` is the image's own binary. Atlas counts everything (weights, buffers, KV, reserves) against
+        # --gpu-memory-utilization and sizes its KV cache to what is left, so the cap is the number to set.
+        slots = max(1, int(p.concurrency))
+        cmd = ["spark", "serve", path, "--model-name", r.name, "--bind", "0.0.0.0", "--port", str(port),
+               "--max-seq-len", str(p.context_tokens), "--max-num-seqs", str(slots), "--max-batch-size", str(slots),
+               "--no-tui"]
+        util = r.gpu_memory_utilization or p.gpu_fraction
+        if util:
+            cmd += ["--gpu-memory-utilization", str(util)]
+        kv = {"fp8_e4m3": "fp8", "fp8": "fp8", "bf16": "bf16", "nvfp4": "nvfp4"}.get(r.kv_cache_dtype)
+        if kv:
+            cmd += ["--kv-cache-dtype", kv]
+        if draft:
+            cmd += ["--dflash", "--draft-model", draft]  # DFlash is the only draft-model method it takes
+        elif r.draft_method == "mtp":
+            cmd += ["--speculative"]  # the model's own MTP heads
     else:
         raise ValueError(f"unknown engine {r.engine}")
     return cmd + extra_tokens(r.extra_args)

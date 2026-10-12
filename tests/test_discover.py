@@ -2,6 +2,13 @@ from dgxkit.control import LABEL
 from dgxkit.discover import discover, parse
 
 
+def test_atlas_server_is_recognised_by_its_binary_and_flags():
+    a = parse(["spark", "serve", "/models/q", "--port", "8888", "--model-name", "qwen", "--dflash", "--draft-model", "/models/d"],
+              image="avarok/atlas-gb10:latest")
+    assert a == {"engine": "atlas", "port": 8888, "model": "/models/q", "served_name": "qwen", "draft": "/models/d"}
+    assert parse(["spark", "serve", "/m"])["port"] == 8888
+
+
 def test_vllm_with_dotted_speculative_config_like_q_spark():
     args = ["vllm", "serve", "/models/vllm/laguna-xs-2.1-abliterix-nvfp4", "--port", "8095",
             "--served-model-name", "laguna", "--speculative_config.model", "/models/vllm/laguna-xs-2.1-dflash-nvfp4",

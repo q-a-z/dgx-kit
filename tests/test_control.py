@@ -29,6 +29,22 @@ def test_llamacpp_needs_a_gguf_choice_and_scales_context_by_slots():
     assert cmd[cmd.index("--parallel") + 1] == "3"
 
 
+def test_atlas_command_uses_its_own_binary_and_caps_memory_with_the_utilization_flag():
+    r = Recipe(name="a", repo="org/A", engine="atlas", kv_cache_dtype="fp8", gpu_memory_utilization=0.5,
+               draft_repo="org/A-dflash", draft_method="dflash")
+    cmd = engine_command(r, P, 8100, "/models")
+    assert cmd[:3] == ["spark", "serve", "/models/org--A"]
+    assert cmd[cmd.index("--model-name") + 1] == "a" and cmd[cmd.index("--port") + 1] == "8100"
+    assert cmd[cmd.index("--bind") + 1] == "0.0.0.0" and "--no-tui" in cmd
+    assert cmd[cmd.index("--max-seq-len") + 1] == "65536"
+    assert cmd[cmd.index("--max-num-seqs") + 1] == "3" and cmd[cmd.index("--max-batch-size") + 1] == "3"
+    assert cmd[cmd.index("--gpu-memory-utilization") + 1] == "0.5"
+    assert cmd[cmd.index("--kv-cache-dtype") + 1] == "fp8"
+    assert cmd[cmd.index("--draft-model") + 1] == "/models/org--A-dflash" and "--dflash" in cmd
+    mtp = Recipe(name="b", repo="org/B", engine="atlas", draft_method="mtp")
+    assert "--speculative" in engine_command(mtp, P, 8100, "/models") and "--draft-model" not in engine_command(mtp, P, 8100, "/models")
+
+
 def test_pick_port_skips_taken_and_bound():
     assert pick_port({8100}, is_free=lambda p: p != 8101) == 8102
 

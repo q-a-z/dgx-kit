@@ -5,7 +5,7 @@ import { usePoll } from '../usePoll'
 import { ChangePassword } from '../Login'
 import { toast } from '../toast'
 
-const LABELS: Record<string, string> = { vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp', litellm: 'LiteLLM gateway' }
+const LABELS: Record<string, string> = { vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp', atlas: 'Atlas', litellm: 'LiteLLM gateway' }
 
 /** A bar and the words for a pull or build that is running (or the reason it failed). */
 export function PullProgress({ job }: { job: { kind: string; state: string; error: string | null; tail: string[]; progress?: number | null } }) {

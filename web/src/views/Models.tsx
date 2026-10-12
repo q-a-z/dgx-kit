@@ -150,7 +150,7 @@ export function Editor({ model, onDone }: { model: ModelRow; onDone: (msg: strin
       </label>
       <label>Engine
         <select value={r.engine} onChange={(e) => set('engine', e.target.value)}>
-          <option value="vllm">vLLM</option><option value="sglang">SGLang</option><option value="llamacpp">llama.cpp</option>
+          <option value="vllm">vLLM</option><option value="sglang">SGLang</option><option value="llamacpp">llama.cpp</option><option value="atlas">Atlas</option>
         </select>
       </label>
       <ImagePicker engine={r.engine} value={r.image ?? null} onChange={(v) => set('image', v)} />

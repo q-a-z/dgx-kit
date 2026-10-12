@@ -1,8 +1,9 @@
+from .atlas import AtlasAdapter
 from .llamacpp import LlamaCppAdapter
 from .sglang import SglangAdapter
 from .vllm import VllmAdapter
 
-ADAPTERS = {"vllm": VllmAdapter, "sglang": SglangAdapter, "llamacpp": LlamaCppAdapter}
+ADAPTERS = {"vllm": VllmAdapter, "sglang": SglangAdapter, "llamacpp": LlamaCppAdapter, "atlas": AtlasAdapter}
 
 
 def adapter_for(engine: str, base_url: str):
