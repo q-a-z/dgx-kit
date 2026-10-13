@@ -254,7 +254,7 @@ function GatewayDefaults({ onApplied }: { onApplied: () => void }) {
     <label>Gateway defaults
       <textarea className="mono" rows={10} spellCheck={false} value={shown} onChange={(e) => setText(e.target.value)} />
       <small className="muted">
-        YAML. <code>litellm_params</code> go to every published model (a request that sets the same field wins); <code>litellm_settings</code> go to LiteLLM itself. File: <code>{data.file}</code>.
+        YAML. <code>litellm_params</code> go to every published model (a request that sets the same field wins); <code>litellm_settings</code> and <code>general_settings</code> go to LiteLLM itself. Whether an answer streams is up to each request; <code>always_include_stream_usage</code> (general_settings) makes streamed answers end with token usage. File: <code>{data.file}</code>.
         {params.length ? ` Each model gets: ${params.join(', ')}.` : ' Nothing added to models.'}
         {data.pending && text === null && ' Saved but not applied to the running gateway yet.'}
       </small>
