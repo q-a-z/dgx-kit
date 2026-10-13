@@ -169,7 +169,7 @@ def test_gateway_defaults_round_trip_and_reject_broken_yaml(env):
     s.gateway = Gateway(s.state_dir)  # the real file handling; applying is not exercised, so Docker is never touched
     d = client.get("/api/gateway/defaults").json()
     assert d["litellm_params"] == {"stream_timeout": 600, "timeout": 1800}
-    assert d["general_settings"] == {"always_include_stream_usage": True}
+    assert d["general_settings"] == {}
     r = client.put("/api/gateway/defaults", json={"text": "litellm_params:\n  timeout: 900\n"})
     assert r.status_code == 200 and r.json()["litellm_params"] == {"timeout": 900}
     assert "general_settings" in r.json()

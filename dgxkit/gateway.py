@@ -35,16 +35,15 @@ DEFAULTS_FILE = "defaults.yaml"  # in the gateway's folder: parameters every pub
 DEFAULTS_HELP = """# Defaults for the LiteLLM gateway, applied to every model DGX-kit publishes.
 # litellm_params: added to each model's litellm_params, so a request that sets the same field still wins.
 # litellm_settings: added to LiteLLM's own settings (drop_params, disable_cache and so on).
-# general_settings: added to the proxy's settings. always_include_stream_usage is the one that makes streamed answers
-# end with a token-usage chunk; a stream_options default in litellm_params does not do that.
+# general_settings: added to the proxy's settings. always_include_stream_usage: true there makes streamed answers
+# end with a token-usage chunk (a stream_options default in litellm_params does not do that).
 # Whether an answer streams is up to each request (its "stream" field); no default here can force it.
 # Save the file, then press "Save and apply" in Settings, Gateway (the gateway restarts for a moment).
 litellm_params:
   stream_timeout: 600     # seconds to wait for the first streamed chunk
   timeout: 1800           # seconds for a whole request (long contexts and long reasoning)
 litellm_settings: {}
-general_settings:
-  always_include_stream_usage: true
+general_settings: {}
 """
 PROTECTED_PARAMS = {"model", "api_base", "api_key", "custom_llm_provider"}  # what routes the request is DGX-kit's
 MEMORY_LIMIT = "4g"  # a leaking proxy gets killed alone instead of taking the models with it

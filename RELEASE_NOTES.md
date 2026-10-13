@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.38
+
+### Changed
+- The starting `defaults.yaml` no longer turns on `always_include_stream_usage`; `general_settings` starts empty (the option is still documented in the file's comments). Existing files are left as they are.
+
 ## 0.1.37
 
 ### Fixed
