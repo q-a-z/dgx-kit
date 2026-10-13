@@ -238,7 +238,7 @@ def test_defaults_are_added_to_every_model_without_touching_routing():
         "litellm_params:\n  stream_options: {include_usage: true}\n  timeout: 1800\n  api_base: http://evil\n"
         "litellm_settings:\n  num_retries: 2\n  master_key: nope\n")
     assert params == {"stream_options": {"include_usage": True}, "timeout": 1800}
-    assert settings == {"num_retries": 2}
+    assert settings["litellm_settings"] == {"num_retries": 2}
     assert any("api_base" in p for p in problems) and any("master_key" in p for p in problems)
     cfg = litellm_config({"qwen": 8101}, (params, settings))
     lp = cfg["model_list"][0]["litellm_params"]
@@ -246,3 +246,14 @@ def test_defaults_are_added_to_every_model_without_touching_routing():
     assert lp["api_base"] == "http://127.0.0.1:8101/v1" and lp["model"] == "openai/qwen"
     assert cfg["litellm_settings"]["num_retries"] == 2 and cfg["litellm_settings"]["drop_params"] is True
     assert parse_defaults("not: [valid")[2] and parse_defaults("- a\n- b")[2]
+
+
+def test_general_settings_defaults_and_no_shared_objects_in_the_written_config():
+    import yaml
+    from dgxkit.gateway import parse_defaults
+    params, settings, _ = parse_defaults("litellm_params:\n  stream_options: {include_usage: true}\ngeneral_settings:\n  always_include_stream_usage: true\n  master_key: x\n")
+    cfg = litellm_config({"a": 1, "b": 2}, (params, settings))
+    assert cfg["general_settings"]["always_include_stream_usage"] is True
+    assert cfg["general_settings"]["master_key"] == "os.environ/LITELLM_MASTER_KEY"
+    text = yaml.safe_dump(cfg, sort_keys=False)
+    assert "&id" not in text and "*id" not in text  # each model gets its own copy: no YAML anchors in the file

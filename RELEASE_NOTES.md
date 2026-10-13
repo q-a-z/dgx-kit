@@ -2,11 +2,16 @@
 
 Newest first. Every commit adds its entry here.
 
-## 0.1.36
+## 0.1.37
 
 ### Fixed
 - **Gateway defaults now do what they say.** 0.1.35 shipped `stream: true` and `stream_options.include_usage` as `litellm_params` defaults; tested on the Spark's gateway neither changed anything: a request without `stream` still came back as plain JSON, and a streamed answer carried no usage chunk. The setting LiteLLM reads is `general_settings.always_include_stream_usage`, so `defaults.yaml` now also takes a `general_settings` section, and the file starts with that, `stream_timeout: 600` and `timeout: 1800`. Streaming itself can't be forced by a default: each request's `stream` field decides. The written `config.yaml` no longer uses YAML anchors (each model gets its own copy of the defaults).
 - An existing `defaults.yaml` is left as it is; open **Gateway defaults** and replace the text to pick up the new starting file.
+
+## 0.1.36
+
+### Changed
+- Help text in **Gateway defaults** mentions `general_settings`. (The note that first sat here described the fix above before its code was in the release; it shipped in 0.1.37.)
 
 ## 0.1.35
 
