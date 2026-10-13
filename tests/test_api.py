@@ -163,6 +163,18 @@ def test_reset_stats_asks_each_running_model(env):
     assert client.post("/api/stats/reset?model=nope").status_code == 404
 
 
+def test_gateway_defaults_round_trip_and_reject_broken_yaml(env):
+    client, s, _ = env
+    from dgxkit.gateway import Gateway
+    s.gateway = Gateway(s.state_dir)  # the real file handling; applying is not exercised, so Docker is never touched
+    d = client.get("/api/gateway/defaults").json()
+    assert d["litellm_params"] == {} or "stream_options" in d["litellm_params"]
+    r = client.put("/api/gateway/defaults", json={"text": "litellm_params:\n  timeout: 900\n"})
+    assert r.status_code == 200 and r.json()["litellm_params"] == {"timeout": 900}
+    assert client.put("/api/gateway/defaults", json={"text": "a: [broken"}).status_code == 422
+    assert client.get("/api/gateway/defaults").json()["litellm_params"] == {"timeout": 900}  # the bad save changed nothing
+
+
 def test_rename_refuses_bad_names_and_running_models(env):
     client, s, _ = env
     client.post("/api/models", json=model_body())

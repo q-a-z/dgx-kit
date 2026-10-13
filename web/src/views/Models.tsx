@@ -231,6 +231,43 @@ function ExtraEnv({ onApplied }: { onApplied: () => void }) {
   )
 }
 
+type DefaultsState = { file: string; text: string; litellm_params: Record<string, unknown>; litellm_settings: Record<string, unknown>; problems: string[]; pending: boolean }
+
+/** Parameters every published model gets: stream usage, timeouts and the like (litellm/defaults.yaml). */
+function GatewayDefaults({ onApplied }: { onApplied: () => void }) {
+  const { data, reload } = usePoll<DefaultsState>('/api/gateway/defaults', 30000)
+  const [text, setText] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ text: string; bad?: boolean } | null>(null)
+  if (!data) return null
+  const shown = text ?? data.text
+  const put = (apply: boolean) => {
+    if (apply && !window.confirm('Apply now? The LiteLLM gateway restarts for a few seconds; running models are not touched.')) return
+    setBusy(true)
+    api<DefaultsState>('/api/gateway/defaults', { method: 'PUT', json: { text: shown, apply } })
+      .then(() => { setText(null); setMsg({ text: apply ? 'Saved and applied.' : 'Saved. Not applied yet.' }); toast(apply ? 'Gateway defaults saved and applied.' : 'Gateway defaults saved. Not applied yet.'); reload(); onApplied() })
+      .catch((e: Error) => setMsg({ text: e.message, bad: true }))
+      .finally(() => setBusy(false))
+  }
+  const params = Object.keys(data.litellm_params)
+  return (
+    <label>Gateway defaults
+      <textarea className="mono" rows={10} spellCheck={false} value={shown} onChange={(e) => setText(e.target.value)} />
+      <small className="muted">
+        YAML. <code>litellm_params</code> go to every published model (a request that sets the same field wins); <code>litellm_settings</code> go to LiteLLM itself. File: <code>{data.file}</code>.
+        {params.length ? ` Each model gets: ${params.join(', ')}.` : ' Nothing added to models.'}
+        {data.pending && text === null && ' Saved but not applied to the running gateway yet.'}
+      </small>
+      {data.problems.map((p) => <small key={p} className="bad">{p}</small>)}
+      <span className="row">
+        <button disabled={busy || text === null} onClick={() => put(false)}>Save</button>
+        <button className="primary" disabled={busy || (text === null && !data.pending)} onClick={() => put(true)}>Save and apply</button>
+        {msg && <span className={msg.bad ? 'bad' : 'muted'}>{msg.text}</span>}
+      </span>
+    </label>
+  )
+}
+
 type GatewayConf = { url: string | null; url_default: string; key_set: boolean; key_hint: string | null }
 
 /** Where the gateway is and its key: DGX-kit publishes running models there and checks it with them. */
@@ -281,6 +318,7 @@ export function GatewayCard() {
             <span className="muted">Makes the key, pulls the images, starts Postgres and LiteLLM. Safe to run again; it only repairs what’s missing.</span>
           </div>
           {data.extra_env_file && <ExtraEnv onApplied={reload} />}
+          {data.extra_env_file && <GatewayDefaults onApplied={reload} />}
         </>
       )}
       <label>Address clients use

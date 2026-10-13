@@ -230,3 +230,19 @@ def test_extra_env_reports_ignored_lines_and_whether_the_saved_file_is_live(tmp_
     assert st["pending"] is True and st["applied"] == ["STORE_MODEL_IN_DB"]  # saved, not applied yet
     g.sync({})
     assert g.extra_env_state()["pending"] is False  # applied: the gateway was made again with it
+
+
+def test_defaults_are_added_to_every_model_without_touching_routing():
+    from dgxkit.gateway import parse_defaults
+    params, settings, problems = parse_defaults(
+        "litellm_params:\n  stream_options: {include_usage: true}\n  timeout: 1800\n  api_base: http://evil\n"
+        "litellm_settings:\n  num_retries: 2\n  master_key: nope\n")
+    assert params == {"stream_options": {"include_usage": True}, "timeout": 1800}
+    assert settings == {"num_retries": 2}
+    assert any("api_base" in p for p in problems) and any("master_key" in p for p in problems)
+    cfg = litellm_config({"qwen": 8101}, (params, settings))
+    lp = cfg["model_list"][0]["litellm_params"]
+    assert lp["timeout"] == 1800 and lp["stream_options"] == {"include_usage": True}
+    assert lp["api_base"] == "http://127.0.0.1:8101/v1" and lp["model"] == "openai/qwen"
+    assert cfg["litellm_settings"]["num_retries"] == 2 and cfg["litellm_settings"]["drop_params"] is True
+    assert parse_defaults("not: [valid")[2] and parse_defaults("- a\n- b")[2]

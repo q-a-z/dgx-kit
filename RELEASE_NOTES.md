@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.35
+
+### Added
+- **Gateway defaults.** Settings, Gateway has a new **Gateway defaults** editor (`litellm/defaults.yaml` in the state folder): `litellm_params` are added to every published model, `litellm_settings` go to LiteLLM itself. The file starts with `stream_options.include_usage: true` (streamed answers end with a token-usage chunk), `stream_timeout: 600` and `timeout: 1800`. A request that sets the same field still wins; `model`, `api_base`, `api_key` and the master key stay DGX-kit's. Save, then **Save and apply** (the gateway restarts for a moment; models are not touched). API: `GET` and `PUT /api/gateway/defaults`.
+
 ## 0.1.34
 
 ### Added

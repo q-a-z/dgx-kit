@@ -909,6 +909,38 @@ async def reveal_gateway_key(request: Request):
     return {"key": gateway_key(svc(request))}
 
 
+class DefaultsBody(BaseModel):
+    text: str
+    apply: bool = False
+
+
+@router.get("/gateway/defaults")
+async def get_gateway_defaults(request: Request):
+    """The defaults every published model gets (litellm/defaults.yaml): stream usage, timeouts and the like."""
+    return await asyncio.to_thread(svc(request).gateway.defaults_state)
+
+
+@router.put("/gateway/defaults")
+async def put_gateway_defaults(body: DefaultsBody, request: Request):
+    """Save the file; with apply, rewrite the gateway's config now (the gateway restarts for a moment)."""
+    s = svc(request)
+    if len(body.text) > 20000:
+        raise HTTPException(413, "that is a lot for a list of defaults")
+    from .gateway import DEFAULTS_FILE, parse_defaults
+    _, _, problems = parse_defaults(body.text)
+    if problems and any("YAML" in p or "mapping" in p for p in problems):
+        raise HTTPException(422, "; ".join(problems))
+    f = s.gateway.dir / DEFAULTS_FILE
+    f.parent.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(body.text if body.text.endswith("\n") or not body.text else body.text + "\n")
+    tmp.replace(f)
+    s.log("litellm defaults", "applied" if body.apply else "saved")
+    if body.apply:
+        await sync_gateway(s)
+    return await asyncio.to_thread(s.gateway.defaults_state)
+
+
 class ExtraEnvBody(BaseModel):
     text: str
     apply: bool = False

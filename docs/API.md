@@ -142,6 +142,7 @@ Ready-made sets of sizing settings (`compact`, `balanced`, `long-context`, `many
 |---|---|
 | `GET /api/gateway` | Status: `state`, `port`, `image`, `problem`, `db`, `key_ready`, `reachable`, `auth` (`rejected` when the key is wrong), `served` (model names), `url`, `extra_env` (names in effect), `extra_env_file` |
 | `POST /api/gateway/sync` | Set up or repair the gateway: key, images, Postgres, LiteLLM. Safe to repeat. Recreates LiteLLM when its settings changed |
+| `GET /api/gateway/defaults`, `PUT /api/gateway/defaults` | `litellm/defaults.yaml`: `litellm_params` added to every published model and `litellm_settings` added to LiteLLM. `PUT` body `{text, apply}`; `422` for broken YAML; `apply` rewrites the gateway's config (it restarts for a moment) |
 | `GET /api/gateway/extra` | The extra LiteLLM settings file: `file`, `text`, `applied` (names), `ignored` (`[{line, text, why}]`), `pending` (saved but not in the running gateway) |
 | `PUT /api/gateway/extra` | Body `{"text", "apply"?}`: save the file; with `apply: true` also recreate the gateway now (a few seconds' restart; models keep running). `LITELLM_MASTER_KEY` and `DATABASE_URL` are ignored |
 | `GET /api/settings/gateway` | The address and key settings: `url`, `url_default`, `key_set`, `key_hint` |

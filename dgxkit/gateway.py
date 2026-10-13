@@ -31,21 +31,71 @@ EXTRA_ENV_HELP = """# Extra environment variables for the LiteLLM container, one
 # STORE_MODEL_IN_DB=True
 # LITELLM_LOG=INFO
 """
+DEFAULTS_FILE = "defaults.yaml"  # in the gateway's folder: parameters every published model gets unless a request sets its own
+DEFAULTS_HELP = """# Defaults for the LiteLLM gateway, applied to every model DGX-kit publishes.
+# litellm_params: added to each model's litellm_params, so a request that sets the same field still wins.
+# litellm_settings: added to LiteLLM's own settings (drop_params, disable_cache and so on).
+# Save the file, then press "Save and apply" in Settings, Gateway (the gateway restarts for a moment).
+litellm_params:
+  stream_options:
+    include_usage: true   # streamed answers end with a token-usage chunk
+  stream_timeout: 600     # seconds to wait for the first streamed chunk
+  timeout: 1800           # seconds for a whole request (long contexts and long reasoning)
+litellm_settings: {}
+"""
+PROTECTED_PARAMS = {"model", "api_base", "api_key", "custom_llm_provider"}  # what routes the request is DGX-kit's
 MEMORY_LIMIT = "4g"  # a leaking proxy gets killed alone instead of taking the models with it
 NAME = "dgxkit-gateway"
 IMAGE = os.environ.get("DGXKIT_IMAGE_LITELLM", "ghcr.io/berriai/litellm:main-stable")
 
 
-def litellm_config(published: dict[str, int]) -> dict:
-    """LiteLLM config for {model name: engine port}; the key comes from the container's env."""
+def parse_defaults(text: str) -> tuple[dict, dict, list[str]]:
+    """(litellm_params defaults, litellm_settings additions, problems) from defaults.yaml.
+    A bad file never breaks the gateway: what can't be read is reported and skipped."""
+    problems: list[str] = []
+    try:
+        data = yaml.safe_load(text) or {}
+    except yaml.YAMLError as e:
+        return {}, {}, [f"not valid YAML: {str(e).splitlines()[0]}"]
+    if not isinstance(data, dict):
+        return {}, {}, ["the file must be a mapping with litellm_params and litellm_settings"]
+    params, settings = data.get("litellm_params") or {}, data.get("litellm_settings") or {}
+    for name, v in (("litellm_params", params), ("litellm_settings", settings)):
+        if not isinstance(v, dict):
+            problems.append(f"{name} must be a mapping")
+    params = params if isinstance(params, dict) else {}
+    settings = settings if isinstance(settings, dict) else {}
+    for k in list(params):
+        if k in PROTECTED_PARAMS:
+            problems.append(f"{k} is set by DGX-kit for each model; ignored")
+            del params[k]
+    for k in ("master_key",):
+        if k in settings:
+            problems.append(f"{k} is managed by DGX-kit; ignored")
+            del settings[k]
+    return params, settings, problems
+
+
+def read_defaults(directory: Path) -> tuple[dict, dict]:
+    try:
+        params, settings, _ = parse_defaults((directory / DEFAULTS_FILE).read_text())
+        return params, settings
+    except OSError:
+        return {}, {}
+
+
+def litellm_config(published: dict[str, int], defaults: tuple[dict, dict] | None = None) -> dict:
+    """LiteLLM config for {model name: engine port}; the key comes from the container's env.
+    defaults = (extra litellm_params for every model, extra litellm_settings), from defaults.yaml."""
+    params, settings = defaults or ({}, {})
     return {
         "model_list": [
             {"model_name": name,
-             "litellm_params": {"model": f"openai/{name}", "api_base": f"http://127.0.0.1:{port}/v1", "api_key": "none"}}
+             "litellm_params": {**params, "model": f"openai/{name}", "api_base": f"http://127.0.0.1:{port}/v1", "api_key": "none"}}
             for name, port in sorted(published.items())
         ],
         # No cache and no spend logs: both grow without bound in a long-running proxy.
-        "litellm_settings": {"drop_params": True, "disable_cache": True, "disable_spend_logs": True},
+        "litellm_settings": {"drop_params": True, "disable_cache": True, "disable_spend_logs": True, **settings},
         "general_settings": {"master_key": "os.environ/LITELLM_MASTER_KEY"},
     }
 
@@ -149,7 +199,13 @@ class Gateway:
     def sync(self, published: dict[str, int]) -> None:
         """Bring the gateway in line with the running models. Never raises."""
         self.published = dict(published)
-        changed = self._write(yaml.safe_dump(litellm_config(published), sort_keys=False))
+        try:
+            if not (self.dir / DEFAULTS_FILE).exists():
+                self.dir.mkdir(parents=True, exist_ok=True)
+                (self.dir / DEFAULTS_FILE).write_text(DEFAULTS_HELP)
+        except OSError:
+            pass
+        changed = self._write(yaml.safe_dump(litellm_config(published, read_defaults(self.dir)), sort_keys=False))
         try:
             if not (self.dir / EXTRA_ENV).exists():
                 (self.dir / EXTRA_ENV).write_text(EXTRA_ENV_HELP)
@@ -249,6 +305,23 @@ class Gateway:
         except Exception:
             pass
         return {"file": str(f), "text": text, "applied": sorted(names[0]), "ignored": names[1], "pending": pending}
+
+    def defaults_state(self) -> dict:
+        """defaults.yaml, its text, what it adds to each model, and anything in it that is ignored."""
+        f = self.dir / DEFAULTS_FILE
+        try:
+            text = f.read_text()
+        except OSError:
+            text = DEFAULTS_HELP
+        params, settings, problems = parse_defaults(text)
+        live = ""
+        try:
+            live = (self.dir / "config.yaml").read_text()
+        except OSError:
+            pass
+        want = yaml.safe_dump(litellm_config(self.published, (params, settings)), sort_keys=False)
+        return {"file": str(f), "text": text, "litellm_params": params, "litellm_settings": settings,
+                "problems": problems, "pending": bool(live) and live != want}
 
     def _external(self):
         """_external_now(), remembered for 15 seconds, since every page poll asks."""
