@@ -49,6 +49,10 @@ BUILDS: dict[str, dict] = {
     "vllm-0.30-gb10": {"engine": "vllm", "dir": "vllm", "tag": "dgx-kit/vllm:0.30-gb10",
                        "args": {"BASE": os.environ.get("DGXKIT_VLLM_030_BASE", "vllm/vllm-openai:v0.30.0"), "SERIES": "0.30", "FLASHINFER": FLASHINFER},
                        "about": "vLLM 0.30 with the GB10 patches and FlashInfer " + (FLASHINFER or "as shipped")},
+    # A pinned nightly, for fixes that aren't in a release yet (5555a2d8 contains vllm#55601, the hybrid-mamba prefix-cache index fix).
+    "vllm-nightly-gb10": {"engine": "vllm", "dir": "vllm", "tag": "dgx-kit/vllm:nightly-gb10",
+                          "args": {"BASE": os.environ.get("DGXKIT_VLLM_NIGHTLY_BASE", "vllm/vllm-openai:nightly-5555a2d8f7116b2b4877f66516f4128176cf722a"), "SERIES": "nightly", "FLASHINFER": FLASHINFER},
+                          "about": "vLLM nightly 5555a2d8 (includes #55601) with the GB10 patches and FlashInfer " + (FLASHINFER or "as shipped")},
     "vllm-0.29-gb10": {"engine": "vllm", "dir": "vllm", "tag": "dgx-kit/vllm:0.29-gb10",
                        "args": {"BASE": os.environ.get("DGXKIT_VLLM_029_BASE", "vllm/vllm-openai:v0.29.0"), "SERIES": "0.29", "FLASHINFER": FLASHINFER},
                        "about": "vLLM 0.29 with the GB10 patches and FlashInfer " + (FLASHINFER or "as shipped")},
