@@ -2,6 +2,14 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.39
+
+### Added
+- **vLLM nightly image** (`dgx-kit/vllm:nightly-gb10`, Settings, Engine images): the upstream nightly `5555a2d8` with the GB10 patches and FlashInfer 0.7.0. It contains vllm#55601 (the hybrid-mamba prefix-cache index fix), so the `050-mamba-align-block-size` patch is not applied to it. Nothing runs on it until a model's Image is set to it.
+
+### Changed
+- Patch `050-mamba-align-block-size` moved from `common/` to the `0.29/` and `0.30/` series (same content).
+
 ## 0.1.38
 
 ### Changed

@@ -6,6 +6,7 @@ The Images tab builds two patched vLLM images from `images/vllm/Dockerfile`:
 |---|---|---|
 | `dgx-kit/vllm:0.30-gb10` | `vllm/vllm-openai:v0.30.0` | `common/*.patch`, then `0.30/*.patch` |
 | `dgx-kit/vllm:0.29-gb10` | `vllm/vllm-openai:v0.29.0` | `common/*.patch`, then `0.29/*.patch` |
+| `dgx-kit/vllm:nightly-gb10` | pinned nightly `5555a2d8` | `common/*.patch`, then `nightly/*.patch` (empty) |
 
 Put a patch in `common/` when it applies cleanly to both releases, otherwise in the release's own folder.
 Files apply in name order, so prefix them (`010-…`, `020-…`).
