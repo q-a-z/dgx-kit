@@ -8,11 +8,12 @@ ARG BASE=vllm/vllm-openai:v0.30.0
 FROM ${BASE}
 ARG SERIES=0.30
 # FlashInfer 0.7.0 is the one the GB10 fleet was validated on. The stock image brings an older FlashInfer plus prebuilt
-# kernel packages that must match it exactly, so they go too; kernels then compile on first use (cached on the host).
+# kernel packages that must match it exactly, so they go too (the nightlies ship the cache as per-architecture flashinfer-jit-cache-sm* packages, so match by prefix; the emptied package folders are removed too, or FlashInfer finds them and fails on a missing __version__); kernels then compile on first use (cached on the host).
 # FLASHINFER= (empty) keeps the stock one.
 ARG FLASHINFER=0.7.0
 RUN if [ -n "$FLASHINFER" ]; then \
-      python3 -m pip uninstall -y flashinfer-cubin flashinfer-jit-cache && \
+      python3 -m pip uninstall -y $(python3 -m pip list --format=freeze | cut -d= -f1 | grep -E '^flashinfer[-_](cubin|jit[-_]cache)') && \
+      rm -rf /usr/local/lib/python3.12/dist-packages/flashinfer_cubin /usr/local/lib/python3.12/dist-packages/flashinfer_jit_cache && \
       python3 -m pip install --no-cache-dir --no-deps --break-system-packages "flashinfer-python==${FLASHINFER}"; \
     fi
 ENV TORCH_CUDA_ARCH_LIST=12.1a FLASHINFER_CUDA_ARCH_LIST=12.1a PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True

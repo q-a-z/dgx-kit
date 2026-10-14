@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.40
+
+### Fixed
+- **The nightly image started no model: `module 'flashinfer_jit_cache' has no attribute '__version__'`.** The nightly ships FlashInfer's kernel cache as per-architecture `flashinfer-jit-cache-sm*` packages, so the Dockerfile's `pip uninstall flashinfer-jit-cache` removed nothing, and the emptied `flashinfer_jit_cache` folder was left for FlashInfer to find. The build now removes those packages by prefix and deletes the leftover folders. Rebuild `dgx-kit/vllm:nightly-gb10` in Settings, Engine images; an image built with 0.1.39 does not start a model.
+
 ## 0.1.39
 
 ### Added
