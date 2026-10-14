@@ -125,15 +125,21 @@ def test_vllm_window_lifetime_and_slo():
     assert out["slo_combined"] == 0.5
 
 
-TRTLLM = """
-trtllm_request_success_total{finished_reason="stop"} 10
-trtllm_kv_cache_utilization 0.25
-"""
-
-
-def test_trtllm_reads_its_names_from_the_prometheus_path():
+def test_trtllm_reads_the_json_iteration_stats_from_metrics():
+    import json
+    from pathlib import Path
     from dgxkit.engines.trtllm import TrtllmAdapter
+    items = json.loads((Path(__file__).parent / "fixtures" / "trtllm_metrics.json").read_text())
     a = TrtllmAdapter("http://x")
-    out = a.compute(P.parse(TRTLLM), now=0.0)
-    assert out["kv_used_pct"] == 25.0 and out["requests_total"] == 10
-    assert a.metrics_path == "/prometheus/metrics" and adapter_for("trtllm", "http://x").engine == "trtllm"
+    assert a.metrics_path == "/metrics" and adapter_for("trtllm", "http://x").engine == "trtllm"
+    a.fold(items)
+    out = a.compute(a._parsed(), now=0.0)
+    assert out["running"] == items[-1]["numActiveRequests"] and out["waiting"] == 0
+    assert out["requests_total"] == sum(i.get("numCompletedRequests") or 0 for i in items) >= 1
+    assert out["gen_tokens_total"] >= len(items) - 1
+    kv = items[-1]["kvCacheStats"]
+    assert out["kv_used_pct"] == round(100 * kv["usedNumBlocks"] / kv["maxNumBlocks"], 1)
+    a.fold([])  # nothing ran since the last call: idle, totals kept
+    idle = a.compute(a._parsed(), now=1.0)
+    assert idle["running"] == 0 and idle["requests_total"] == out["requests_total"]
+

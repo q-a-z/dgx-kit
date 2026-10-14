@@ -2,6 +2,13 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.43
+
+### Changed
+- **TensorRT-LLM live numbers come from `/metrics`, not Prometheus.** The server only publishes `/prometheus/metrics` when `return_perf_metrics` is on, so the dashboard's once-a-second scrape got `404 Not Found`. The adapter now reads the server's own JSON iteration stats from `GET /metrics` (requests running and waiting, KV cache use and hit rate, prompt and generated tokens, completed requests, and draft acceptance when a draft is on) and feeds them through the same live, window and lifetime numbers as the other engines.
+- **Needs `enable_iter_perf_stats: true`** in the model's `--extra_llm_api_options` file; without it the list is empty and the model reads as idle. There are no latency percentiles in this source.
+- **Only one reader:** each `/metrics` call returns the iterations since the previous call and clears them, so nothing else should poll it. An idle server can take 2 to 4 seconds to answer, so the adapter waits up to 10.
+
 ## 0.1.42
 
 ### Fixed
