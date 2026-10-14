@@ -76,7 +76,7 @@ def parse(args: list[str], image: str = "") -> dict | None:
     elif engine == "sglang":
         model = _opt(args, "--model-path", "--model")
     elif engine == "trtllm":
-        i = next((i for i, a in enumerate(args) if a.endswith("trtllm-serve") or a == "serve"), -1)
+        i = next((i for i, a in enumerate(args) if a.endswith("trtllm-serve")), -1)
         model = args[i + 1] if 0 <= i and i + 1 < len(args) and not args[i + 1].startswith("-") else None
     elif engine == "atlas":
         model = _opt(args, "--model-from-path")

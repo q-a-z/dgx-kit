@@ -93,6 +93,6 @@ def test_launch_settings_of_a_container_started_elsewhere():
 
 
 def test_trtllm_server_is_recognised_by_trtllm_serve():
-    a = parse(["trtllm-serve", "/models/q", "--port", "8355", "--served_model_name", "qwen"], image="nvcr.io/nvidia/tensorrt-llm/release:1.2.1")
-    assert a == {"engine": "trtllm", "port": 8355, "model": "/models/q", "served_name": "qwen", "draft": None}
+    a = parse(["/opt/nvidia/nvidia_entrypoint.sh", "trtllm-serve", "/models/q", "--port", "8355"], image="nvcr.io/nvidia/tensorrt-llm/release:1.2.1")
+    assert a == {"engine": "trtllm", "port": 8355, "model": "/models/q", "served_name": None, "draft": None}
     assert parse(["trtllm-serve", "/m"])["port"] == 8000

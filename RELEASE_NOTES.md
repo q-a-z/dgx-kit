@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.42
+
+### Fixed
+- **TensorRT-LLM could not start.** Two launch problems, found by running the image's own `--help` before any model was started: DGX-kit replaced the image's entrypoint script, which sets the library path TensorRT needs (`libnvonnxparser.so.10: cannot open shared object file`), and it passed `--served_model_name`, a flag `trtllm-serve` doesn't have. It now runs through `/opt/nvidia/nvidia_entrypoint.sh` and leaves the name flag out (the server lists the weights path as its model id).
+
 ## 0.1.41
 
 ### Added

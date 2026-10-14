@@ -161,7 +161,10 @@ def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]
         # Speculative decoding and KV dtype need an extra_llm_api_options YAML, so they go in as extra arguments
         # (`--extra_llm_api_options /path.yaml`, with the file's folder mounted by docker.volumes); a draft is ignored here.
         slots = max(1, int(p.concurrency))
-        cmd = ["trtllm-serve", path, "--served_model_name", r.name, "--host", "0.0.0.0", "--port", str(port),
+        # The image's entrypoint script sets LD_LIBRARY_PATH (TensorRT, NIXL); the runner replaces the entrypoint with the
+        # command's first word, so run it through that script or `import tensorrt` fails. trtllm-serve has no served-name
+        # flag: /v1/models lists the weights path, and the gateway's model field is not checked against it.
+        cmd = ["/opt/nvidia/nvidia_entrypoint.sh", "trtllm-serve", path, "--host", "0.0.0.0", "--port", str(port),
                "--max_seq_len", str(p.context_tokens), "--max_batch_size", str(slots),
                "--max_num_tokens", str(min(32768, p.context_tokens))]
         util = r.gpu_memory_utilization or p.gpu_fraction
