@@ -132,3 +132,14 @@ def test_status_says_when_a_container_started():
     assert DockerRunner(FakeDocker([c])).status()["a"]["started"] == 1791057992.648744  # 2026-10-03 20:06:32.65 UTC
     assert started_at(FakeContainer({}, started="0001-01-01T00:00:00Z")) is None  # never started
     assert started_at(FakeContainer({}, started="")) is None
+
+
+def test_trtllm_command_uses_trtllm_serve_and_a_free_memory_fraction():
+    r = Recipe(name="t", repo="org/T", engine="trtllm", gpu_memory_utilization=0.4, extra_args=["--extra_llm_api_options /c/t.yaml"])
+    cmd = engine_command(r, P, 8100, "/models")
+    assert cmd[:2] == ["trtllm-serve", "/models/org--T"]
+    assert cmd[cmd.index("--served_model_name") + 1] == "t" and cmd[cmd.index("--port") + 1] == "8100"
+    assert cmd[cmd.index("--max_seq_len") + 1] == "65536" and cmd[cmd.index("--max_batch_size") + 1] == "3"
+    assert cmd[cmd.index("--max_num_tokens") + 1] == "32768"
+    assert cmd[cmd.index("--kv_cache_free_gpu_memory_fraction") + 1] == "0.4"
+    assert cmd[-2:] == ["--extra_llm_api_options", "/c/t.yaml"]

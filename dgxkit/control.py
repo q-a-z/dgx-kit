@@ -157,6 +157,16 @@ def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]
             cmd += ["--dflash", "--draft-model", draft]  # DFlash is the only draft-model method it takes
         elif r.draft_method == "mtp":
             cmd += ["--speculative"]  # the model's own MTP heads
+    elif r.engine == "trtllm":
+        # Speculative decoding and KV dtype need an extra_llm_api_options YAML, so they go in as extra arguments
+        # (`--extra_llm_api_options /path.yaml`, with the file's folder mounted by docker.volumes); a draft is ignored here.
+        slots = max(1, int(p.concurrency))
+        cmd = ["trtllm-serve", path, "--served_model_name", r.name, "--host", "0.0.0.0", "--port", str(port),
+               "--max_seq_len", str(p.context_tokens), "--max_batch_size", str(slots),
+               "--max_num_tokens", str(min(32768, p.context_tokens))]
+        util = r.gpu_memory_utilization or p.gpu_fraction
+        if util:  # a share of what is free after the weights load, not of all memory (unlike vLLM)
+            cmd += ["--kv_cache_free_gpu_memory_fraction", str(util)]
     else:
         raise ValueError(f"unknown engine {r.engine}")
     return cmd + extra_tokens(r.extra_args)

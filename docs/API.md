@@ -49,7 +49,7 @@ A model is a **recipe**: the engine, the weights, and its options. Fields (all o
 |---|---|
 | `name`, `repo` | Its name here, and the Hugging Face repo |
 | `title` | The name the dashboard shows (empty: made from the repo). Clients still use `name` |
-| `engine` | `vllm` (default), `sglang`, `llamacpp` or `atlas` |
+| `engine` | `vllm` (default), `sglang`, `llamacpp`, `atlas` or `trtllm` |
 | `image` | The Docker image; empty uses the engine's default |
 | `revision` | A repo revision |
 | `quantization` | `nvfp4`, `fp8`, `gguf` or none (detected from the repo) |

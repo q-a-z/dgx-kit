@@ -25,6 +25,8 @@ DEFAULTS = {
     "llamacpp": os.environ.get("DGXKIT_IMAGE_LLAMACPP", "ghcr.io/ggml-org/llama.cpp:server-cuda13"),  # CUDA 13 build, which has kernels for the GB10 (12.1); arm64 is published
     # Atlas (Avarok, AGPL-3.0): a Rust and CUDA engine for the GB10 whose binary is `spark`. Not run by anything here until asked for.
     "atlas": os.environ.get("DGXKIT_IMAGE_ATLAS", "avarok/atlas-gb10:latest"),
+    # NVIDIA's TensorRT-LLM release container (arm64, with Blackwell kernels); serves with `trtllm-serve`.
+    "trtllm": os.environ.get("DGXKIT_IMAGE_TRTLLM", "nvcr.io/nvidia/tensorrt-llm/release:1.2.1"),
     "litellm": os.environ.get("DGXKIT_IMAGE_LITELLM", "ghcr.io/berriai/litellm:main-stable"),
 }
 CATALOG = DEFAULTS  # kept for callers that only need the default names
@@ -223,7 +225,7 @@ class ImageManager:
 
     def local(self, engine: str) -> list[str]:
         """Tags on this box that look like this engine, whoever pulled or built them."""
-        key = {"llamacpp": "llama"}.get(engine, engine)
+        key = {"llamacpp": "llama", "trtllm": "tensorrt-llm"}.get(engine, engine)
         try:
             tags = self._tags()
         except Exception:

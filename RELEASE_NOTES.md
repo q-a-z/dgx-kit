@@ -2,6 +2,16 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.41
+
+### Added
+- **TensorRT-LLM as a fifth engine.** Pick **TensorRT-LLM** as a model's engine; DGX-kit starts it with `trtllm-serve` on `nvcr.io/nvidia/tensorrt-llm/release:1.2.1` (`DGXKIT_IMAGE_TRTLLM` changes it), passes the context, concurrency and **GPU memory share** (as the KV cache's share of memory left after the weights load), and reads its `trtllm_*` Prometheus metrics for the live numbers. `trtllm-serve` servers started outside DGX-kit are recognised too. `tools/trtllm_try.sh` runs it by hand beside DGX-kit.
+- Nothing starts by itself: no model runs on it until you add one and press Start.
+
+### Good to know
+- **Untested on the Spark.** The flags and metric names come from NVIDIA's documentation, not a running server; a refused flag shows in the model's logs, and an unexpected metric name shows as a missing number.
+- **Speculative decoding and KV dtype** are set in a TensorRT-LLM YAML file: add `--extra_llm_api_options /path/file.yaml` to the model's options and mount the folder under docker volumes. A draft model on the recipe is ignored by this engine.
+
 ## 0.1.40
 
 ### Fixed

@@ -13,7 +13,7 @@ Release notes: [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
 - **Watch the machine:** gauges for temperature, power, clock, load, network, disk and every CPU core, a stats line (tokens in and out, requests, decode and prefill speed against their averages), and the models laid out in unified memory. The logo carries the box's real model, read from its firmware (for example ASUS GX10).
 - **Keep track of firmware:** Settings → System lists the BIOS, GPU VBIOS, kernel, driver and every firmware device fwupd manages, says when an update is available, and remembers when any version changed.
-- **Run models:** start and stop them, edit their engine options as one block of text, and see speed and cache numbers live. A model takes the memory its context needs, not all that is free (it says how much), and Start fetches a missing engine image by itself. GGUF models run on llama.cpp with nothing to build. Atlas (`avarok/atlas-gb10`, a Rust and CUDA engine, AGPL-3.0) is available as an engine too; nothing runs on it until you add a model and press Start.
+- **Run models:** start and stop them, edit their engine options as one block of text, and see speed and cache numbers live. A model takes the memory its context needs, not all that is free (it says how much), and Start fetches a missing engine image by itself. GGUF models run on llama.cpp with nothing to build. Atlas (`avarok/atlas-gb10`, a Rust and CUDA engine, AGPL-3.0) is available as an engine too; nothing runs on it until you add a model and press Start. TensorRT-LLM (NVIDIA's `trtllm-serve`) is the same: available, untried until you pick it.
 - **Decision models:** Laya, which answers typed yes/no, choice and score questions about a text with calibrated probabilities in about 20 ms, runs beside the models and is listed with them (see below).
 - **One gateway:** every running model is published on one OpenAI-compatible address through a built-in LiteLLM, and you can publish or unpublish each one.
 - **Bring your setup over:** import llmctl `.conf` files, including models whose weights are already on disk.
@@ -397,7 +397,7 @@ service reads there is read-only. Build the release package from the last commit
 Layout:
 
 - `dgxkit/collectors`: GPU (one NVML session, no `nvidia-smi`), CPU, memory, storage, network, sensors.
-- `dgxkit/engines`: metrics parsers for vLLM, SGLang, llama.cpp and Atlas.
+- `dgxkit/engines`: metrics parsers for vLLM, SGLang, llama.cpp, Atlas and TensorRT-LLM.
 - `dgxkit/control.py`, `dgxkit/api_models.py`: start, stop, edit, logs, downloads over HTTP. Only containers labelled `dgxkit.model` are touched.
 - `dgxkit/options.py`, `dgxkit/importer.py`: a model's settings as text, and llmctl `.conf` import.
 - `dgxkit/gateway.py`: the bundled LiteLLM and its Postgres.

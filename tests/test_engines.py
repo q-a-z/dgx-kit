@@ -123,3 +123,17 @@ def test_vllm_window_lifetime_and_slo():
     assert out["ttft_avg_s"] == 0.5          # (3.0 - 1.0) s over 4 new requests
     assert out["slo_ttft"] == 0.5            # 2 of the 4 new requests under 500 ms
     assert out["slo_combined"] == 0.5
+
+
+TRTLLM = """
+trtllm_request_success_total{finished_reason="stop"} 10
+trtllm_kv_cache_utilization 0.25
+"""
+
+
+def test_trtllm_reads_its_names_from_the_prometheus_path():
+    from dgxkit.engines.trtllm import TrtllmAdapter
+    a = TrtllmAdapter("http://x")
+    out = a.compute(P.parse(TRTLLM), now=0.0)
+    assert out["kv_used_pct"] == 25.0 and out["requests_total"] == 10
+    assert a.metrics_path == "/prometheus/metrics" and adapter_for("trtllm", "http://x").engine == "trtllm"

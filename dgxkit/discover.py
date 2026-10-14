@@ -12,7 +12,7 @@ import shlex
 
 from .control import LABEL
 
-DEFAULT_PORTS = {"vllm": 8000, "sglang": 30000, "llamacpp": 8080, "atlas": 8888}
+DEFAULT_PORTS = {"vllm": 8000, "sglang": 30000, "llamacpp": 8080, "atlas": 8888, "trtllm": 8000}
 
 
 def _opt(args: list[str], *names: str) -> str | None:
@@ -36,6 +36,8 @@ def _engine(args: list[str], image: str) -> str | None:
         return "llamacpp"
     if ("atlas" in image or any(a.endswith("/spark") or a == "spark" for a in args[:1])) and "serve" in args:
         return "atlas"
+    if "trtllm-serve" in joined or ("tensorrt-llm" in image and "serve" in args):
+        return "trtllm"
     if "vllm" in joined or "vllm" in image:
         if "serve" in args or "vllm.entrypoints" in joined:
             return "vllm"
@@ -73,6 +75,9 @@ def parse(args: list[str], image: str = "") -> dict | None:
             model = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("-") else None
     elif engine == "sglang":
         model = _opt(args, "--model-path", "--model")
+    elif engine == "trtllm":
+        i = next((i for i, a in enumerate(args) if a.endswith("trtllm-serve") or a == "serve"), -1)
+        model = args[i + 1] if 0 <= i and i + 1 < len(args) and not args[i + 1].startswith("-") else None
     elif engine == "atlas":
         model = _opt(args, "--model-from-path")
         if not model and "serve" in args:

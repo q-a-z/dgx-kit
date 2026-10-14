@@ -25,6 +25,7 @@ DEFAULT_SLO = {"ttft": 0.5, "itl": 0.05, "tpot": 0.05, "e2e": 5.0}  # seconds
 class PromAdapter:
     engine = ""
     health_path = "/health"
+    metrics_path = "/metrics"
     # stat -> metric names, first present wins
     GAUGES: dict[str, tuple[str, ...]] = {}   # running, waiting, kv_used (0..1), prefix_hit (0..1), accept_len
     COUNTERS: dict[str, tuple[str, ...]] = {}  # gen, prompt, accepted, drafted, drafts, hits, queries, preempt, done
@@ -54,7 +55,7 @@ class PromAdapter:
             return False
 
     async def scrape(self) -> dict:
-        text = (await self.client.get(self.base_url + "/metrics")).text
+        text = (await self.client.get(self.base_url + self.metrics_path)).text
         return self.compute(P.parse(text), time.monotonic())
 
     def _gauge(self, m: dict, key: str) -> float | None:

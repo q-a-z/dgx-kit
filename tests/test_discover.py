@@ -90,3 +90,9 @@ def test_launch_settings_of_a_container_started_elsewhere():
     assert l["image"] == "vllm-spark:0.29-pfxtest" and l["ports"] == ["host network"]
     assert ["--max-model-len", "262144"] in l["options"] and ["--enable-prefix-caching", None] in l["options"] and ["--port", "8000"] in l["options"]
     assert ["HF_TOKEN", "(hidden)"] in l["env"] and not any(k == "PATH" for k, _ in l["env"])
+
+
+def test_trtllm_server_is_recognised_by_trtllm_serve():
+    a = parse(["trtllm-serve", "/models/q", "--port", "8355", "--served_model_name", "qwen"], image="nvcr.io/nvidia/tensorrt-llm/release:1.2.1")
+    assert a == {"engine": "trtllm", "port": 8355, "model": "/models/q", "served_name": "qwen", "draft": None}
+    assert parse(["trtllm-serve", "/m"])["port"] == 8000
