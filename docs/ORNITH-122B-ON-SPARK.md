@@ -10,9 +10,10 @@ time once the download is done.
 | | |
 |---|---|
 | Weights | 73 GB (+ 1.9 GB draft). With the KV cache the box shows about 91-97 GB in use. |
-| Decode, code, temperature 0 | about 47-50 t/s, 5-7 draft tokens accepted per step |
-| Decode, prose | about 24 t/s (acceptance is only about 3) |
-| 2 / 4 streams, total | 53 / 74 t/s |
+| Decode, code, temperature 0 | about 54 t/s, 4.7-5.8 draft tokens accepted per step (7 draft tokens) |
+| Decode, prose | about 31 t/s (acceptance is only about 3) |
+| Without any draft | 23.4 t/s, flat |
+| 2 / 4 streams, total | 53 / 74 t/s (measured with 15 draft tokens; not re-measured with 7) |
 | Load time | about 9 minutes the first time (cold read of 73 GB) |
 | Role benchmark, the 13 hardest tasks, 1 run each | 13 / 13 passed (developer 3/3, reviewer 3/3, analyst 3/3, project-manager 4/4) |
 
@@ -85,16 +86,34 @@ Plain vLLM:
 ```bash
 vllm serve ~/models/vllm/ornith-122b-nvfp4 --served-model-name ornith-122b \
   --max-model-len 131072 --kv-cache-memory-bytes 10000000000 --gpu-memory-utilization 0.85 --kv-cache-dtype fp8 \
-  --speculative-config '{"method":"dflash","model":"'$HOME'/models/vllm/ornith-122b-nvfp4/draft","num_speculative_tokens":15}' \
+  --speculative-config '{"method":"dflash","model":"'$HOME'/models/vllm/ornith-122b-nvfp4/draft","num_speculative_tokens":7}' \
   --mamba-ssm-cache-dtype bfloat16 --mamba-cache-mode align --enable-prefix-caching \
   --enable-auto-tool-choice --tool-call-parser qwen3_xml --reasoning-parser qwen3 --language-model-only \
   --override-generation-config '{"temperature":0.7,"top_p":0.8,"top_k":20,"max_new_tokens":32768}' \
   --max-num-seqs 8 --long-prefill-token-threshold 1024 --attention-backend FLASHINFER
 ```
 
-With DGX-kit: create a recipe with repo `local/ornith-122b-nvfp4`, engine vllm, draft method `dflash`, 15
+With DGX-kit: create a recipe with repo `local/ornith-122b-nvfp4`, engine vllm, draft method `dflash`, 7
 speculative tokens, KV cache dtype fp8, and the same extra options as above (one per line). Give the recipe the
 model's `config.json` (the kit sizes the KV cache from it) and keep the folder name lowercase.
+
+## How many draft tokens
+
+The draft card uses 15. On a Spark that is too many: verifying a long block reads many more experts from memory,
+and the late positions are mostly rejected. Same model, same machine, decode t/s (mean of 2 runs per test):
+
+| Draft tokens | code t=0 | code t=0.5 | code t=1 | prose | code, no thinking |
+|---|---|---|---|---|---|
+| none | 23.5 | 23.3 | 23.4 | 23.4 | 23.4 |
+| 5 | 45.7 | 47.5 | 48.8 | 32.5 | 55.6 |
+| **7** | **54.1** | 48.9 | 51.0 | 30.9 | 56.6 |
+| 11 | 41.9 | 47.7 | 37.7 | 26.2 | 57.0 |
+| 15 | 47.5-50.5 | 42.2 | 48.1 | 24.1 | 45.3 |
+| the model's own MTP head, 3 tokens | 29-31 | 32 | 30 | 25.8 | 32.7 |
+
+Run-to-run noise is about +-5 t/s, so 5 and 7 are close; 7 had the best average. MTP is clearly worse.
+The `bench.py` in `tools/` refuses to start while the model has a running request, so wait for the server to go idle
+before benchmarking.
 
 ## Things that went wrong for us
 
