@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.45
+
+### Changed
+- **Ornith-122B guide uses 7 draft tokens, not 15.** A sweep of 5 / 7 / 11 / 15 DFlash2 tokens and the model's own MTP head: 7 is fastest (about 54 t/s on code at temperature 0, 31 on prose, against 23.4 with no draft). The sweep table is in the guide.
+
 ## 0.1.44
 
 ### Added
