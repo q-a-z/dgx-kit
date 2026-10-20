@@ -2,6 +2,12 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.44
+
+### Added
+- **Guide for running Ornith-1.5-122B on a DGX Spark:** `docs/ORNITH-122B-ON-SPARK.md` - download, convert, serve and the things that went wrong (no fastsafetensors on this model, no quantized lm_head, MTP head untouched). Measured: 73 GB, about 47-50 t/s single-stream with the DFlash2 draft, 13 of 13 on the hardest role-benchmark tasks.
+- **`tools/ornith122_convert.py`:** turns the official FP8 checkpoint into NVFP4 experts + FP8 linear attention, one shard at a time on the GPU (about 5 minutes). Edited after the run that produced the numbers above; not yet re-run end to end.
+
 ## 0.1.43
 
 ### Changed
