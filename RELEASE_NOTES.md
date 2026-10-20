@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.47
+
+### Fixed
+- **Ornith-122B guide: the convert command no longer depends on the folder you run it from.** It mounted `$PWD/tools/ornith122_convert.py`, which only exists in a repo clone; run elsewhere, Docker created an empty folder at that path and Python failed with "can't find '__main__' module". The guide now downloads the script and mounts it by absolute path, and explains the error.
+
 ## 0.1.46
 
 ### Changed
