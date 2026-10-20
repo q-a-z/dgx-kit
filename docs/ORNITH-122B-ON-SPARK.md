@@ -57,13 +57,22 @@ The speed from Hugging Face varies a lot (2-60 MB/s for us). It resumes if you s
 ## 2. Convert
 
 `tools/ornith122_convert.py` reads one source shard at a time, quantizes it on the GPU and writes the matching output shard.
+Download the script first (you do not need a clone of the repo), then run it from any folder:
 
 ```bash
+curl -fsSL -o ~/ornith122_convert.py \
+  https://raw.githubusercontent.com/q-a-z/dgx-kit/main/tools/ornith122_convert.py
+ls -l ~/ornith122_convert.py        # must be a file of about 7 KB, not a folder
+
 docker run --rm --gpus all --user $(id -u):$(id -g) \
-  -v ~/models:/m -v $PWD/tools/ornith122_convert.py:/b.py:ro \
+  -v ~/models:/m -v ~/ornith122_convert.py:/b.py:ro \
   --entrypoint python3 dgx-kit/vllm:nightly-gb10 \
   /b.py /m/_work/ornith-122b-fp8 /m/vllm/ornith-122b-nvfp4 B
 ```
+
+The last argument (`B`) is the variant. If the mounted file does not exist, Docker silently creates an empty
+folder in its place and Python then says `can't find '__main__' module in '/b.py'`; if you see that, check the path
+of the file you mount and remove any folder Docker created there (`sudo rm -rf` it, it is owned by root).
 
 `B` is the recommended variant: experts NVFP4, linear attention FP8. `A` leaves linear attention in BF16 (4 GB bigger,
 about 20 % slower, same quality as far as we could measure). The script prints the quantization error per shard;
