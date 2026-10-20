@@ -128,6 +128,8 @@ before benchmarking.
 
 ## Status
 
-The converted files in this guide are not published anywhere. The converter script in this repo was tidied after our
-run (it no longer tries the FP8 lm_head that vLLM rejects); the logic is the same, but the tidied script has not been
-run end to end yet.
+The converted files in this guide are not published anywhere. The converter in this repo was tidied after our first
+run (it no longer tries the FP8 lm_head that vLLM rejects). We re-ran the tidied script on two shards (one with
+experts, one with the lm_head) and the output files are byte-identical to the ones we loaded, and the config it
+writes is identical to ours. A full end-to-end run of the tidied script (all 62 shards, index included) has not been
+repeated.

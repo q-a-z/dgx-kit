@@ -2,6 +2,11 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.46
+
+### Changed
+- **Ornith-122B converter checked against the build we served:** two shards re-converted by the tidied script are byte-identical to the loaded ones, and its config edit matches. The guide's status note says so.
+
 ## 0.1.45
 
 ### Changed
