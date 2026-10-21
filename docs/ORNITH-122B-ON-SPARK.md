@@ -124,13 +124,27 @@ Run-to-run noise is about +-5 t/s, so 5 and 7 are close; 7 had the best average.
 The `bench.py` in `tools/` refuses to start while the model has a running request, so wait for the server to go idle
 before benchmarking.
 
+## Optional: FP8 lm_head
+
+`tools/ornith122_lmhead_fp8.py SRC DST` makes a twin of the converted folder (every file a symlink to SRC except the last
+shard and the index/config) with the lm_head as FP8 per-channel, about 0.8 GB less to read per token. It needs a GPU and
+a few minutes; run it in the same image as the converter, with both folders mounted at the same paths you will serve from.
+Measured once on a GB10 with the 7-token draft: code at temperature 0 56.9 t/s against about 54 (inside the +-5 t/s noise),
+prose 31.2 against 31, draft acceptance unchanged (4.8-5.1 tokens per step), output clean. The head's weight rounding
+error is 2.6 %; we did not measure accuracy against the BF16 head (no role-benchmark run), so treat this as a small,
+unproven gain.
+
 ## Things that went wrong for us
 
 - **Do not use `--load-format fastsafetensors`.** It works on the 35B models and 3x speeds up their load, but on this
   one it ran the machine out of memory at shard 35 of 62 and the kernel killed the container (and restarted the
   gateway). The default loader peaks at about 97 GB used and finishes.
-- **Do not quantize the lm_head.** vLLM fails at the end of a 9-minute load with
-  `no module or parameter named 'lm_head.weight_scale'`. The converter leaves it in BF16.
+- **The converter leaves the lm_head in BF16, and quantizing it needs two config edits, not one.** With the head
+  quantized but the config unchanged, vLLM fails at the end of a 9-minute load with
+  `no module or parameter named 'lm_head.weight_scale'`. Removing `lm_head` from `ignore` is not enough: the FP8 group
+  targets the class name `Linear`, which `ParallelLMHead` does not match, so vLLM still builds a BF16 head. The group
+  also needs the target `re:.*lm_head$` (not anchored at the start: vLLM's name for the head can carry a
+  `language_model.` prefix). `tools/ornith122_lmhead_fp8.py` does both (see "Optional: FP8 lm_head" below).
 - **Leave the MTP head alone.** It has no FP8 scales; the converter copies it unchanged and keeps it in the ignore list.
 - **Memory:** nothing else big fits next to it. With the kit, stop your other models first.
 - **First start is slow:** about 9 minutes to read 73 GB cold, then about a minute of compile and warm-up.

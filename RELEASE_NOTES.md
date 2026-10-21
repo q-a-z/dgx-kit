@@ -2,6 +2,14 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.48
+
+### Fixed
+- **Ornith-122B guide was wrong that a quantized lm_head cannot be loaded.** The load error came from two config problems: `lm_head` was in `ignore`, and the FP8 group's target (`Linear`) does not match `ParallelLMHead`. With `lm_head` out of `ignore` and `re:.*lm_head$` added to the group's targets, vLLM loads an FP8 head and serves normally.
+
+### Added
+- **`tools/ornith122_lmhead_fp8.py`:** optional step that turns the converted checkpoint's lm_head into FP8 per-channel (symlink twin, only the last shard rewritten). Measured once: code 56.9 vs about 54 t/s (within noise), prose unchanged, 0.8 GB less weight; accuracy against the BF16 head not measured. The guide has a section for it.
+
 ## 0.1.47
 
 ### Fixed

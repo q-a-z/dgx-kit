@@ -3,7 +3,7 @@
 Routed experts become NVFP4 weight-only (compressed-tensors nvfp4-pack-quantized layout); the shared experts and
 the full-attention projections stay FP8 as in the source; the MTP head, embeddings, lm_head and router stay BF16.
 Variant B (recommended) also turns the BF16 linear-attention projections into FP8 per-channel, weight-only.
-(The lm_head is deliberately left alone: vLLM has no parameter for a quantized lm_head in this model class.)
+(The lm_head is left alone here; tools/ornith122_lmhead_fp8.py makes an FP8 one afterwards, see the guide.)
 
 usage: ornith122_convert.py SRC DST VARIANT(A|B) [--only 1,2,..]   (--only = shard numbers, for tests; no index/config written then)
 Streams one source shard -> one output shard, on the GPU (about 5 minutes for the whole model).
