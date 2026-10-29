@@ -1,0 +1,328 @@
+diff --git a/examples/configs/README.md b/examples/configs/README.md
+index 1a4b0a8..0180e95 100644
+--- a/examples/configs/README.md
++++ b/examples/configs/README.md
+@@ -285,6 +285,7 @@ Common fields:
+ | `training.lr_scheduler` | `cosine` | Learning-rate schedule after warmup: `cosine`, `constant`, or `wsd` (hold the peak rate, then a cosine anneal over the last `lr_decay_ratio` of the steps). |
+ | `training.lr_decay_ratio` | `0.2` | `wsd` only: fraction of the optimizer steps spent annealing. |
+ | `training.adam_beta1` | `0.9` | AdamW first-moment decay. |
++| `training.optimizer` | `adamw` | `muon` trains hidden weight matrices with Muon (same LR and weight decay, needs `NO_SHARD`); AdamW keeps the rest. |
+ | `training.adam_beta2` | `0.999` | AdamW second-moment decay. |
+ | `training.weight_decay` | `0.0` | AdamW decoupled weight decay on weight matrices; biases, norm gains, and embedding tables are not decayed. |
+ | `training.warmup_ratio` | `0.015` | Fraction in `[0, 1]` used for scheduler warmup. |
+diff --git a/specforge/config/schema.py b/specforge/config/schema.py
+index 21276f7..b546691 100644
+--- a/specforge/config/schema.py
++++ b/specforge/config/schema.py
+@@ -909,6 +909,9 @@ class TrainingConfig(StrictConfigModel):
+     lr_scheduler: Literal["cosine", "constant", "wsd"] = "cosine"
+     lr_decay_ratio: float = Field(default=0.2, gt=0.0, le=1.0)
+     warmup_ratio: float = Field(default=0.015, ge=0.0, le=1.0)
++    #: ``muon`` trains the hidden weight matrices with Muon and keeps AdamW for
++    #: the rest, at the same learning rate and weight decay (needs NO_SHARD).
++    optimizer: Literal["adamw", "muon"] = "adamw"
+     #: AdamW betas, and decoupled weight decay applied to weight matrices only
+     #: (biases, norm gains and embedding tables are never decayed).
+     adam_beta1: float = Field(default=0.9, ge=0.0, lt=1.0)
+diff --git a/specforge/optimizer.py b/specforge/optimizer.py
+index 96af8c6..8934c58 100644
+--- a/specforge/optimizer.py
++++ b/specforge/optimizer.py
+@@ -51,9 +51,84 @@ def _is_matrix(param: torch.Tensor) -> bool:
+     return len(getattr(param, "_specforge_shape", param.shape)) >= 2
+ 
+ 
++def _newton_schulz(grad, steps):
++    """Quintic Newton-Schulz iteration: approximately ``U @ V.T`` of ``grad``'s
++    SVD, computed in bf16 (coefficients from Keller Jordan's Muon)."""
++    a, b, c = 3.4445, -4.7750, 2.0315
++    x = grad.bfloat16()
++    tall = grad.size(0) > grad.size(1)
++    if tall:
++        x = x.T
++    x = x / (x.norm() + 1e-7)
++    for _ in range(steps):
++        gram = x @ x.T
++        x = a * x + (b * gram + c * gram @ gram) @ x
++    return x.T if tall else x
++
++
++class MuonAdamW(torch.optim.Optimizer):
++    """Muon for groups with ``use_muon``, AdamW for the rest, in one optimizer
++    so the LR scheduler and checkpoints see a single set of param groups.
++
++    Follows "Muon is Scalable for LLM Training" (Liu et al. 2025): decoupled
++    weight decay, Nesterov momentum, and each Muon update scaled by
++    ``0.2 * sqrt(max(A, B))`` so its RMS matches AdamW's and both kinds of
++    group share one learning rate and weight decay."""
++
++    def __init__(
++        self, params, lr, weight_decay, betas, momentum=0.95, eps=1e-8, ns_steps=5
++    ):
++        defaults = dict(
++            lr=lr,
++            weight_decay=weight_decay,
++            betas=tuple(betas),
++            momentum=momentum,
++            eps=eps,
++            ns_steps=ns_steps,
++            use_muon=False,
++        )
++        super().__init__(params, defaults)
++
++    @torch.no_grad()
++    def step(self, closure=None):
++        for group in self.param_groups:
++            lr, weight_decay = group["lr"], group["weight_decay"]
++            for param in group["params"]:
++                if param.grad is None:
++                    continue
++                grad, state = param.grad, self.state[param]
++                param.mul_(1 - lr * weight_decay)
++                if group["use_muon"]:
++                    momentum = group["momentum"]
++                    if not state:
++                        state["momentum_buffer"] = torch.zeros_like(param)
++                    buffer = state["momentum_buffer"]
++                    buffer.mul_(momentum).add_(grad)
++                    update = _newton_schulz(
++                        grad.add(buffer, alpha=momentum), group["ns_steps"]
++                    )
++                    scale = 0.2 * math.sqrt(max(param.shape))
++                    param.add_(update.to(param.dtype), alpha=-lr * scale)
++                    continue
++                beta1, beta2 = group["betas"]
++                if not state:
++                    state["step"] = 0
++                    state["exp_avg"] = torch.zeros_like(param)
++                    state["exp_avg_sq"] = torch.zeros_like(param)
++                state["step"] += 1
++                exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
++                exp_avg.lerp_(grad, 1 - beta1)
++                exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
++                bias1 = 1 - beta1 ** state["step"]
++                bias2 = 1 - beta2 ** state["step"]
++                denom = (exp_avg_sq / bias2).sqrt_().add_(group["eps"])
++                param.addcdiv_(exp_avg, denom, value=-lr / bias1)
++
++
+ class BF16Optimizer:
+-    """AdamW over fp32 master copies of the bf16 trainable params, with grad
+-    clipping and configurable warmup scheduling."""
++    """AdamW (or Muon, see :class:`MuonAdamW`) over fp32 master copies of the
++    bf16 trainable params, with grad clipping and configurable warmup
++    scheduling."""
+ 
+     #: ``step(loss_denominator=...)`` validates the caller's global loss
+     #: denominator in the same host read as the grad norm (see TrainerCore).
+@@ -72,6 +147,7 @@ class BF16Optimizer:
+         betas=(0.9, 0.999),
+         decay_matrices_only=False,
+         lr_decay_ratio=0.2,
++        optimizer="adamw",
+     ):
+         # defaults copied from EAGLE traineagle3 ds_config.json
+         self.model = model
+@@ -95,13 +171,26 @@ class BF16Optimizer:
+             if self.fp32_params and all(mp.is_cuda for mp in self.fp32_params)
+             else None
+         )
+-        self.optimizer = torch.optim.AdamW(
+-            self._param_groups(weight_decay, decay_matrices_only),
+-            lr=lr,
+-            weight_decay=weight_decay,
+-            betas=tuple(betas),
+-            fused=self._adamw_fused,
+-        )
++        if optimizer not in ("adamw", "muon"):
++            raise ValueError(
++                f"unsupported optimizer={optimizer!r}; expected 'adamw' or 'muon'"
++            )
++        self.optimizer_type = optimizer
++        if optimizer == "muon":
++            self.optimizer = MuonAdamW(
++                self._muon_param_groups(weight_decay),
++                lr=lr,
++                weight_decay=weight_decay,
++                betas=betas,
++            )
++        else:
++            self.optimizer = torch.optim.AdamW(
++                self._param_groups(weight_decay, decay_matrices_only),
++                lr=lr,
++                weight_decay=weight_decay,
++                betas=tuple(betas),
++                fused=self._adamw_fused,
++            )
+         self.last_grad_norm = None
+         self._grad_norm_process_group = None
+         self._reduce_grad_norm_across_ranks = True
+@@ -149,6 +238,38 @@ class BF16Optimizer:
+             {"params": no_decay, "weight_decay": 0.0},
+         ]
+ 
++    def _muon_param_groups(self, weight_decay):
++        """Muon takes the hidden weight matrices; embeddings, any ``lm_head``
++        and every non-matrix param stay on AdamW, as in Moonlight. Decay
++        follows ``decay_matrices_only``: norms, biases and embeddings get none."""
++        names = {id(param): name for name, param in self.model.named_parameters()}
++        embeddings = {
++            id(module.weight)
++            for module in self.model.modules()
++            if isinstance(module, torch.nn.Embedding)
++        }
++        muon, adam_decay, adam_no_decay = [], [], []
++        for param, master in zip(self.model_params, self.fp32_params):
++            name = names.get(id(param), "")
++            if not _is_matrix(param) or id(param) in embeddings:
++                adam_no_decay.append(master)
++            elif "lm_head" in name or "embed" in name:
++                adam_decay.append(master)
++            elif master.ndim != 2:
++                # ponytail: no gather of sharded matrices (Moonlight's
++                # Distributed Muon); add it if a draft needs FSDP sharding.
++                raise ValueError(
++                    f"Muon needs whole 2-D matrices but {name or 'a param'} has "
++                    f"shape {tuple(master.shape)}; use fsdp_sharding: NO_SHARD"
++                )
++            else:
++                muon.append(master)
++        return [
++            {"params": muon, "use_muon": True},
++            {"params": adam_decay},
++            {"params": adam_no_decay, "weight_decay": 0.0},
++        ]
++
+     def configure_grad_norm_reduction(
+         self, *, process_group=None, enabled: bool = True
+     ) -> None:
+@@ -315,6 +436,8 @@ class BF16Optimizer:
+         (and a fused one would enable it for CPU masters). Fused AdamW reads
+         its step counters on the parameter device; unfused keeps them on CPU.
+         """
++        if self.optimizer_type != "adamw":
++            return
+         for group in self.optimizer.param_groups:
+             group["fused"] = self._adamw_fused
+             if self._adamw_fused:
+@@ -339,6 +462,12 @@ class BF16Optimizer:
+                 f"{saved_scheduler_type!r} but this run has "
+                 f"lr_scheduler={self.lr_scheduler_type!r}"
+             )
++        saved_optimizer_type = state_dict.get("optimizer_type", "adamw")
++        if saved_optimizer_type != self.optimizer_type:
++            raise ValueError(
++                f"checkpoint optimizer is {saved_optimizer_type!r} but this run "
++                f"uses optimizer={self.optimizer_type!r}"
++            )
+         saved_max_grad_norm = state_dict.get("max_grad_norm")
+         if saved_max_grad_norm is not None and float(saved_max_grad_norm) != float(
+             self.max_grad_norm
+@@ -385,6 +514,7 @@ class BF16Optimizer:
+             "optimizer_state_dict": self.optimizer.state_dict(),
+             "scheduler_state_dict": self.scheduler.state_dict(),
+             "lr_scheduler_type": self.lr_scheduler_type,
++            "optimizer_type": self.optimizer_type,
+             "max_grad_norm": self.max_grad_norm,
+             # rank-local fp32 masters; without them a resume re-quantizes from bf16
+             "fp32_params": [t.detach().cpu() for t in self.fp32_params],
+diff --git a/specforge/training/assembly.py b/specforge/training/assembly.py
+index 89bf540..9fdc898 100644
+--- a/specforge/training/assembly.py
++++ b/specforge/training/assembly.py
+@@ -274,6 +274,7 @@ class _ConfiguredOptimizerFactory:
+             betas=(t.adam_beta1, t.adam_beta2),
+             weight_decay=t.weight_decay,
+             decay_matrices_only=True,
++            optimizer=t.optimizer,
+         )
+ 
+ 
+diff --git a/tests/test_optimizer/test_bf16_optimizer_muon.py b/tests/test_optimizer/test_bf16_optimizer_muon.py
+new file mode 100644
+index 0000000..a8f3edc
+--- /dev/null
++++ b/tests/test_optimizer/test_bf16_optimizer_muon.py
+@@ -0,0 +1,82 @@
++import unittest
++from unittest import mock
++
++import torch
++
++from specforge.optimizer import BF16Optimizer
++
++
++class _Draft(torch.nn.Module):
++    def __init__(self):
++        super().__init__()
++        self.embed_tokens = torch.nn.Embedding(16, 8)
++        self.proj = torch.nn.Linear(8, 32)
++        self.norm = torch.nn.LayerNorm(32)
++        self.lm_head = torch.nn.Linear(32, 16, bias=False)
++
++    def forward(self, tokens):
++        return self.lm_head(self.norm(self.proj(self.embed_tokens(tokens))))
++
++
++def _train(optimizer_type, steps=60):
++    torch.manual_seed(0)
++    model = _Draft()
++    opt = BF16Optimizer(
++        model,
++        lr=1e-2,
++        weight_decay=0.1,
++        total_steps=steps,
++        warmup_ratio=0.0,
++        betas=(0.9, 0.95),
++        decay_matrices_only=True,
++        optimizer=optimizer_type,
++        max_grad_norm=1.0,
++    )
++    tokens = torch.arange(16)
++    losses = []
++    for _ in range(steps):
++        loss = torch.nn.functional.cross_entropy(model(tokens), tokens)
++        loss.backward()
++        opt.step()
++        losses.append(loss.item())
++    return model, opt, losses
++
++
++class TestMuon(unittest.TestCase):
++    def test_only_hidden_matrices_use_muon(self):
++        model, opt, _ = _train("muon", steps=1)
++        muon, decay, no_decay = opt.optimizer.param_groups
++        self.assertTrue(muon["use_muon"])
++        self.assertEqual([p.shape for p in muon["params"]], [model.proj.weight.shape])
++        self.assertEqual([p.shape for p in decay["params"]], [model.lm_head.weight.shape])
++        self.assertEqual(no_decay["weight_decay"], 0.0)
++        self.assertEqual(len(no_decay["params"]), 4)  # embed, bias, norm w/b
++
++    def test_muon_learns(self):
++        _, _, losses = _train("muon")
++        self.assertLess(losses[-1], 0.5 * losses[0])
++
++    def test_resume_rejects_other_optimizer(self):
++        _, muon_opt, _ = _train("muon", steps=2)
++        _, adam_opt, _ = _train("adamw", steps=2)
++        with self.assertRaisesRegex(ValueError, "checkpoint optimizer is"):
++            adam_opt.load_state_dict(muon_opt.state_dict())
++
++    def test_resume_round_trip(self):
++        _, opt, _ = _train("muon", steps=3)
++        _, fresh, _ = _train("muon", steps=1)
++        with mock.patch("specforge.optimizer.print_on_rank0"):
++            fresh.load_state_dict(opt.state_dict())
++        self.assertEqual(fresh.optimizer.state_dict()["state"].keys(),
++                         opt.optimizer.state_dict()["state"].keys())
++
++    def test_flat_shards_are_refused(self):
++        model = torch.nn.Linear(4, 4, bias=False)
++        model.weight._specforge_shape = (4, 4)
++        model.weight.data = model.weight.data.flatten()
++        with self.assertRaisesRegex(ValueError, "NO_SHARD"):
++            BF16Optimizer(model, lr=1e-3, weight_decay=0.1, optimizer="muon")
++
++
++if __name__ == "__main__":
++    unittest.main()

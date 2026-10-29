@@ -1,4 +1,4 @@
-import { Pending } from './Settings'
+import { Pending } from '../components/Pending'
 import { toast } from '../toast'
 import { PullProgress } from './Other'
 import { useState } from 'react'

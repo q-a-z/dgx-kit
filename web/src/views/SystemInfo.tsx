@@ -3,7 +3,7 @@ import { useConfirm } from '../components/Confirm'
 import { toast } from '../toast'
 import { api, fmtDateTime } from '../api'
 import { usePoll } from '../usePoll'
-import { Pending } from './Settings'
+import { Pending } from '../components/Pending'
 
 type Device = { id: string; name: string; version: string | null; vendor: string | null; summary: string | null; updatable: boolean; updates: { version: string | null; summary: string | null }[] }
 type Report = {

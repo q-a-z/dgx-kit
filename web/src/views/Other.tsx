@@ -1,4 +1,4 @@
-import { Pending } from './Settings'
+import { Pending } from '../components/Pending'
 import { useState } from 'react'
 import { api, fmtTime, type Action, type Image } from '../api'
 import { usePoll } from '../usePoll'

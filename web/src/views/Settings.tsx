@@ -5,6 +5,7 @@ import { usePoll } from '../usePoll'
 import { Folders } from './Library'
 import { DiskDelete } from './DiskDelete'
 import { GatewayCard } from './Models'
+import { Pending } from '../components/Pending'
 import { go } from '../nav'
 import { toast } from '../toast'
 import { Images, Log } from './Other'
@@ -167,11 +168,6 @@ function GpuSlots() {
       {msg && <p className="bad">{msg}</p>}
     </section>
   )
-}
-
-/** What a section shows before its data arrives, or when it can't be read. */
-export function Pending({ error, what }: { error: string | null; what: string }) {
-  return <p className={error ? 'bad' : 'muted'}>{error ? `Couldn’t read ${what}: ${error}` : `Reading ${what}…`}</p>
 }
 
 type ConfItem = { file: string; error?: string; exists?: boolean; notes?: string[]; port?: string

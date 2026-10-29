@@ -1,0 +1,31 @@
+{
+  "architectures": ["FlashMapDraftModel"],
+  "model_type": "flashmap",
+  "target_model": "Qwen/Qwen3.5-35B-A3B",
+  "target_hidden_size": 2048,
+  "vocab_size": 248320,
+  "target_layer_ids": [1, 10, 19, 28, 37],
+  "block_size": 16,
+  "hidden_size": 2048,
+  "num_hidden_layers": 6,
+  "num_attention_heads": 16,
+  "intermediate_size": 8192,
+  "cond_dim": 256,
+  "time_embed_dim": 256,
+  "time_scale": 1000.0,
+  "rope_theta": 10000.0,
+  "rms_norm_eps": 1e-06,
+  "qk_norm_eps": 1e-05,
+  "layer_norm_eps": 1e-06,
+  "noise_gate": "jump",
+  "time_schedule": "decoding_error",
+  "num_steps": 1,
+  "jump_grids": {
+    "1": [0.0, 1.0],
+    "2": [0.0, 0.8172569274902344, 1.0],
+    "3": [0.0, 0.8010796308517456, 0.8310279846191406, 1.0],
+    "4": [0.0, 0.7906050682067871, 0.8172569274902344, 0.8379518389701843, 1.0]
+  },
+  "dtype": "bfloat16",
+  "tie_word_embeddings": false
+}

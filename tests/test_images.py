@@ -88,9 +88,10 @@ def test_patched_vllm_builds_leave_the_engine_default_and_are_choices(tmp_path):
     path, tag, args = d.api.built
     assert path.endswith("images/vllm") and tag == "dgx-kit/vllm:0.29-gb10" and args["SERIES"] == "0.29"
     assert m.image_for("vllm") == "vllm/vllm-openai:v1"  # only this model's choice changes, not every vLLM model
-    assert m.choices("vllm") == ["vllm/vllm-openai:v1", "dgx-kit/vllm:0.30-gb10", "dgx-kit/vllm:0.29-gb10"]
+    assert m.choices("vllm") == ["vllm/vllm-openai:v1", "dgx-kit/vllm:0.30-gb10",
+                                "dgx-kit/vllm:nightly-gb10", "dgx-kit/vllm:0.29-gb10"]
     vllm = next(i for i in m.list() if i["engine"] == "vllm")
-    assert [b["id"] for b in vllm["builds"]] == ["vllm-0.30-gb10", "vllm-0.29-gb10"]
+    assert [b["id"] for b in vllm["builds"]] == ["vllm-0.30-gb10", "vllm-nightly-gb10", "vllm-0.29-gb10"]
 
 
 def test_clean_only_removes_our_images_nobody_points_at(tmp_path):

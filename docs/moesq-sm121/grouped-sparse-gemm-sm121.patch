@@ -1,0 +1,123 @@
+diff --git a/csrc/ops.cu b/csrc/ops.cu
+index 8ae733b..bceb53b 100644
+--- a/csrc/ops.cu
++++ b/csrc/ops.cu
+@@ -104,7 +104,7 @@ DeviceInfo const& device_info(int device) {
+ 
+ void check_arch(torch::Tensor const& t) {
+   int v = device_info(t.device().index()).sm_version;
+-  TORCH_CHECK(v == kArchSm,
++  TORCH_CHECK(v == kArchSm || (kArchSm == 120 && v == 121),
+               "paired_nvfp4 ops in this module are built for SM", kArchSm,
+               " but the tensor is on a compute capability ", v / 10, ".", v % 10, " device");
+ }
+diff --git a/csrc/sm121_compat.h b/csrc/sm121_compat.h
+new file mode 100644
+index 0000000..bc762fb
+--- /dev/null
++++ b/csrc/sm121_compat.h
+@@ -0,0 +1,9 @@
++// GB10 (SM121) has the SM120 tensor cores; CUTLASS only enables its SM120 kernels for __CUDA_ARCH__ == 1200.
++#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ == 1210
++#ifndef CUTLASS_ARCH_MMA_SM120_ENABLED
++#define CUTLASS_ARCH_MMA_SM120_ENABLED 1
++#endif
++#ifndef CUTLASS_ARCH_MMA_SM120A_ENABLED
++#define CUTLASS_ARCH_MMA_SM120A_ENABLED 1
++#endif
++#endif
+diff --git a/csrc/testing/selftest.cu b/csrc/testing/selftest.cu
+index a83e27d..0cfef33 100644
+--- a/csrc/testing/selftest.cu
++++ b/csrc/testing/selftest.cu
+@@ -119,7 +119,7 @@ void quantize_row(std::vector<float>& row, DstTensor& dst, int outer_idx, int g,
+ 
+ // Returns a CPU float32 tensor [max_abs_err, max_rel_err, ref_rms, num_bad].
+ torch::Tensor paired_nvfp4_selftest(int64_t M_, int64_t maxn_, int64_t K_, int64_t E_, int64_t seed_) {
+-  TORCH_CHECK(current_sm() == kArchSm, "selftest requires SM", kArchSm);
++  TORCH_CHECK(current_sm() == kArchSm || (kArchSm == 120 && current_sm() == 121), "selftest requires SM", kArchSm);
+   const int M = int(M_), max_n = int(maxn_), K = int(K_), E = int(E_);
+   const int Kb = kblocks(K);
+   TORCH_CHECK(K % SFVecSize == 0, "K must be a multiple of 16 for this test");
+@@ -322,7 +322,7 @@ torch::Tensor paired_nvfp4_probe_act_layout(torch::Tensor b_act, torch::Tensor s
+ // matches alpha * (Wdq @ x), then quant_act emits kernel-correct bytes. Returns [max_abs, max_rel,
+ // ref_rms, num_bad].
+ torch::Tensor paired_nvfp4_selftest_quant_act(int64_t M_, int64_t maxn_, int64_t K_, int64_t E_, int64_t seed_) {
+-  TORCH_CHECK(current_sm() == kArchSm, "selftest_quant_act requires SM", kArchSm);
++  TORCH_CHECK(current_sm() == kArchSm || (kArchSm == 120 && current_sm() == 121), "selftest_quant_act requires SM", kArchSm);
+   const int M = int(M_), max_n = int(maxn_), K = int(K_), E = int(E_), Kb = kblocks(K);
+   TORCH_CHECK(K % SFVecSize == 0 && K % 8 == 0, "K must be a multiple of 16");
+ 
+@@ -453,7 +453,7 @@ torch::Tensor paired_nvfp4_selftest_quant_act(int64_t M_, int64_t maxn_, int64_t
+ //   [b_act_mismatch, sfb_mismatch, b_act_first_idx, sfb_first_idx,
+ //    probe_max_rel, n_active_elem, b_total_bytes, sfb_total_bytes].
+ torch::Tensor paired_nvfp4_selftest_quant_act_diff(int64_t M_, int64_t maxn_, int64_t K_, int64_t E_, int64_t seed_) {
+-  TORCH_CHECK(current_sm() == kArchSm, "selftest_quant_act_diff requires SM", kArchSm);
++  TORCH_CHECK(current_sm() == kArchSm || (kArchSm == 120 && current_sm() == 121), "selftest_quant_act_diff requires SM", kArchSm);
+   const int M = int(M_), max_n = int(maxn_), K = int(K_), E = int(E_), Kb = kblocks(K);
+   TORCH_CHECK(K % SFVecSize == 0 && K % 8 == 0, "K must be a multiple of 16");
+ 
+@@ -600,7 +600,7 @@ static __global__ void sf_offset_kernel(LayoutSF layout, int outer, int K, int g
+ // Returns [lin_mis, swz_mis, off_mis, lin_first, swz_first, off_first, lin_total, sfb_total, n_blocks,
+ //          fused_mis].
+ torch::Tensor paired_nvfp4_selftest_sf_debug(int64_t M_, int64_t maxn_, int64_t K_, int64_t E_, int64_t seed_) {
+-  TORCH_CHECK(current_sm() == kArchSm, "selftest_sf_debug requires SM", kArchSm);
++  TORCH_CHECK(current_sm() == kArchSm || (kArchSm == 120 && current_sm() == 121), "selftest_sf_debug requires SM", kArchSm);
+   const int M = int(M_), max_n = int(maxn_), K = int(K_), E = int(E_), KB = K / SFVecSize;
+   TORCH_CHECK(K % SFVecSize == 0, "K must be a multiple of 16");
+ 
+@@ -768,7 +768,7 @@ static __global__ void ref_silu_mul_kernel(cutlass::bfloat16_t const* __restrict
+ // Returns [b_mis, sfb_mis, b_first, sfb_first, b_total, sfb_total].
+ torch::Tensor paired_nvfp4_selftest_silu_mul_quant(int64_t M_, int64_t maxn_, int64_t N_,
+                                                    int64_t E_, int64_t seed_) {
+-  TORCH_CHECK(current_sm() == kArchSm, "selftest_silu_mul_quant requires SM", kArchSm);
++  TORCH_CHECK(current_sm() == kArchSm || (kArchSm == 120 && current_sm() == 121), "selftest_silu_mul_quant requires SM", kArchSm);
+   const int M = int(M_), max_n = int(maxn_), N = int(N_), E = int(E_);
+   TORCH_CHECK(N % SFVecSize == 0, "N must be a multiple of SFVecSize=", SFVecSize);
+ 
+@@ -856,7 +856,7 @@ torch::Tensor paired_nvfp4_selftest_silu_mul_quant(int64_t M_, int64_t maxn_, in
+ // Returns [b_mis, sfb_mis, b_mis_w, sfb_mis_w, sfb_zero, valid_rows].
+ torch::Tensor paired_nvfp4_selftest_scatter_quant(int64_t T_, int64_t topk_, int64_t K_,
+                                                   int64_t E_, int64_t cap_, int64_t seed_) {
+-  TORCH_CHECK(current_sm() == kArchSm, "selftest_scatter_quant requires SM", kArchSm);
++  TORCH_CHECK(current_sm() == kArchSm || (kArchSm == 120 && current_sm() == 121), "selftest_scatter_quant requires SM", kArchSm);
+   const int T = int(T_), topk = int(topk_), K = int(K_), E = int(E_), cap = int(cap_);
+   const int KB = K / SFVecSize;
+   TORCH_CHECK(K % SFVecSize == 0, "K must be a multiple of SFVecSize=", SFVecSize);
+diff --git a/paired_nvfp4_kernels/__init__.py b/paired_nvfp4_kernels/__init__.py
+index 10a0c12..1b9a905 100644
+--- a/paired_nvfp4_kernels/__init__.py
++++ b/paired_nvfp4_kernels/__init__.py
+@@ -66,7 +66,8 @@ def _current_sm():
+     if not torch.cuda.is_available():
+         return None
+     major, minor = torch.cuda.get_device_capability()
+-    return major * 10 + minor
++    sm = major * 10 + minor
++    return 120 if sm == 121 else sm   # GB10 (SM121) runs the family-specific 120f build
+ 
+ 
+ def _load():
+diff --git a/setup.py b/setup.py
+index 359d45a..0bf3f8f 100644
+--- a/setup.py
++++ b/setup.py
+@@ -35,7 +35,7 @@ CSRC = os.path.join(HERE, "csrc")
+ VERSION = "0.13.0"
+ 
+ # Archs with a csrc/sm<N>/ configuration. Extend when porting (see docs/porting.md).
+-SUPPORTED_ARCHS = {"100a": 100, "120a": 120}
++SUPPORTED_ARCHS = {"100a": 100, "120a": 120, "120f": 120, "121a": 120}
+ 
+ cutlass_dir = os.environ.get("CUTLASS_DIR", os.path.join(HERE, "third_party", "cutlass"))
+ cutlass_dir = os.path.abspath(cutlass_dir)
+@@ -79,6 +79,9 @@ def extension(arch):
+         # Grid dependency control in the CUTLASS GEMMs, for programmatic dependent launch
+         # (csrc/pdl.cuh). The SM100 kernel override waits before its first dependent read.
+         defines.append("-DCUTLASS_ENABLE_GDC_FOR_SM100=1")
++    if arch == "121a":
++        # CUTLASS gates the SM120 kernels on __CUDA_ARCH__ == 1200; GB10 compiles as 1210 (same MMA)
++        defines += ["-include", os.path.join(CSRC, "sm121_compat.h")]
+     nvcc = [
+         "-O3",
+         "-std=c++17",

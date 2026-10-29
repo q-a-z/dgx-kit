@@ -3,7 +3,7 @@ import { api, fmtBytes } from '../api'
 import { Modal } from '../components/Confirm'
 import { usePoll } from '../usePoll'
 import type { Item, Lib } from './Library'
-import { Pending } from './Settings'
+import { Pending } from '../components/Pending'
 
 type Preview = { path: string; name: string; folder: string; size_bytes: number; used_by: string[]; also_removes: string[] }
 

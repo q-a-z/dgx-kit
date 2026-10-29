@@ -143,3 +143,12 @@ def test_trtllm_command_uses_trtllm_serve_and_a_free_memory_fraction():
     assert cmd[cmd.index("--max_num_tokens") + 1] == "32768"
     assert cmd[cmd.index("--kv_cache_free_gpu_memory_fraction") + 1] == "0.4"
     assert cmd[-2:] == ["--extra_llm_api_options", "/c/t.yaml"]
+
+
+def test_recipe_can_ask_for_security_opt(tmp_path, monkeypatch):
+    from dgxkit.control import docker_options
+    from dgxkit.recipes import Recipe
+    monkeypatch.setenv("DGXKIT_CACHE_DIR", str(tmp_path))
+    r = Recipe(name="n", repo="x", engine="vllm", docker={"security_opt": ["seccomp=unconfined"]})
+    assert docker_options(r, "/m")["security_opt"] == ["seccomp=unconfined"]
+    assert "security_opt" not in docker_options(Recipe(name="n", repo="x", engine="vllm"), "/m")

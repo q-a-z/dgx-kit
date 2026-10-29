@@ -86,6 +86,8 @@ def docker_options(r: Recipe, models_root: str) -> dict:
     for key in ("mem_limit", "shm_size"):
         if d.get(key):
             out[key] = d[key]
+    if d.get("security_opt"):  # e.g. ["seccomp=unconfined"]: Docker's default profile blocks io_uring
+        out["security_opt"] = [str(o) for o in d["security_opt"]]
     return out
 
 
