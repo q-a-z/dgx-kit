@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .collectors.system import parse_meminfo
-from . import quickcheck
+from . import cluster, quickcheck
 from .benchmarks import TESTS as _ALL
 from .options import apply_text, to_text
 from .paths import expand_home
@@ -78,10 +78,25 @@ def plan_for(s, r: Recipe, extra_free: int = 0):
         from .sizing import text_config
         model_max = text_config(r.config).get("max_position_embeddings")
         max_context = min(DEFAULT_CONTEXT, model_max) if model_max else DEFAULT_CONTEXT  # a small-context model isn't asked for more than it has
-    return plan(r.config, r.weights_bytes + r.draft_weights_bytes, available_bytes(s) + max(0, extra_free),
+    # Tensor parallelism splits the weights, so each node holds its share of them.
+    return plan(r.config, (r.weights_bytes + r.draft_weights_bytes) // cluster.size(r), available_bytes(s) + max(0, extra_free),
                 kv_dtype=r.kv_cache_dtype, max_context=max_context, min_context=r.min_context,
                 min_concurrency=r.min_concurrency, kv_cache_bytes=r.kv_cache_bytes, total_bytes=total_bytes(s),
                 cap_pool=not r.fill_memory)
+
+
+def stop_model(s, name: str) -> None:
+    """Stop a model's container, and its workers on the other nodes when it is a cluster."""
+    s.runner.stop(name)
+    try:
+        r = s.store.get(name)
+    except (FileNotFoundError, ValueError):
+        return
+    if cluster.is_cluster(r):
+        try:
+            s.runner.stop_workers(r)
+        except Exception as e:  # a node that is down must not keep the head from stopping
+            s.log("stop", f"{name}: couldn't stop every worker: {e}"[:300])
 
 
 def _exists(s, name: str) -> bool:
@@ -292,7 +307,8 @@ async def edit_model(name: str, body: dict, request: Request):
     if not _exists(s, name):
         raise HTTPException(404)
     # The page never receives the model's config, so what it sends back mustn't erase it.
-    r = recipe_from({"config": s.store.get(name).config, **body, "name": name})
+    old = s.store.get(name)
+    r = recipe_from({"config": old.config, "cluster": old.cluster, **body, "name": name})
     if body.get("options") is not None and r.engine == "vllm":
         try:
             r = apply_text(r, body["options"])
@@ -407,6 +423,10 @@ async def _start_model(s, name: str) -> dict:
     check = check_start(r, p, s.models_root, s.images.is_ready(r.image))
     if not check.ok:
         raise HTTPException(409, {"problems": check.problems})
+    if cluster.is_cluster(r):  # a half-started cluster hangs, so every node is checked first
+        bad = cluster.problems(await asyncio.to_thread(cluster.check, r, s.models_root))
+        if bad:
+            raise HTTPException(409, {"problems": bad})
     port = pick_port(s.runner.ports_in_use())
     cmd = engine_command(r, p, port, s.models_root)
     meta = {"context_tokens": p.context_tokens, "kv_pool_tokens": p.kv_pool_tokens,
@@ -442,6 +462,19 @@ async def _start_when_image_is_ready(s, name: str, image: str) -> None:
     finally:
         if s.preparing.get(name) == image:
             s.preparing.pop(name, None)
+
+
+@router.get("/models/{name}/cluster")
+async def cluster_check(name: str, request: Request):
+    """The cluster's requirements, checked now: SSH, the fiber link, RDMA, Docker, image and weights on every node."""
+    s = svc(request)
+    if not _exists(s, name):
+        raise HTTPException(404)
+    r = s.store.get(name)
+    if not cluster.is_cluster(r):
+        raise HTTPException(422, "this model has no cluster settings")
+    r.image = image_to_use(s, r)
+    return cluster.report(await asyncio.to_thread(cluster.check, r, s.models_root))
 
 
 @router.post("/models/{name}/start")
@@ -623,7 +656,7 @@ async def stop(name: str, request: Request):
         raise HTTPException(409, {"problems": [f"{int(busy)} requests running or waiting"], "force": "?force=1"})
     s.preparing.pop(name, None)  # stopping also cancels a start that was waiting for its image
     before = (await asyncio.to_thread(s.runner.status)).get(name)
-    s.runner.stop(name)
+    await asyncio.to_thread(stop_model, s, name)
     if before and before.get("id"):
         remember_stop(s, name, before["id"])
     s.sampler.remove_engine(name)
@@ -677,7 +710,7 @@ async def delete(name: str, request: Request):
     if not _exists(s, name):
         raise HTTPException(404)
     if name in s.runner.status():
-        s.runner.stop(name)
+        await asyncio.to_thread(stop_model, s, name)
         s.sampler.remove_engine(name)
     s.store.delete(name)
     s.log("delete", name)

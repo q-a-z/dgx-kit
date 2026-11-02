@@ -7,6 +7,9 @@ COPY web/ ./
 RUN npm run build
 
 FROM python:3.12-slim
+# Clusters: ssh reaches the other Sparks (Docker over SSH), ip reads the fiber link's address
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-client iproute2 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY pyproject.toml ./
 COPY dgxkit ./dgxkit

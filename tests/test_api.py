@@ -32,6 +32,9 @@ class FakeRunner:
     def stop(self, name):
         self.running.pop(name, None)
 
+    def stop_workers(self, r, timeout=30):
+        self.workers_stopped = getattr(self, "workers_stopped", []) + [r.name]
+
     def logs(self, name, tail=200):
         return "log line"
 
@@ -826,3 +829,33 @@ def test_a_service_without_a_key_has_none_to_give(env):
     s.lev.has_key, s.lev.title = False, "Lev"
     assert client.get("/api/services/laya/key").json() == {"key": "secret-key"}
     assert client.get("/api/services/lev/key").status_code == 404
+
+
+CLUSTER = {"workers": [{"host": "q@gx10-2", "ip": "192.168.100.11"}], "head_ip": "192.168.100.10", "interface": "enp1s0f1np1"}
+
+
+def test_a_cluster_model_is_checked_before_it_starts_and_stops_on_every_node(env, monkeypatch):
+    from dgxkit import cluster
+    client, s, models = env
+    (models / "org--Llama-8B").mkdir()
+    assert client.post("/api/models", json=model_body(cluster=CLUSTER)).status_code == 201
+    bad = [cluster.Check("ssh to q@gx10-2", False, "key login failed", "set up key login")]
+    monkeypatch.setattr(cluster, "check", lambda r, root: bad)
+    r = client.get("/api/models/llama/cluster").json()
+    assert not r["ok"] and "fix: set up key login" in r["text"]
+    r = client.post("/api/models/llama/start")
+    assert r.status_code == 409 and "ssh to q@gx10-2" in r.json()["detail"]["problems"][0]
+    assert s.runner.started == []  # nothing was launched
+    monkeypatch.setattr(cluster, "check", lambda r, root: [])
+    started = client.post("/api/models/llama/start").json()
+    assert "--nnodes" in started["command"] and s.gateway.synced[-1] == {"llama": 8100}  # published like any other model
+    assert client.put("/api/models/llama", json=model_body(max_context=32768)).status_code == 200
+    assert s.store.get("llama").cluster == CLUSTER  # an edit from the page does not send it back, and must not lose it
+    client.post("/api/models/llama/stop")
+    assert s.runner.workers_stopped == ["llama"]
+
+
+def test_the_cluster_check_needs_cluster_settings(env):
+    client, _, _ = env
+    client.post("/api/models", json=model_body())
+    assert client.get("/api/models/llama/cluster").status_code == 422

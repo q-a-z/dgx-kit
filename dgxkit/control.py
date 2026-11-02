@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from . import cluster
 from .recipes import Recipe
 from .sizing import Plan
 
@@ -72,7 +73,7 @@ def jit_caches(engine: str) -> tuple[dict, dict]:
     return vols, {"MAX_JOBS": "2", "NVCC_THREADS": "1"}
 
 
-def docker_options(r: Recipe, models_root: str) -> dict:
+def docker_options(r: Recipe, models_root: str, node_ip: str | None = None) -> dict:
     """Volumes, environment and container limits, including what an imported llmctl .conf asked for."""
     d = r.docker or {}
     vols = mounts(r, models_root)
@@ -82,7 +83,10 @@ def docker_options(r: Recipe, models_root: str) -> dict:
         parts = str(v).split(":")
         if len(parts) >= 2 and parts[0].startswith("/"):
             vols[parts[0]] = {"bind": parts[1], "mode": parts[2] if len(parts) > 2 else "rw"}
-    out = {"volumes": vols, "environment": {**cache_env, **(r.env or {})} or None}
+    cluster_env = cluster.env(r, node_ip or r.cluster["head_ip"]) if cluster.is_cluster(r) else {}
+    out = {"volumes": vols, "environment": {**cache_env, **cluster_env, **(r.env or {})} or None}
+    if cluster_env:
+        out["devices"] = ["/dev/infiniband:/dev/infiniband:rwm"]  # RDMA for NCCL; without it NCCL falls back to TCP
     for key in ("mem_limit", "shm_size"):
         if d.get(key):
             out[key] = d[key]
@@ -105,6 +109,8 @@ def extra_tokens(lines: list[str]) -> list[str]:
 def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]:
     path = weights_path(r, models_root)
     draft = draft_path(r, models_root)
+    if cluster.is_cluster(r) and r.engine != "vllm":
+        raise ValueError("a cluster needs the vLLM engine")
     if r.engine == "vllm":
         cmd = ["vllm", "serve", path, "--served-model-name", r.name,
                "--host", "0.0.0.0", "--port", str(port),
@@ -115,6 +121,8 @@ def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]
             cmd += ["--gpu-memory-utilization", str(util)]
         if r.kv_cache_dtype != "auto":
             cmd += ["--kv-cache-dtype", r.kv_cache_dtype]
+        if cluster.is_cluster(r):
+            cmd += cluster.head_args(r)
         if draft:
             spec = {"method": r.draft_method or "draft_model", "model": draft,
                     "num_speculative_tokens": r.num_speculative_tokens, **(r.speculative_extra or {})}
@@ -271,21 +279,53 @@ class DockerRunner:
             self._client = None
             return {}
 
-    def start(self, r: Recipe, cmd: list[str], port: int, models_root: str, meta: dict | None = None):
-        for old in self._ours(r.name):  # a stopped container from last time
-            old.remove(force=True)
+    def remote(self, host: str):
+        """Docker on another Spark, over SSH (the key login is set up by the user)."""
+        import docker
+        return docker.DockerClient(base_url=f"ssh://{host}", use_ssh_client=True)
+
+    def _run(self, client, name: str, r: Recipe, cmd: list[str], labels: dict, models_root: str, node_ip: str | None = None):
         from docker.types import DeviceRequest, Ulimit
         # Images ship their own entrypoints (vllm-openai runs `vllm serve`, llama.cpp runs the
         # server); the command's first word replaces it so every engine starts the same way.
-        return self.docker.containers.run(
-            r.image, cmd[1:], entrypoint=[cmd[0]], name=f"dgxkit-{r.name}", detach=True,
-            # meta (planned context and KV pool) lets a restarted dashboard pick running models back up.
-            labels={LABEL: r.name, "dgxkit.port": str(port), "dgxkit.engine": r.engine,
-                    "dgxkit.meta": json.dumps(meta or {})},
+        return client.containers.run(
+            r.image, cmd[1:], entrypoint=[cmd[0]], name=name, detach=True, labels=labels,
             network_mode="host", ipc_mode="host", ulimits=[Ulimit(name="memlock", soft=-1, hard=-1)],
             device_requests=[DeviceRequest(count=-1, capabilities=[["gpu"]])],
-            **docker_options(r, models_root),
+            **docker_options(r, models_root, node_ip),
         )
+
+    def start(self, r: Recipe, cmd: list[str], port: int, models_root: str, meta: dict | None = None):
+        started = []
+        try:  # workers first, so a node that can't start stops the whole thing before the head waits for it
+            for rank, w in enumerate(cluster.workers(r), 1):
+                client = self.remote(w["host"])
+                for old in client.containers.list(all=True, filters={"name": f"^dgxkit-{r.name}-w{rank}$"}):  # one left from last time
+                    old.remove(force=True)
+                started.append((client, self._run(client, f"dgxkit-{r.name}-w{rank}", r, cluster.worker_command(cmd, rank),
+                                                  {"dgxkit.worker": r.name}, models_root, w["ip"])))
+            for old in self._ours(r.name):  # a stopped container from last time
+                old.remove(force=True)
+            # meta (planned context and KV pool) lets a restarted dashboard pick running models back up.
+            return self._run(self.docker, f"dgxkit-{r.name}", r, cmd,
+                             {LABEL: r.name, "dgxkit.port": str(port), "dgxkit.engine": r.engine, "dgxkit.meta": json.dumps(meta or {})},
+                             models_root)
+        except Exception:
+            for _, c in started:
+                c.remove(force=True)
+            raise
+
+    def stop_workers(self, r: Recipe, timeout: int = 30):
+        """Stop the worker containers on the other nodes; one that can't be reached doesn't hide the rest."""
+        failed = []
+        for rank, w in enumerate(cluster.workers(r), 1):
+            try:
+                for c in self.remote(w["host"]).containers.list(all=True, filters={"name": f"^dgxkit-{r.name}-w{rank}$"}):
+                    c.stop(timeout=timeout) if c.status == "running" else c.remove(force=True)
+            except Exception as e:
+                failed.append(f"{w['host']}: {e}")
+        if failed:
+            raise RuntimeError("; ".join(failed))
 
     def stop(self, name: str, timeout: int = 30):
         for c in self._ours(name):
