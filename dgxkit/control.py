@@ -123,8 +123,9 @@ def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]
             cmd += ["--kv-cache-dtype", r.kv_cache_dtype]
         if cluster.is_cluster(r):
             cmd += cluster.head_args(r)
-        if draft:
-            spec = {"method": r.draft_method or "draft_model", "model": draft,
+        if draft or r.draft_method:
+            spec = {"method": r.draft_method or "draft_model",
+                    **({"model": draft} if draft else {}),
                     "num_speculative_tokens": r.num_speculative_tokens, **(r.speculative_extra or {})}
             if spec["method"] == "auto":
                 del spec["method"]  # vLLM reads the method from the draft's own config

@@ -115,6 +115,8 @@ def recipe_from_args(name: str, args: list[str], image: str | None = None,
                     r.draft_repo = spec["model"]
                 r.draft_method = spec.get("method")
                 r.num_speculative_tokens = int(spec.get("num_speculative_tokens") or 3)
+                r.speculative_extra = {k: v for k, v in spec.items()
+                                       if k not in ("model", "method", "num_speculative_tokens")}
             except (ValueError, TypeError):
                 notes.append("couldn't read --speculative-config; kept it as an extra argument")
                 extra.append(_line(flag, val))

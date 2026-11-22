@@ -29,6 +29,29 @@ def test_speculative_json_and_container_mounts_map_to_host_paths():
     assert (r.draft_method, r.num_speculative_tokens, r.extra_args) == ("dflash", 5, [])
 
 
+def test_bundled_speculator_survives_options_save_and_launch():
+    import json
+
+    from dgxkit.control import engine_command
+    from dgxkit.options import apply_text, to_text
+    from dgxkit.recipes import Recipe
+    from dgxkit.sizing import Plan
+
+    r = Recipe(name="inkling", repo="local/inkling", engine="vllm")
+    options = """--speculative-config '{"method":"dspark","num_speculative_tokens":7,"draft_sample_method":"probabilistic"}'"""
+    saved = apply_text(r, options)
+    assert saved.draft_path is None and saved.draft_repo is None
+    assert saved.draft_method == "dspark" and saved.num_speculative_tokens == 7
+    assert saved.speculative_extra == {"draft_sample_method": "probabilistic"}
+    assert "dspark" in to_text(saved)
+
+    plan = Plan(131072, 524288, 55179869184, 4, True)
+    command = engine_command(saved, plan, 8101, "/models")
+    spec = json.loads(command[command.index("--speculative-config") + 1])
+    assert spec == {"method": "dspark", "num_speculative_tokens": 7,
+                    "draft_sample_method": "probabilistic"}
+
+
 def test_read_confs_skips_backups(tmp_path):
     (tmp_path / "a.conf").write_text(FIX.read_text())
     (tmp_path / "a.conf.bak").write_text("broken")
