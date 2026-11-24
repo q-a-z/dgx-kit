@@ -96,10 +96,6 @@ print("\nSystem sources")
 for path in ["/proc/meminfo", "/proc/stat", "/proc/diskstats", "/proc/net/dev",
              "/sys/devices/system/cpu/cpu0/cpufreq/scaling_cur_freq"]:
     print(f"  {path:55} {'ok' if os.path.exists(path) else 'MISSING'}")
-for d in sorted(glob.glob("/sys/class/hwmon/hwmon*")):
-    name = open(f"{d}/name").read().strip() if os.path.exists(f"{d}/name") else "?"
-    kinds = sorted({os.path.basename(f).split("_")[0].rstrip("0123456789") for f in glob.glob(f"{d}/*_input")})
-    print(f"  hwmon {name:20} {', '.join(kinds) or 'no inputs'}")
 cg = glob.glob("/sys/fs/cgroup/system.slice/docker-*.scope/memory.current")
 print(f"  docker cgroup memory files: {len(cg)} found")
 

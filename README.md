@@ -396,7 +396,7 @@ service reads there is read-only. Build the release package from the last commit
 
 Layout:
 
-- `dgxkit/collectors`: GPU (one NVML session, no `nvidia-smi`), CPU, memory, storage, network, sensors.
+- `dgxkit/collectors`: GPU (one NVML session, no `nvidia-smi`), CPU, memory, storage, network. Hardware sensor (`hwmon`, including NVMe temperature) polling is disabled; the API retains an empty `sensors` list for compatibility.
 - `dgxkit/engines`: metrics parsers for vLLM, SGLang, llama.cpp, Atlas and TensorRT-LLM.
 - `dgxkit/control.py`, `dgxkit/api_models.py`: start, stop, edit, logs, downloads over HTTP. Only containers labelled `dgxkit.model` are touched.
 - `dgxkit/options.py`, `dgxkit/importer.py`: a model's settings as text, and llmctl `.conf` import.

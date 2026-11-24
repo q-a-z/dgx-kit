@@ -6,15 +6,36 @@ from dgxkit.collectors.system import SystemCollector, parse_diskstats
 ROOT = Path(__file__).parent / "fixtures" / "root"
 
 
-def test_system_first_sample_has_memory_and_sensors():
+def test_system_first_sample_has_memory():
     s = SystemCollector(str(ROOT)).sample()
     assert s["memory"]["total_bytes"] == 127535852 * 1024
     assert s["memory"]["used_bytes"] == (127535852 - 30000000) * 1024
     assert s["load"] == [1.5, 1.2, 0.9]
     assert s["cpu_freq_mhz"] == {"cpu0": 2400}
-    assert s["sensors"] == [{"chip": "acpitz", "label": "temp1", "unit": "C", "value": 47.5}]
+    assert s["sensors"] == []
     assert "cpu_pct" not in s  # rates need two samples
     assert s["net_iface"] == "wlP9s9" and s["cpu_model"] is None
+
+
+def test_system_sampling_never_accesses_hwmon(monkeypatch):
+    from dgxkit.collectors import system
+
+    original_glob = system.glob.glob
+    original_read_text = Path.read_text
+
+    def checked_glob(pattern, *args, **kwargs):
+        assert "hwmon" not in str(pattern)
+        return original_glob(pattern, *args, **kwargs)
+
+    def checked_read_text(path, *args, **kwargs):
+        assert "hwmon" not in str(path)
+        return original_read_text(path, *args, **kwargs)
+
+    monkeypatch.setattr(system.glob, "glob", checked_glob)
+    monkeypatch.setattr(Path, "read_text", checked_read_text)
+    collector = SystemCollector(str(ROOT))
+    for _ in range(2):
+        assert collector.sample()["sensors"] == []
 
 
 def test_system_second_sample_has_rates():

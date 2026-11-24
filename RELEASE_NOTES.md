@@ -2,6 +2,12 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.49
+
+### Changed
+- **Removed hardware sensor polling.** System samples no longer enumerate or read `hwmon` devices, including NVMe temperature sensors. The API retains an empty `sensors` list for compatibility. GPU monitoring through NVML remains enabled; CPU temperature readings are unavailable.
+- **The GPU diagnostic utility no longer scans `hwmon`.**
+
 ## 0.1.48
 
 ### Fixed

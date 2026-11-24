@@ -1,4 +1,4 @@
-"""CPU, memory, storage, network and sensor stats straight from /proc and /sys.
+"""CPU, memory, storage and network stats straight from /proc and /sys.
 
 Rates (CPU %, MB/s) need two readings, so SystemCollector keeps the previous
 raw counters and returns deltas. `root` lets tests point at fixture files.
@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import glob
 import re
-import os
 import time
 from pathlib import Path
 
@@ -95,27 +94,6 @@ class SystemCollector:
             freqs[cpu] = int(Path(p).read_text()) // 1000  # kHz to MHz
         return freqs
 
-    def _sensors(self) -> list[dict]:
-        sensors = []
-        for d in sorted(glob.glob(str(self.root / "sys/class/hwmon/hwmon*"))):
-            name_file = Path(d, "name")
-            chip = name_file.read_text().strip() if name_file.exists() else os.path.basename(d)
-            for f in sorted(glob.glob(f"{d}/*_input")):
-                kind = os.path.basename(f).split("_")[0]
-                label_file = Path(f.replace("_input", "_label"))
-                label = label_file.read_text().strip() if label_file.exists() else kind
-                try:
-                    raw = int(Path(f).read_text())
-                except (OSError, ValueError):
-                    continue
-                if kind.startswith("temp"):
-                    sensors.append({"chip": chip, "label": label, "unit": "C", "value": raw / 1000})
-                elif kind.startswith("power"):
-                    sensors.append({"chip": chip, "label": label, "unit": "W", "value": raw / 1e6})
-                elif kind.startswith("fan"):
-                    sensors.append({"chip": chip, "label": label, "unit": "rpm", "value": raw})
-        return sensors
-
     def _default_iface(self) -> str | None:
         """Interface of the default route (the box's real uplink, not docker/veth bridges)."""
         try:
@@ -172,7 +150,7 @@ class SystemCollector:
             "net_iface": self._default_iface(),
             "cpu_model": self._cpu_model(),
             "machine": self.machine(),
-            "sensors": self._sensors(),
+            "sensors": [],
         }
         if self._prev is not None:
             dt = t - self._prev_t
