@@ -69,6 +69,23 @@ def test_restarts_only_when_the_model_list_changes(tmp_path):
     assert c.restarts == 2
 
 
+def test_failed_restart_retries_the_same_config(tmp_path, monkeypatch):
+    c = FakeContainer()
+    docker = FakeDocker(c)
+    g = Gateway(str(tmp_path), master_key="k", client=docker)
+    g.sync({"llama": 8100})
+    with monkeypatch.context() as mocked:
+        def fail(**kwargs):
+            raise RuntimeError("restart failed")
+        mocked.setattr(c, "restart", fail)
+        g.sync({"qwen": 8101})
+        assert g.problem and g.published == {"llama": 8100}
+    reloaded = Gateway(str(tmp_path), master_key="k", client=docker)
+    reloaded.sync({"qwen": 8101})
+    assert reloaded.problem is None and c.restarts == 2
+    assert reloaded.published == {"qwen": 8101}
+
+
 def test_explains_why_it_cannot_start(tmp_path):
     g = Gateway(str(tmp_path), master_key=None, client=FakeDocker())
     g.sync({})

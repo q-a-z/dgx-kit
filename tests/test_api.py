@@ -208,7 +208,7 @@ def test_start_refuses_until_downloaded_then_runs(env):
     assert r["port"] == 8100 and r["plan"]["fits"]
     assert r["command"][:3] == ["vllm", "serve", str(models / "org--Llama-8B")]
     assert "llama" in s.sampler.engines
-    assert s.gateway.synced[-1] == {"llama": 8100}
+    assert s.gateway.synced[-1] == {}  # a created container still needs an engine health check
     assert client.put("/api/models/llama", json=model_body(publish=False)).status_code == 200
     assert s.gateway.synced[-1] == {}
     assert client.post("/api/models/llama/stop").json() == {"stopped": True}
@@ -299,6 +299,11 @@ def test_readonly_mode_blocks_everything_that_changes_the_box(tmp_path, monkeypa
         assert client.get("/api/me").json()["readonly"] is True
         assert client.post("/api/models", json=model_body()).status_code == 201  # settings only
         (models / "org--Llama-8B").mkdir()
+        (models / "org--Llama-8B" / "config.json").write_text('{"architectures":["LlamaForCausalLM"]}')
+        checkpoint = models / "org--Llama-8B" / "model.safetensors"
+        checkpoint.write_bytes(b"fixture")
+        response = client.post("/api/library/delete", json={"path": str(checkpoint.parent), "confirm": checkpoint.parent.name})
+        assert response.status_code == 403 and checkpoint.exists()
         for method, path in [("post", "/api/models/llama/start"), ("post", "/api/models/llama/stop"),
                              ("post", "/api/models/llama/download"), ("delete", "/api/models/llama"),
                              ("post", "/api/images/vllm/pull"), ("post", "/api/gateway/sync"),
@@ -547,6 +552,7 @@ def test_publish_and_unpublish_update_the_gateway_without_touching_the_model(env
     client, s, _ = env
     client.post("/api/models", json=model_body())
     s.runner.running["llama"] = 8100
+    s.sampler.latest["models"]["llama"] = {"port": 8100, "up": True}
     assert client.post("/api/models/llama/publish", json={"publish": False}).json() == {"publish": False}
     assert s.store.get("llama").publish is False and s.gateway.synced[-1] == {}  # off the gateway now
     assert s.runner.running == {"llama": 8100}  # still running
@@ -834,21 +840,69 @@ def test_a_service_without_a_key_has_none_to_give(env):
 CLUSTER = {"workers": [{"host": "q@gx10-2", "ip": "192.168.100.11"}], "head_ip": "192.168.100.10", "interface": "enp1s0f1np1"}
 
 
+def test_cluster_start_accepts_fixed_fp8_cache_for_four_full_contexts(env, monkeypatch):
+    from dgxkit import cluster
+    client, s, models = env
+    (models / "org--Llama-8B").mkdir()
+    cfg = {"num_hidden_layers": 40, "num_attention_heads": 32,
+           "num_key_value_heads": 8, "head_dim": 128, "max_position_embeddings": 131072}
+    limit = int(5.25 * 2**30)
+    body = model_body(config=cfg, weights_bytes=5 * 2**30, cluster=CLUSTER,
+                      kv_cache_dtype="fp8", kv_cache_bytes=limit,
+                      max_context=32768, min_context=32768, min_concurrency=4,
+                      extra_args=["--max-num-seqs 4"])
+    assert client.post("/api/models", json=body).status_code == 201
+    monkeypatch.setattr(cluster, "check", lambda r, root, **kw: [])
+    response = client.post("/api/models/llama/start")
+    assert response.status_code == 200, response.json()
+    result = response.json()
+    assert result["plan"]["concurrency"] >= 4 and result["plan"]["context_tokens"] == 32768
+    cmd = result["command"]
+    assert cmd[cmd.index("--kv-cache-memory-bytes") + 1] == str(limit)
+    assert cmd[cmd.index("--kv-cache-dtype") + 1] == "fp8"
+    assert cmd[cmd.index("--max-num-seqs") + 1] == "4"
+    assert s.store.get("llama").min_concurrency == 4
+
+
+def test_memory_reserve_override_is_per_recipe_and_survives_edits(env, monkeypatch):
+    from dgxkit import api_models, cluster
+    client, s, models = env
+    (models / "org--Llama-8B").mkdir()
+    monkeypatch.setattr(api_models, "available_bytes", lambda s: 14 * 2**30)
+    monkeypatch.setattr(cluster, "check", lambda r, root, **kw: [])
+    cfg = {"num_hidden_layers": 40, "num_attention_heads": 32,
+           "num_key_value_heads": 8, "head_dim": 128, "max_position_embeddings": 131072}
+    body = model_body(config=cfg, weights_bytes=5 * 2**30, cluster=CLUSTER,
+                      kv_cache_dtype="fp8", kv_cache_bytes=int(5.25 * 2**30),
+                      max_context=32768, min_context=32768, min_concurrency=4,
+                      extra_args=["--max-num-seqs 4"])
+    assert client.post("/api/models", json=body).status_code == 201
+    assert client.post("/api/models/llama/start").status_code == 409
+    assert client.put("/api/models/llama", json={**body, "memory_reserve_bytes": 4 * 2**30}).status_code == 200
+    assert client.put("/api/models/llama", json={**body, "title": "Granite"}).status_code == 200
+    response = client.post("/api/models/llama/start")
+    assert response.status_code == 200, response.json()
+    assert response.json()["plan"]["concurrency"] >= 4
+    assert s.store.get("llama").memory_reserve_bytes == 4 * 2**30
+    assert client.post("/api/models", json={**body, "name": "other"}).status_code == 201
+    assert s.store.get("other").memory_reserve_bytes is None
+
+
 def test_a_cluster_model_is_checked_before_it_starts_and_stops_on_every_node(env, monkeypatch):
     from dgxkit import cluster
     client, s, models = env
     (models / "org--Llama-8B").mkdir()
     assert client.post("/api/models", json=model_body(cluster=CLUSTER)).status_code == 201
     bad = [cluster.Check("ssh to q@gx10-2", False, "key login failed", "set up key login")]
-    monkeypatch.setattr(cluster, "check", lambda r, root: bad)
+    monkeypatch.setattr(cluster, "check", lambda r, root, **kw: bad)
     r = client.get("/api/models/llama/cluster").json()
     assert not r["ok"] and "fix: set up key login" in r["text"]
     r = client.post("/api/models/llama/start")
     assert r.status_code == 409 and "ssh to q@gx10-2" in r.json()["detail"]["problems"][0]
     assert s.runner.started == []  # nothing was launched
-    monkeypatch.setattr(cluster, "check", lambda r, root: [])
+    monkeypatch.setattr(cluster, "check", lambda r, root, **kw: [])
     started = client.post("/api/models/llama/start").json()
-    assert "--nnodes" in started["command"] and s.gateway.synced[-1] == {"llama": 8100}  # published like any other model
+    assert "--nnodes" in started["command"] and s.gateway.synced[-1] == {}
     assert client.put("/api/models/llama", json=model_body(max_context=32768)).status_code == 200
     assert s.store.get("llama").cluster == CLUSTER  # an edit from the page does not send it back, and must not lose it
     client.post("/api/models/llama/stop")
@@ -859,3 +913,99 @@ def test_the_cluster_check_needs_cluster_settings(env):
     client, _, _ = env
     client.post("/api/models", json=model_body())
     assert client.get("/api/models/llama/cluster").status_code == 422
+
+
+def test_stop_cancels_start_while_cluster_preflight_is_running(env, monkeypatch):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Event
+    from dgxkit import cluster
+
+    client, s, models = env
+    (models / "org--Llama-8B").mkdir()
+    assert client.post("/api/models", json=model_body(cluster=CLUSTER)).status_code == 201
+    entered, release = Event(), Event()
+
+    def preflight(*args, **kwargs):
+        entered.set()
+        assert release.wait(5)
+        return []
+
+    monkeypatch.setattr(cluster, "check", preflight)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        start = executor.submit(client.post, "/api/models/llama/start")
+        try:
+            assert entered.wait(3)
+            assert client.get("/api/models").json()[0]["starting"]
+            assert client.post("/api/models/llama/start").status_code == 409
+            assert client.post("/api/models/llama/stop").json() == {"stopped": True}
+        finally:
+            release.set()
+        result = start.result(timeout=3)
+    assert result.status_code == 409 and "cancelled" in result.json()["detail"]["problems"][0]
+    assert not s.runner.started
+
+
+def test_stop_reports_a_worker_failure_and_can_be_retried(env, monkeypatch):
+    client, s, _ = env
+    assert client.post("/api/models", json=model_body(cluster=CLUSTER)).status_code == 201
+    s.runner.running["llama"] = 8100
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("gx10-2 is unreachable")
+
+    with monkeypatch.context() as mocked:
+        mocked.setattr(s.runner, "stop_workers", fail)
+        response = client.post("/api/models/llama/stop")
+        assert response.status_code == 503
+        assert response.json()["detail"] == {"stopped": False, "problems": ["workers: gx10-2 is unreachable"]}
+        assert not s.runner.running
+        assert client.get("/api/models").json()[0]["stop_problems"]
+        assert client.post("/api/models/llama/start").status_code == 409
+    assert client.post("/api/models/llama/stop").json() == {"stopped": True}
+    assert not client.get("/api/models").json()[0]["stop_problems"]
+
+
+def test_cluster_diagnosis_identifies_the_rank_with_a_permission_error(env):
+    client, s, _ = env
+    client.post("/api/models", json=model_body(cluster=CLUSTER))
+    s.runner.logs = lambda *a: "RuntimeError: connection closed by peer"
+    s.runner.worker_logs = lambda *a: {
+        "rank 1 on gx10-2": "PermissionError: [Errno 13] Permission denied: '/models/model.safetensors'",
+    }
+    diagnosis = client.get("/api/models/llama/diagnosis").json()
+    assert diagnosis["cause"] == "checkpoint_permission" and "rank 1 on gx10-2" in diagnosis["detail"]
+    assert "rank 1 on gx10-2" in client.get("/api/models/llama/logs").json()["logs"]
+
+
+def test_gateway_reconciles_engine_readiness_and_exit(env):
+    from functools import partial
+    from dgxkit.api_models import sync_gateway
+
+    client, s, _ = env
+    client.post("/api/models", json=model_body())
+    s.runner.running["llama"] = 8100
+    sync = partial(sync_gateway, s, reconcile=True)
+    client.portal.call(sync)
+    assert s.gateway.synced[-1] == {}
+    s.sampler.latest["models"]["llama"] = {"port": 8100, "up": True}
+    client.portal.call(sync)
+    assert s.gateway.synced[-1] == {"llama": 8100}
+    calls = len(s.gateway.synced)
+    s.sampler.latest["models"]["llama"] = {"port": 8100, "up": False, "was_up": True}
+    client.portal.call(sync)
+    assert len(s.gateway.synced) == calls
+    s.runner.running.clear()
+    client.portal.call(sync)
+    assert s.gateway.synced[-1] == {}
+
+
+def test_start_refuses_an_incomplete_draft(env):
+    client, s, models = env
+    (models / "org--Llama-8B").mkdir()
+    draft = models / "org--draft"
+    draft.mkdir()
+    (draft / ".dgxkit-incomplete").touch()
+    client.post("/api/models", json=model_body(draft_repo="org/draft"))
+    response = client.post("/api/models/llama/start")
+    assert response.status_code == 409 and "draft download hasn't finished" in response.json()["detail"]["problems"]
+    assert not s.runner.started

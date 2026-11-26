@@ -204,15 +204,19 @@ class Gateway:
 
     def sync(self, published: dict[str, int]) -> None:
         """Bring the gateway in line with the running models. Never raises."""
-        self.published = dict(published)
+        pending = self.dir / "config.pending"
         try:
             if not (self.dir / DEFAULTS_FILE).exists():
                 self.dir.mkdir(parents=True, exist_ok=True)
                 (self.dir / DEFAULTS_FILE).write_text(DEFAULTS_HELP)
         except OSError:
             pass
-        changed = self._write(yaml.safe_dump(litellm_config(published, read_defaults(self.dir)), sort_keys=False))
         try:
+            config = yaml.safe_dump(litellm_config(published, read_defaults(self.dir)), sort_keys=False)
+            path = self.dir / "config.yaml"
+            if not path.exists() or path.read_text() != config:
+                pending.touch()
+                self._write(config)
             if not (self.dir / EXTRA_ENV).exists():
                 (self.dir / EXTRA_ENV).write_text(EXTRA_ENV_HELP)
             extra = read_extra_env(self.dir)
@@ -222,8 +226,10 @@ class Gateway:
             current = labels.get(LABEL, GENERATION) == GENERATION
             same_env = labels.get(ENV_LABEL, env_digest({})) == digest  # a container from before extra.env had no extras
             if c is not None and c.status == "running" and (current or not self.db) and same_env:
-                if changed:
+                if pending.exists():
                     c.restart(timeout=10)
+                pending.unlink(missing_ok=True)
+                self.published = dict(published)
                 self.problem = None
                 return
             if not self.master_key:
@@ -259,6 +265,8 @@ class Gateway:
                 volumes={str(self.dir): {"bind": "/app/dgxkit", "mode": "ro"}},
                 restart_policy={"Name": "unless-stopped"},
             )
+            pending.unlink(missing_ok=True)
+            self.published = dict(published)
             self.problem = None
         except Exception as e:  # Docker down or refused; the dashboard keeps working
             from docker.errors import DockerException

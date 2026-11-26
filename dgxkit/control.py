@@ -63,7 +63,7 @@ def jit_caches(engine: str) -> tuple[dict, dict]:
     jobs: uncapped, ninja and nvcc run one compiler per core and the container hits its memory limit and is
     killed mid-build (seen on a Nemotron start). Shared with llmctl's caches when it left them in ~/.cache.
     """
-    if engine in ("llamacpp", "atlas"):  # llama.cpp is built ahead; Atlas ships its kernels precompiled, no runtime compilation
+    if engine in ("llamacpp", "atlas", "velogb10"):  # these engines ship precompiled kernels
         return {}, {}
     root = Path(os.environ.get("DGXKIT_CACHE_DIR") or Path.home() / ".cache")
     vols = {}
@@ -79,20 +79,30 @@ def docker_options(r: Recipe, models_root: str, node_ip: str | None = None) -> d
     vols = mounts(r, models_root)
     cache_vols, cache_env = jit_caches(r.engine)
     vols.update(cache_vols)
-    for v in d.get("volumes") or []:
-        parts = str(v).split(":")
-        if len(parts) >= 2 and parts[0].startswith("/"):
-            vols[parts[0]] = {"bind": parts[1], "mode": parts[2] if len(parts) > 2 else "rw"}
+    vols.update(recipe_volumes(r))
     cluster_env = cluster.env(r, node_ip or r.cluster["head_ip"]) if cluster.is_cluster(r) else {}
     out = {"volumes": vols, "environment": {**cache_env, **cluster_env, **(r.env or {})} or None}
-    if cluster_env:
+    if cluster_env or cluster.is_cluster(r):
         out["devices"] = ["/dev/infiniband:/dev/infiniband:rwm"]  # RDMA for NCCL; without it NCCL falls back to TCP
-    for key in ("mem_limit", "shm_size"):
+        # Verbs memory registration and NCCL's pinned buffers can hit the
+        # memlock limit even when the ulimit is raised; grant the capability
+        # explicitly for cluster containers.
+        out["cap_add"] = ["IPC_LOCK"]
+    for key in ("mem_limit", "shm_size", "user"):
         if d.get(key):
             out[key] = d[key]
     if d.get("security_opt"):  # e.g. ["seccomp=unconfined"]: Docker's default profile blocks io_uring
         out["security_opt"] = [str(o) for o in d["security_opt"]]
     return out
+
+
+def recipe_volumes(r: Recipe) -> dict:
+    vols = {}
+    for v in (r.docker or {}).get("volumes") or []:
+        parts = str(v).split(":")
+        if len(parts) >= 2 and parts[0].startswith("/"):
+            vols[parts[0]] = {"bind": parts[1], "mode": parts[2] if len(parts) > 2 else "rw"}
+    return vols
 
 
 def extra_tokens(lines: list[str]) -> list[str]:
@@ -110,8 +120,29 @@ def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]
     path = weights_path(r, models_root)
     draft = draft_path(r, models_root)
     if cluster.is_cluster(r) and r.engine != "vllm":
+        if r.engine == "velogb10":
+            raise ValueError("managed veloGB10 recipes support single-node serving; Velo-Fabric needs its own peer launcher")
         raise ValueError("a cluster needs the vLLM engine")
-    if r.engine == "vllm":
+    if r.engine == "velogb10":
+        if r.kv_cache_bytes is not None or r.fill_memory:
+            raise ValueError("veloGB10 allocates KV per lane; use context and concurrency instead of a fixed KV pool or fill_memory")
+        exl3 = r.quantization == "exl3"
+        kv = ({"auto": "q8", "q8": "q8", "bf16": "f16", "fp16": "f16", "fp8": "fp8"} if exl3 else
+              {"auto": "bf16", "bf16": "bf16", "fp16": "bf16", "fp8": "k8v8"}).get(r.kv_cache_dtype)
+        if kv is None:
+            raise ValueError("veloGB10 KV type must be auto, q8, bf16, fp16 or fp8")
+        cmd = ["/opt/velogb10/gb10_inference", "--server", "--model-dir", path,
+               "--model-name", r.name, "--host", "0.0.0.0", "--port", str(port),
+               "--max-seq-len", str(p.context_tokens),
+               "--max-batch", str(max(1, int(p.concurrency))), "--kv-cache", kv]
+        if draft:
+            if r.draft_method not in ("dflash", "dflash2"):
+                raise ValueError("veloGB10 external drafts require dflash or dflash2")
+            cmd += ["--spec-source", r.draft_method, "--draft-dir", draft]
+        elif r.draft_method not in (None, "mtp"):
+            raise ValueError("veloGB10 requires a draft model for dflash/dflash2")
+        cmd += ["--mtp", "auto" if r.draft_method else "off"]
+    elif r.engine == "vllm":
         cmd = ["vllm", "serve", path, "--served-model-name", r.name,
                "--host", "0.0.0.0", "--port", str(port),
                "--max-model-len", str(p.context_tokens),
@@ -220,6 +251,8 @@ def check_start(r: Recipe, p: Plan, models_root: str, image_ready: bool) -> Star
     d = draft_path(r, models_root)
     if d and not Path(d).exists():
         problems.append("draft isn't downloaded")
+    elif d and (Path(d) / ".dgxkit-incomplete").exists():
+        problems.append("draft download hasn't finished")
     if r.engine == "llamacpp" and r.gguf_file and path.exists() and not gguf_path(r, models_root).is_file():
         problems.append(f"GGUF file not found: {gguf_path(r, models_root)}")
     if not p.fits:
@@ -264,9 +297,10 @@ class DockerRunner:
         return self.docker.containers.list(all=True, filters=filt)
 
     def ports_in_use(self) -> set[int]:
-        return {int(c.labels.get("dgxkit.port", 0)) for c in self._ours() if c.status == "running"}
+        return {int(c.labels.get("dgxkit.port", 0)) for c in self._ours()
+                if c.status in ("running", "paused", "restarting", "created")}
 
-    def status(self) -> dict[str, dict]:
+    def status(self, *, strict: bool = False) -> dict[str, dict]:
         try:
             # A container the slot scheduler froze is paused to Docker but serving to us: it resumes within a slot.
             return {c.labels[LABEL]: {"state": "running" if c.status == "paused" else c.status, "port": int(c.labels.get("dgxkit.port", 0)), "id": c.id,
@@ -277,12 +311,18 @@ class DockerRunner:
                     for c in self._ours()}
         except Exception:  # Docker down: show nothing running rather than failing the page
             self._client = None
+            if strict:
+                raise
             return {}
 
     def remote(self, host: str):
         """Docker on another Spark, over SSH (the key login is set up by the user)."""
         import docker
-        return docker.DockerClient(base_url=f"ssh://{host}", use_ssh_client=True)
+        cluster.ensure_ssh()
+        try:
+            return docker.DockerClient(base_url=f"ssh://{host}", use_ssh_client=True)
+        except docker.errors.DockerException as e:  # otherwise the API reports any Docker error as "Docker isn't reachable"
+            raise ValueError(f"can't reach Docker on {host}: {e}") from e
 
     def _run(self, client, name: str, r: Recipe, cmd: list[str], labels: dict, models_root: str, node_ip: str | None = None):
         from docker.types import DeviceRequest, Ulimit
@@ -296,23 +336,43 @@ class DockerRunner:
         )
 
     def start(self, r: Recipe, cmd: list[str], port: int, models_root: str, meta: dict | None = None):
+        import logging
+
+        active = {"running", "paused", "restarting", "created"}
+        heads = self._ours(r.name)
+        if any(c.status in active for c in heads):
+            raise ValueError(f"{r.name} is already active; stop it first")
+        targets = []
+        for rank, w in enumerate(cluster.workers(r), 1):
+            host = w["host"]
+            client = self.remote(host)
+            node_ip = cluster.worker_ip(w)
+            if not node_ip:
+                raise ValueError(f"worker {host} has no fabric IP")
+            worker_name = f"dgxkit-{r.name}-w{rank}"
+            previous = client.containers.list(all=True, filters={"name": f"^/{worker_name}$", "label": f"dgxkit.worker={r.name}"})
+            if any(c.status in active for c in previous):
+                raise ValueError(f"{host}: {worker_name} is still active; stop it first")
+            targets.append((rank, client, node_ip, worker_name, previous))
         started = []
         try:  # workers first, so a node that can't start stops the whole thing before the head waits for it
-            for rank, w in enumerate(cluster.workers(r), 1):
-                client = self.remote(w["host"])
-                for old in client.containers.list(all=True, filters={"name": f"^dgxkit-{r.name}-w{rank}$"}):  # one left from last time
-                    old.remove(force=True)
-                started.append((client, self._run(client, f"dgxkit-{r.name}-w{rank}", r, cluster.worker_command(cmd, rank),
-                                                  {"dgxkit.worker": r.name}, models_root, w["ip"])))
-            for old in self._ours(r.name):  # a stopped container from last time
-                old.remove(force=True)
+            for rank, client, node_ip, worker_name, previous in targets:
+                for old in previous:
+                    old.remove()
+                started.append(self._run(client, worker_name, r, cluster.worker_command(cmd, rank),
+                                         {"dgxkit.worker": r.name}, models_root, node_ip))
+            for old in heads:
+                old.remove()
             # meta (planned context and KV pool) lets a restarted dashboard pick running models back up.
             return self._run(self.docker, f"dgxkit-{r.name}", r, cmd,
                              {LABEL: r.name, "dgxkit.port": str(port), "dgxkit.engine": r.engine, "dgxkit.meta": json.dumps(meta or {})},
                              models_root)
         except Exception:
-            for _, c in started:
-                c.remove(force=True)
+            for c in started:
+                try:
+                    c.remove(force=True)
+                except Exception:
+                    logging.getLogger(__name__).exception("Failed to remove a worker after %s did not start", r.name)
             raise
 
     def stop_workers(self, r: Recipe, timeout: int = 30):
@@ -320,8 +380,13 @@ class DockerRunner:
         failed = []
         for rank, w in enumerate(cluster.workers(r), 1):
             try:
-                for c in self.remote(w["host"]).containers.list(all=True, filters={"name": f"^dgxkit-{r.name}-w{rank}$"}):
-                    c.stop(timeout=timeout) if c.status == "running" else c.remove(force=True)
+                for c in self.remote(w["host"]).containers.list(all=True, filters={"name": f"^/dgxkit-{r.name}-w{rank}$", "label": f"dgxkit.worker={r.name}"}):
+                    if c.status == "paused":
+                        c.unpause()
+                    if c.status in ("running", "paused", "restarting"):
+                        c.stop(timeout=timeout)
+                    else:
+                        c.remove()
             except Exception as e:
                 failed.append(f"{w['host']}: {e}")
         if failed:
@@ -329,7 +394,9 @@ class DockerRunner:
 
     def stop(self, name: str, timeout: int = 30):
         for c in self._ours(name):
-            if c.status == "running":
+            if c.status == "paused":
+                c.unpause()
+            if c.status in ("running", "paused", "restarting"):
                 c.stop(timeout=timeout)
             else:  # crashed, crash-looping or never started: clear it so nothing is left holding the name
                 c.remove(force=True)
@@ -337,3 +404,17 @@ class DockerRunner:
     def logs(self, name: str, tail: int = 200) -> str:
         cs = self._ours(name)
         return cs[0].logs(tail=tail).decode(errors="replace") if cs else ""
+
+    def worker_logs(self, r: Recipe, tail: int) -> dict[str, str]:
+        logs = {}
+        for rank, w in enumerate(cluster.workers(r), 1):
+            host = w["host"]
+            label = f"rank {rank} on {host}"
+            try:
+                cs = self.remote(host).containers.list(all=True, filters={
+                    "name": f"^/dgxkit-{r.name}-w{rank}$", "label": f"dgxkit.worker={r.name}",
+                })
+                logs[label] = cs[0].logs(tail=tail).decode(errors="replace") if cs else "worker container not found"
+            except Exception as e:
+                logs[label] = f"could not retrieve worker log: {e}"
+        return logs

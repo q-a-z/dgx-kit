@@ -12,7 +12,7 @@ import shlex
 
 from .control import LABEL
 
-DEFAULT_PORTS = {"vllm": 8000, "sglang": 30000, "llamacpp": 8080, "atlas": 8888, "trtllm": 8000}
+DEFAULT_PORTS = {"vllm": 8000, "sglang": 30000, "llamacpp": 8080, "atlas": 8888, "trtllm": 8000, "velogb10": 8000}
 
 
 def _opt(args: list[str], *names: str) -> str | None:
@@ -30,6 +30,8 @@ def _opt(args: list[str], *names: str) -> str | None:
 
 def _engine(args: list[str], image: str) -> str | None:
     joined = " ".join(args)
+    if any(a.rsplit("/", 1)[-1] == "gb10_inference" for a in args) and "--server" in args:
+        return "velogb10"
     if "sglang.launch_server" in joined or "sglang serve" in joined:
         return "sglang"
     if any(a.endswith("llama-server") for a in args) or "llama.cpp" in image:
@@ -45,6 +47,8 @@ def _engine(args: list[str], image: str) -> str | None:
 
 
 def _draft(engine: str, args: list[str]) -> str | None:
+    if engine == "velogb10":
+        return _opt(args, "--draft-dir", "--dflash-dir")
     if engine == "vllm":
         spec = _opt(args, "--speculative-config", "--speculative_config")
         if spec:
@@ -73,6 +77,8 @@ def parse(args: list[str], image: str = "") -> dict | None:
         if not model and "serve" in args:
             i = args.index("serve")
             model = args[i + 1] if i + 1 < len(args) and not args[i + 1].startswith("-") else None
+    elif engine == "velogb10":
+        model = _opt(args, "--model-dir")
     elif engine == "sglang":
         model = _opt(args, "--model-path", "--model")
     elif engine == "trtllm":

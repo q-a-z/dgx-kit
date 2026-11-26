@@ -39,7 +39,7 @@ class ModelStore:
     def save(self, r: Recipe) -> None:
         path = self._path(r.name)
         if path.exists():  # keep the old version before overwriting
-            stamp = time.strftime("%Y%m%d-%H%M%S")
+            stamp = f"{time.strftime('%Y%m%d-%H%M%S')}-{time.time_ns()}"
             (self.history / f"{r.name}.{stamp}.yaml").write_text(path.read_text())
         tmp = path.with_suffix(".tmp")
         tmp.write_text(yaml.safe_dump(r.to_dict(), sort_keys=False))

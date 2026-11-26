@@ -31,13 +31,18 @@ def attention_layers(config: dict) -> int:
     return n
 
 
-def kv_bytes_per_token(config: dict, kv_dtype: str = "auto") -> int:
+def kv_bytes_per_token(config: dict, kv_dtype: str = "auto", *, tensor_parallel_size: int = 1) -> int:
     c = text_config(config)
     heads = c.get("num_attention_heads")
     kv_heads = c.get("num_key_value_heads") or heads
     head_dim = c.get("head_dim") or (c["hidden_size"] // heads if heads and c.get("hidden_size") else None)
     if not kv_heads or not head_dim:
         raise ValueError("the model's config doesn't say how big its attention is, so the KV cache can't be sized")
+    if tensor_parallel_size < 1:
+        raise ValueError("tensor parallel size must be positive")
+    if kv_heads % tensor_parallel_size and tensor_parallel_size % kv_heads:
+        raise ValueError("KV heads and tensor parallel size must divide one another")
+    kv_heads = max(1, kv_heads // tensor_parallel_size)
     return 2 * attention_layers(config) * kv_heads * head_dim * KV_DTYPE_BYTES.get(kv_dtype, 2)
 
 
@@ -70,6 +75,7 @@ def plan(
     kv_cache_bytes: int | None = None,
     total_bytes: int | None = None,
     cap_pool: bool = False,
+    tensor_parallel_size: int = 1,
 ) -> Plan:
     """Largest context (halving from max_context) that leaves min_concurrency in the pool.
 
@@ -82,10 +88,12 @@ def plan(
     """
     c = text_config(config)
     model_max = c.get("max_position_embeddings")
+    if reserve_bytes < 0:
+        raise ValueError("memory reserve must not be negative")
     # An explicit context is kept even beyond the config's max_position_embeddings: many models serve more than their
     # config says (Nemotron 3.5 to 1M with VLLM_ALLOW_LONG_MAX_MODEL_LEN). Only the default is capped by the model.
     max_context = max_context or model_max or 32768
-    per_token = kv_bytes_per_token(config, kv_dtype)
+    per_token = kv_bytes_per_token(config, kv_dtype, tensor_parallel_size=tensor_parallel_size)
     kv_budget = available_bytes - reserve_bytes - int(weights_bytes * (1 + headroom_fraction))
     if kv_budget <= 0:
         return Plan(0, 0, 0, 0.0, False, "weights don't fit in free memory")
@@ -103,8 +111,16 @@ def plan(
         pool = kv_cache_bytes // per_token
         ctx = max_context  # as the user wrote it; the engine checks it against its own pool
         ok = kv_cache_bytes <= kv_budget
+        reason = ""
+        if ok and pool < ctx:
+            ok = False
+            reason = "the fixed KV cache cannot hold one requested context"
+        elif ok and ctx and pool / ctx < min_concurrency:
+            ok = False
+            reason = f"the fixed KV cache supports only {pool / ctx:.2f} concurrent contexts (need {min_concurrency:g})"
         return Plan(ctx, pool, kv_cache_bytes, round(pool / ctx, 2) if ctx else 0.0, ok,
-                    "" if ok else "the fixed KV cache doesn't fit in free memory", frac(kv_cache_bytes), total(kv_cache_bytes))
+                    reason if ok or reason else "the fixed KV cache doesn't fit in free memory",
+                    frac(kv_cache_bytes), total(kv_cache_bytes))
     pool = kv_budget // per_token
     ctx = max_context
     while ctx >= min_context:

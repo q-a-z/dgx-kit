@@ -50,6 +50,7 @@ class Job:
     error: str | None = None
     started: float = field(default_factory=time.time)
     proc: asyncio.subprocess.Process | None = None
+    task: asyncio.Task | None = field(default=None, repr=False)
     _samples: list = field(default_factory=list)  # (time, bytes) about a second apart; the speed is measured over the last ten seconds of them
 
     def progress(self) -> dict:
@@ -86,6 +87,15 @@ class Downloader:
             dest = Path(cache_dir) / "hub" / ("models--" + repo.replace("/", "--"))
         else:
             dest = Path(local_dir) if local_dir else Path(model_dir(self.models_root, repo))
+        dest = dest.resolve()
+        for job in self.jobs.values():
+            active = job.state in ("queued", "running", "paused")
+            draining = job.task is not None and not job.task.done()
+            if (active or draining) and (job.repo == repo or job.dest.resolve() == dest):
+                if active and (job.repo, job.dest, job.revision, job.allow_patterns, job.ignore_patterns, job.cache_dir) == (
+                        repo, dest, revision, allow_patterns, ignore_patterns, cache_dir):
+                    return job
+                raise RuntimeError(f"a download for {job.repo} is already using this repository or destination")
         already = dir_bytes(dest) if dest.exists() else 0
         if not fits_on_disk(self.models_root, total_bytes, already):
             raise RuntimeError("not enough free disk for this download")
@@ -93,33 +103,49 @@ class Downloader:
         (dest / MARKER).touch()
         job = Job(repo, total_bytes, dest, allow_patterns, revision, ignore_patterns, cache_dir)
         self.jobs[repo] = job
-        asyncio.create_task(self._run(job))
+        job.task = asyncio.create_task(self._run(job))
         return job
 
     async def _run(self, job: Job):
+        if job.state != "queued":
+            return
         args = [sys.executable, "-m", "dgxkit.downloader", job.repo, str(job.dest), job.revision or "",
                 ",".join(job.allow_patterns or []), ",".join(job.ignore_patterns or []), job.cache_dir or ""]
         env = {**os.environ, **({"HF_TOKEN": self.token} if self.token else {})}
         job.state = "running"
         job._samples.clear()  # a resumed download starts measuring afresh
-        job.proc = await asyncio.create_subprocess_exec(*args, env=env, stderr=asyncio.subprocess.PIPE)
-        _, err = await job.proc.communicate()
-        if job.state in ("cancelled", "paused"):
-            return
-        if job.proc.returncode == 0:
-            (job.dest / MARKER).unlink(missing_ok=True)
-            job.state = "done"
-        else:
-            lines = err.decode(errors="replace").strip().splitlines()
-            job.state, job.error = "failed", lines[-1] if lines else "download failed"
+        try:
+            job.proc = proc = await asyncio.create_subprocess_exec(*args, env=env, stderr=asyncio.subprocess.PIPE)
+            if job.state != "running":
+                self._kill(job)
+            _, err = await proc.communicate()
+            if job.state != "running":
+                return
+            if proc.returncode == 0:
+                (job.dest / MARKER).unlink(missing_ok=True)
+                job.state = "done"
+            else:
+                lines = err.decode(errors="replace").strip().splitlines()
+                job.state, job.error = "failed", lines[-1] if lines else "download failed"
+        except OSError as e:
+            if job.state == "running":
+                job.state, job.error = "failed", str(e)
+        finally:
+            job.proc = None
+
+    @staticmethod
+    def _kill(job: Job) -> None:
+        if job.proc is not None:
+            try:
+                job.proc.kill()
+            except ProcessLookupError:
+                pass
 
     def cancel(self, repo: str):
         job = self.jobs.get(repo)
-        if job and job.state == "paused":
+        if job and job.state in ("queued", "paused", "running"):
             job.state = "cancelled"
-        elif job and job.proc and job.state == "running":
-            job.state = "cancelled"
-            job.proc.kill()  # partial files stay; the next start resumes them
+            self._kill(job)  # partial files stay; the next start resumes them
 
     def pause(self, repo: str) -> bool:
         """Stop the transfer but keep the job; the files so far stay and resume picks up from them."""
@@ -127,7 +153,7 @@ class Downloader:
         if not (job and job.proc and job.state == "running"):
             return False
         job.state = "paused"
-        job.proc.kill()
+        self._kill(job)
         return True
 
     def resume(self, repo: str) -> bool:
@@ -135,8 +161,16 @@ class Downloader:
         if not (job and job.state == "paused"):
             return False
         job.state = "queued"
-        asyncio.create_task(self._run(job))
+        if job.task is None or job.task.done():
+            job.task = asyncio.create_task(self._run(job))
+        else:
+            job.task = asyncio.create_task(self._resume(job, job.task))
         return True
+
+    async def _resume(self, job: Job, previous: asyncio.Task) -> None:
+        await previous
+        if job.state == "queued":
+            await self._run(job)
 
 
 def _worker(repo: str, dest: str, revision: str, patterns: str, ignore: str = "", cache_dir: str = ""):

@@ -28,8 +28,10 @@ const ACTIVE = new Set(['queued', 'running', 'paused', 'failed'])
 
 export function stateOf(e: Omit<Entry, 'state'>): string {
   if (e.service) return e.service.state  // running | starting | preparing | stopped | exited, same words as a model's
+  if (e.row?.stop_problems?.length) return 'stop-incomplete'
   const d = e.download
   if (e.row?.preparing && !e.running) return 'preparing'
+  if (e.row?.starting && !e.running) return 'starting'
   if (d && d.state === 'failed') return 'failed'
   if (d && d.state === 'paused') return 'paused'
   if (d && ACTIVE.has(d.state)) return 'downloading'
@@ -49,7 +51,7 @@ export function stateOf(e: Omit<Entry, 'state'>): string {
 
 export const STATE_LABEL: Record<string, string> = {
   running: 'Serving', starting: 'Starting', down: 'Not answering', stopped: 'Stopped', exited: 'Crashed', restarting: 'Crashing, restarting',
-  preparing: 'Fetching image', downloading: 'Downloading', paused: 'Download paused', failed: 'Download failed', missing: 'Not downloaded', nofiles: 'Weights not found',
+  'stop-incomplete': 'Stop incomplete', preparing: 'Fetching image', downloading: 'Downloading', paused: 'Download paused', failed: 'Download failed', missing: 'Not downloaded', nofiles: 'Weights not found',
 }
 /** What the saved settings say, in one line: the starting text for a note, so it can't disagree with the config. */
 export const describeModel = (r: ModelRow) =>
@@ -67,7 +69,7 @@ export const stateText = (e: Entry) => {
 /** When it started, for the hover on that text. */
 export const stateTitle = (e: Entry) => (e.state === 'running' && startedOf(e) ? `Running since ${fmtDateTime(startedOf(e)!, 'medium')}` : undefined)
 
-export const STATE_TONE: Record<string, string> = { running: 'ok', starting: 'pending', down: 'bad', exited: 'bad', restarting: 'bad', failed: 'bad', nofiles: 'bad', downloading: 'pending', paused: 'pending', preparing: 'pending' }
+export const STATE_TONE: Record<string, string> = { running: 'ok', starting: 'pending', down: 'bad', exited: 'bad', restarting: 'bad', 'stop-incomplete': 'bad', failed: 'bad', nofiles: 'bad', downloading: 'pending', paused: 'pending', preparing: 'pending' }
 
 /** Every model DGX-kit knows about or can see running, with its live numbers and GPU memory. */
 export function useFleet(latest: Snapshot | null) {

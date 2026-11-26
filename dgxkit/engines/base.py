@@ -50,13 +50,17 @@ class PromAdapter:
 
     async def health(self) -> bool:
         try:
-            return (await self.client.get(self.base_url + self.health_path)).status_code == 200
+            response = await self.client.get(self.base_url + self.health_path)
+            if response.status_code in (404, 405):
+                response = await self.client.get(self.base_url + "/v1/models")
+            return response.status_code == 200
         except httpx.HTTPError:
             return False
 
     async def scrape(self) -> dict:
-        text = (await self.client.get(self.base_url + self.metrics_path)).text
-        return self.compute(P.parse(text), time.monotonic())
+        response = await self.client.get(self.base_url + self.metrics_path)
+        response.raise_for_status()
+        return self.compute(P.parse(response.text), time.monotonic())
 
     def _gauge(self, m: dict, key: str) -> float | None:
         return P.total(m, *self.GAUGES.get(key, ()))

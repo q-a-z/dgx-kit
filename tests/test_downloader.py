@@ -48,3 +48,31 @@ def test_pause_keeps_the_job_and_resume_restarts_it(tmp_path):
     job.state = "paused"
     d.cancel("org/m")
     assert job.state == "cancelled"
+
+
+def test_download_requests_cannot_replace_an_active_job_at_the_same_destination(tmp_path, monkeypatch):
+    import asyncio
+    import pytest
+    from dgxkit.downloader import Downloader, MARKER
+
+    monkeypatch.setattr("dgxkit.downloader.fits_on_disk", lambda *args: True)
+    d = Downloader(str(tmp_path))
+    runs = []
+
+    async def run(job):
+        runs.append(job)
+
+    monkeypatch.setattr(d, "_run", run)
+
+    async def go():
+        dest = str(tmp_path / "shared")
+        job = await d.start("org/main", 100, revision="abc", local_dir=dest)
+        assert await d.start("org/main", 100, revision="abc", local_dir=dest) is job
+        with pytest.raises(RuntimeError, match="already using"):
+            await d.start("org/other", 100, local_dir=dest)
+        with pytest.raises(RuntimeError, match="already using"):
+            await d.start("org/main", 100, revision="def", local_dir=dest)
+        await job.task
+        assert runs == [job] and (job.dest / MARKER).exists()
+
+    asyncio.run(go())

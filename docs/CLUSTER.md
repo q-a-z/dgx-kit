@@ -5,14 +5,14 @@ the Spark that runs DGX-kit and serves the API, so the LiteLLM gateway publishes
 runs a headless worker container that DGX-kit starts over SSH.
 
 **DGX-kit builds the commands and checks the requirements below. Setting them up is yours:** the fiber link, the SSH key,
-and having the same image and weights on every node. Status: unit-tested only, not yet run on two real Sparks.
+and having the same image and weights on every node. Checkpoint reads have been verified on a two-Spark NFS setup.
 
 ## Requirements
 
 1. **A fiber (or DAC) link between the two Sparks**, the same physical port on both, with an address on each side (below).
 2. **SSH key login from the DGX-kit container to each worker**, with the worker's host key already in `known_hosts`.
-   The container needs your key: add `-v /home/q/.ssh:/root/.ssh:ro` to the service's `docker run` (adjust for the user
-   the container runs as), then `ssh-keyscan <worker> >> ~/.ssh/known_hosts`. The worker's SSH user must be allowed to use Docker.
+   DGX-kit uses the keys and known-host entries under `DGXKIT_HOME/.ssh`, visible through the service's read-only
+   home mount. The worker's SSH user must be allowed to use Docker.
 3. **The same vLLM image on every node** (`docker image inspect` finds it on each).
 4. **The same model folder at the same path on every node** (DGX-kit does not copy weights).
 5. **An image built with this version**: the Dockerfile now installs `openssh-client` and `iproute2`, so rebuild and restart dgx-kit.
@@ -65,9 +65,14 @@ every container `/dev/infiniband`. The sizing plan divides the weights by the nu
 
     curl -b "dgxkit_session=..." http://<spark>:3000/api/models/<name>/cluster
 
-answers with JSON; its `text` field lists every requirement as `[ok]`, `[FAIL]` or `[warn]` with the fix. A start runs the same check and refuses on a
-`FAIL`, so a half-started cluster never waits for a node that can't join. Warnings (MTU below 9000, a slow link, no RDMA)
-still run, but NCCL may fall back to TCP, which is far slower.
+The JSON response lists each check and its result. Before a vLLM start, DGX-kit checks available memory on each worker
+and opens checkpoint and draft files from a disposable container using the selected image and launch user.
+The probe uses read-only model mounts and no GPU. A failed check blocks the launch. MTU, link-speed, and RDMA
+warnings can still allow a start, and NCCL may fall back to TCP.
+
+Stop cancels a launch that's still in preflight. If a rank cannot be stopped, the dashboard shows **Stop incomplete**
+with the affected host and lets you retry. The Logs tab includes worker log tails so a startup error on a worker
+can be traced from the head.
 
 ## Limits
 

@@ -68,6 +68,7 @@ export function ModelPanel({ entry, tab, setTab, latest, history, readonly, layo
         {!entry.managed && <span>started outside DGX-kit</span>}
       </div>
       {r?.notes && <p className="model-notes">{r.notes}</p>}
+      {!!r?.stop_problems?.length && <p className="advice bad" role="status">{r.stop_problems.join('; ')}</p>}
       {alert && (
         <p className={`advice ${alert.level}`}>
           <span aria-hidden>{alert.level === 'bad' ? '● ' : '▲ '}</span>{alert.text}{alert.advice && <> <span className="muted">{alert.advice}</span></>}

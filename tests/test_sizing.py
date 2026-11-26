@@ -10,6 +10,33 @@ def test_kv_bytes_dense():
     assert kv_bytes_per_token(LLAMA_8B, "fp8") == 65536
 
 
+def test_tp2_guard_cache_limits_hold_four_full_contexts():
+    for layers, cap_gib, dtype in [(40, 10.5, "auto"), (36, 9.5, "auto"),
+                                   (40, 5.25, "fp8"), (36, 4.75, "fp8")]:
+        cfg = {"num_hidden_layers": layers, "num_attention_heads": 32,
+               "num_key_value_heads": 8, "head_dim": 128, "hidden_size": 4096,
+               "max_position_embeddings": 131072}
+        cap = int(cap_gib * GIB)
+        p = plan(cfg, 2 * GIB, 40 * GIB, max_context=32768, min_context=32768,
+                 min_concurrency=4, kv_cache_bytes=cap, tensor_parallel_size=2, kv_dtype=dtype)
+        assert p.fits, p.reason
+        assert p.context_tokens == 32768 and p.concurrency >= 4
+        assert p.kv_bytes == cap
+
+
+def test_kv_heads_are_replicated_when_tp_exceeds_kv_heads():
+    cfg = {**LLAMA_8B, "num_key_value_heads": 1}
+    assert kv_bytes_per_token(cfg, tensor_parallel_size=2) == kv_bytes_per_token(cfg)
+
+
+def test_tensor_parallel_cache_sizing_does_not_change_model_config():
+    import copy
+    cfg = {"text_config": copy.deepcopy(LLAMA_8B)}
+    before = copy.deepcopy(cfg)
+    assert kv_bytes_per_token(cfg, tensor_parallel_size=2) == kv_bytes_per_token(cfg) // 2
+    assert cfg == before
+
+
 def test_hybrid_counts_only_attention_layers():
     nemotron_like = {"num_hidden_layers": 6, "hybrid_override_pattern": "M-M*-*",
                      "num_attention_heads": 8, "num_key_value_heads": 2, "head_dim": 128}
@@ -43,12 +70,28 @@ def test_plan_reports_when_weights_do_not_fit():
 def test_fixed_kv_cache_is_kept_and_vllm_gets_a_share_that_fits():
     """ornith from llmctl: 8 GB KV fixed. vLLM's 0.92 default crashed it beside another model."""
     from dgxkit.sizing import GIB, plan
-    cfg = {"num_hidden_layers": 40, "num_key_value_heads": 2, "head_dim": 256, "max_position_embeddings": 262144}
+    cfg = {"num_hidden_layers": 40, "full_attention_interval": 4, "num_key_value_heads": 2,
+           "head_dim": 256, "max_position_embeddings": 262144}
     p = plan(cfg, 20 * GIB, 80 * GIB, kv_dtype="fp8", max_context=262144, kv_cache_bytes=8_000_000_000, total_bytes=121 * GIB)
     assert p.fits and p.kv_bytes == 8_000_000_000 and p.context_tokens <= 262144
     assert 0.2 < p.gpu_fraction < 0.35
     q = plan(cfg, 20 * GIB, 80 * GIB, kv_dtype="fp8", total_bytes=121 * GIB)
     assert q.gpu_fraction <= 0.92 and not plan(cfg, 20 * GIB, 30 * GIB, kv_cache_bytes=40 * GIB).fits
+
+
+def test_fixed_kv_cache_must_hold_one_requested_context():
+    cfg = {"num_hidden_layers": 2, "num_attention_heads": 2, "num_key_value_heads": 2, "head_dim": 128,
+           "max_position_embeddings": 8192}
+    p = plan(cfg, 1 * GIB, 20 * GIB, kv_dtype="fp8", max_context=8192, kv_cache_bytes=1_000_000)
+    assert not p.fits and "one requested context" in p.reason
+
+
+def test_fixed_kv_cache_must_meet_minimum_concurrency():
+    cfg = {"num_hidden_layers": 2, "num_attention_heads": 2, "num_key_value_heads": 2, "head_dim": 128,
+           "max_position_embeddings": 8192}
+    p = plan(cfg, 1 * GIB, 20 * GIB, kv_dtype="fp8", max_context=1024, min_concurrency=4,
+             kv_cache_bytes=2_000_000)
+    assert not p.fits and "concurrent contexts" in p.reason
 
 
 def test_nemotron_h_counts_attention_from_layers_block_type():

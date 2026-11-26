@@ -79,11 +79,15 @@ def test_proxy_forwards_by_model_name_and_streams_the_answer():
 
 
 def test_queue_mode_points_litellm_at_the_proxy(env, monkeypatch):
+    from dgxkit.api_models import sync_gateway
+
     client, s, models = env
     monkeypatch.setattr(turns, "QUEUE_PORT", 0)  # any free port
     client.post("/api/models", json={"name": "llama", "repo": "org/Llama-8B", "config": __import__("tests.test_api", fromlist=["CFG"]).CFG, "weights_bytes": 16 * 2**30})
     (models / "org--Llama-8B").mkdir()
     client.post("/api/models/llama/start")
+    s.sampler.latest["models"]["llama"] = {"port": 8100, "up": True}
+    client.portal.call(sync_gateway, s)
     assert s.gateway.synced[-1] == {"llama": 8100}
     r = client.put("/api/settings/slots", json={"enabled": True, "mode": "queue"}).json()
     assert r["mode"] == "queue" and r["active"] and r["queue_port"] == 0 and r["backend"] is None

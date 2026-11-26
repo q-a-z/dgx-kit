@@ -92,6 +92,8 @@ export type ModelRow = Recipe & {
   container: { state: string; port: number; exit_code?: number | null; stopped_cleanly?: boolean; /** Epoch seconds the container last started. */ started?: number | null } | null
   live: Live | null
   downloaded: boolean
+  stop_problems?: string[]
+  starting?: boolean
   /** Waiting for its image to be pulled or built; it starts by itself afterwards. */
   preparing?: { image: string; kind?: string; state?: string; error?: string | null; tail?: string[]; progress?: number | null } | null
 }
@@ -100,9 +102,11 @@ export type Plan = { context_tokens: number; kv_pool_tokens: number; kv_bytes: n
 
 export class ApiError extends Error {
   problems: string[]
-  constructor(message: string, problems: string[] = []) {
+  force: boolean
+  constructor(message: string, problems: string[] = [], force = false) {
     super(message)
     this.problems = problems
+    this.force = force
   }
 }
 
@@ -118,7 +122,7 @@ export async function api<T>(path: string, init?: RequestInit & { json?: unknown
   if (!res.ok) {
     const detail = body?.detail
     const problems: string[] = detail?.problems ?? []
-    throw new ApiError(problems[0] ?? (typeof detail === 'string' ? detail : `${res.status} ${res.statusText}`), problems)
+    throw new ApiError(problems.join('; ') || (typeof detail === 'string' ? detail : `${res.status} ${res.statusText}`), problems, detail?.force === '?force=1')
   }
   return body as T
 }

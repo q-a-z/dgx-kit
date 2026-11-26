@@ -24,6 +24,7 @@ class Sampler:
         self._subscribers: set[asyncio.Queue] = set()
         self._tasks: list[asyncio.Task] = []
         self._engine_tasks: dict[str, asyncio.Task] = {}
+        self._first_samples: dict[str, asyncio.Event] = {}
         self.slots: dict[str, str] = {}  # set by the slot scheduler: model -> running | waiting
 
     def subscribe(self) -> asyncio.Queue:
@@ -49,7 +50,8 @@ class Sampler:
             self._publish()
             await asyncio.sleep(self.interval)
 
-    async def _engine_loop(self, name: str, adapter):
+    async def _engine_loop(self, name: str, adapter, check_health: bool = False):
+        first_sample = self._first_samples.get(name)
         while True:
             if self.slots.get(name) == "waiting":  # frozen for another model's slot: can't answer, and isn't down
                 prev = self.latest["models"].get(name, {})
@@ -58,6 +60,8 @@ class Sampler:
                 continue
             try:
                 stats = await adapter.scrape()
+                if check_health and not await adapter.health():
+                    raise RuntimeError("engine health check failed")
                 first = not self.latest["models"].get(name, {}).get("was_up")
                 self.latest["models"][name] = {"up": True, "was_up": True, **adapter.static, **stats, "slot": self.slots.get(name)}
                 if first and self.on_up:
@@ -67,10 +71,12 @@ class Sampler:
                     continue
                 prev = self.latest["models"].get(name, {})
                 self.latest["models"][name] = {**prev, "up": False, "error": type(e).__name__}
+            if first_sample is not None:
+                first_sample.set()
             await asyncio.sleep(self.interval)
 
     def _publish(self):
-        snap = {"t": time.time(), **self.latest}
+        snap = {"t": time.time(), **self.latest, "models": self.latest["models"].copy()}
         self.history.append(snap)
         for q in list(self._subscribers):
             if q.full():  # slow browser: drop its oldest frame rather than block
@@ -82,17 +88,28 @@ class Sampler:
         for name, adapter in self.engines.items():
             self._engine_tasks[name] = asyncio.create_task(self._engine_loop(name, adapter))
 
-    def add_engine(self, name: str, adapter) -> None:
+    def add_engine(self, name: str, adapter, *, check_health: bool = False) -> None:
         self.remove_engine(name)
         self.engines[name] = adapter
-        self._engine_tasks[name] = asyncio.create_task(self._engine_loop(name, adapter))
+        if check_health:
+            self._first_samples[name] = asyncio.Event()
+        self._engine_tasks[name] = asyncio.create_task(self._engine_loop(name, adapter, check_health))
 
     def remove_engine(self, name: str) -> None:
         task = self._engine_tasks.pop(name, None)
         if task:
             task.cancel()
+        if first := self._first_samples.pop(name, None):
+            first.set()
         self.engines.pop(name, None)
         self.latest["models"].pop(name, None)
+
+    async def wait_for_first_samples(self, names: list[str]) -> None:
+        try:
+            async with asyncio.timeout(5):
+                await asyncio.gather(*(self._first_samples[n].wait() for n in names if n in self._first_samples))
+        except TimeoutError:
+            pass
 
     async def stop(self):
         tasks = self._tasks + list(self._engine_tasks.values())

@@ -19,7 +19,7 @@ from . import cluster, quickcheck
 from .benchmarks import TESTS as _ALL
 from .options import apply_text, to_text
 from .paths import expand_home
-from .control import check_start, engine_command, gguf_path, model_dir, pick_port, weights_path
+from .control import DockerRunner, check_start, engine_command, gguf_path, model_dir, pick_port, weights_path
 from .engines import adapter_for
 from .recipes import Recipe, inspect_repo
 from .store import NAME
@@ -82,21 +82,32 @@ def plan_for(s, r: Recipe, extra_free: int = 0):
     return plan(r.config, (r.weights_bytes + r.draft_weights_bytes) // cluster.size(r), available_bytes(s) + max(0, extra_free),
                 kv_dtype=r.kv_cache_dtype, max_context=max_context, min_context=r.min_context,
                 min_concurrency=r.min_concurrency, kv_cache_bytes=r.kv_cache_bytes, total_bytes=total_bytes(s),
-                cap_pool=not r.fill_memory)
+                cap_pool=not r.fill_memory, tensor_parallel_size=cluster.size(r),
+                reserve_bytes=r.memory_reserve_bytes if r.memory_reserve_bytes is not None else 8 * 2**30)
 
 
-def stop_model(s, name: str) -> None:
+def plan_memory_required(r: Recipe, p) -> int:
+    reserve = r.memory_reserve_bytes if r.memory_reserve_bytes is not None else 8 * 2**30
+    return p.total_bytes + reserve if p.fits else 0
+
+
+def stop_model(s, name: str) -> list[str]:
     """Stop a model's container, and its workers on the other nodes when it is a cluster."""
-    s.runner.stop(name)
+    failures = []
+    try:
+        s.runner.stop(name)
+    except Exception as e:
+        failures.append(f"head: {e}")
     try:
         r = s.store.get(name)
     except (FileNotFoundError, ValueError):
-        return
+        return failures
     if cluster.is_cluster(r):
         try:
             s.runner.stop_workers(r)
-        except Exception as e:  # a node that is down must not keep the head from stopping
-            s.log("stop", f"{name}: couldn't stop every worker: {e}"[:300])
+        except Exception as e:
+            failures.append(f"workers: {e}")
+    return failures
 
 
 def _exists(s, name: str) -> bool:
@@ -117,7 +128,7 @@ def watch(s, name: str, engine: str, port: int, meta: dict) -> None:
     """Feed a running model's live stats into the sampler."""
     adapter = make_adapter(s, engine, port)
     adapter.static = dict(meta)
-    s.sampler.add_engine(name, adapter)
+    s.sampler.add_engine(name, adapter, check_health=True)
 
 
 async def quick_after_up(s, name: str) -> None:
@@ -151,11 +162,14 @@ async def reattach(s) -> list[str]:
     return names
 
 
-def published(s) -> dict[str, int]:
-    """Running models that are marked to publish, by name, with their engine port."""
+def published(s, running: dict) -> dict[str, int]:
+    """Ready models that are marked to publish, by name, with their engine port."""
     out = {}
-    for name, c in s.runner.status().items():
-        if c["state"] != "running":
+    for name, c in running.items():
+        live = s.sampler.latest["models"].get(name) or {}
+        # Admit a container after its first successful health check. A missed sample
+        # must not restart LiteLLM and interrupt requests to every other model.
+        if c["state"] != "running" or live.get("port") != c["port"] or not (live.get("up") or live.get("was_up")):
             continue
         try:
             if s.store.get(name).publish:
@@ -176,8 +190,37 @@ def lan_ip() -> str:
         return "127.0.0.1"
 
 
-async def sync_gateway(s) -> None:
-    """Publish running models: through the configured gateway's API if an address is set, else DGX-kit's own LiteLLM."""
+async def sync_gateway(s, *, reconcile: bool = False) -> None:
+    """Serialize gateway changes and periodically reconcile ready or exited engines."""
+    if os.environ.get("DGXKIT_READONLY") == "1":
+        return
+    async with s.gateway_lock:
+        try:
+            options = {"strict": True} if isinstance(s.runner, DockerRunner) else {}
+            status = await asyncio.to_thread(s.runner.status, **options)
+        except Exception as e:
+            s.log("gateway", f"keeping current routes: could not inspect model containers ({type(e).__name__})")
+            return
+        pub = published(s, status)
+        qp = queue_port(s)
+        if qp is not None:
+            pub = dict.fromkeys(pub, qp)
+        if reconcile and s.gateway_applied == pub and not s.gateway.problem:
+            return
+        await _sync_gateway(s, pub)
+        s.gateway_applied = pub if not s.gateway.problem else None
+
+
+async def watch_gateway(s) -> None:
+    while True:
+        await asyncio.sleep(5)
+        try:
+            await sync_gateway(s, reconcile=True)
+        except Exception as e:
+            s.log("gateway", f"reconcile failed: {str(e)[:200]}")
+
+
+async def _sync_gateway(s, pub: dict[str, int]) -> None:
     st = getattr(s, "settings", None)
     url = st.gateway_url if st else None
     host = None
@@ -193,19 +236,17 @@ async def sync_gateway(s) -> None:
                 return
             url = f"http://127.0.0.1:{found.get('port') or 4000}/v1"
             host = lan_ip()
-    pub = published(s)
-    qp = queue_port(s)
-    if qp is not None:  # queue mode: LiteLLM sends every model to the queue proxy, which forwards by name
-        pub = {n: qp for n in pub}
     if url:
         from urllib.parse import urlparse
         from .gateway import sync_remote
-        s.gateway.published = dict(pub)
         s.gateway.problem = s.gateway.remote_problem = await asyncio.to_thread(sync_remote, url, gateway_key(s), pub, host or urlparse(url).hostname or "127.0.0.1")
+        if not s.gateway.problem:
+            s.gateway.published = dict(pub)
         return
     await asyncio.to_thread(s.gateway.sync, pub)
-    if s.gateway.problem and "isn't pulled" in s.gateway.problem:
-        asyncio.create_task(_pull_gateway_image(s))
+    if s.gateway.problem and "isn't pulled" in s.gateway.problem and (
+            s.gateway_pull is None or s.gateway_pull.done()):
+        s.gateway_pull = asyncio.create_task(_pull_gateway_image(s))
 
 
 async def _pull_gateway_image(s) -> None:
@@ -279,6 +320,8 @@ async def list_models(request: Request):
                                               or await asyncio.to_thread(shut_down_cleanly, s, r.name, c.get("id"))):
             d["container"] = {**c, "stopped_cleanly": True}
         d["live"] = live.get(r.name)
+        d["stop_problems"] = s.stop_failures.get(r.name, [])
+        d["starting"] = r.name in s.starting and not s.starting[r.name].is_set()
         img = s.preparing.get(r.name)  # waiting for its image to be pulled or built, then it starts by itself
         d["preparing"] = {"image": img, **(s.images.image_status(img)["job"] or {})} if img else None
         d["downloaded"] = Path(weights_path(r, s.models_root)).exists()
@@ -308,7 +351,8 @@ async def edit_model(name: str, body: dict, request: Request):
         raise HTTPException(404)
     # The page never receives the model's config, so what it sends back mustn't erase it.
     old = s.store.get(name)
-    r = recipe_from({"config": old.config, "cluster": old.cluster, **body, "name": name})
+    r = recipe_from({"config": old.config, "cluster": old.cluster,
+                     "memory_reserve_bytes": old.memory_reserve_bytes, **body, "name": name})
     if body.get("options") is not None and r.engine == "vllm":
         try:
             r = apply_text(r, body["options"])
@@ -342,8 +386,8 @@ async def rename_model(name: str, body: RenameBody, request: Request):
     c = (await asyncio.to_thread(s.runner.status)).get(name)
     if (c and c["state"] in ("running", "restarting", "created")) or name in s.sampler.engines:
         raise HTTPException(409, "stop it first: a running model keeps the name it started with")
-    if name in s.preparing:
-        raise HTTPException(409, "it is waiting for its image; wait for that to finish, or stop it first")
+    if name in s.starting or name in s.stopping or name in s.stop_failures:
+        raise HTTPException(409, "finish starting or stopping this model before renaming it")
     if any(r["model"] == name and r["state"] == "running" for r in await asyncio.to_thread(s.bench.list)):
         raise HTTPException(409, "a benchmark of it is still running")
     if c:  # a stopped container that still carries the old name: clear it
@@ -416,7 +460,7 @@ def image_to_use(s, r: Recipe) -> str:
     return image
 
 
-async def _start_model(s, name: str) -> dict:
+async def _start_model(s, name: str, cancelled: asyncio.Event) -> dict:
     r = s.store.get(name)
     r.image = image_to_use(s, r)
     p = plan_for(s, r)
@@ -424,26 +468,35 @@ async def _start_model(s, name: str) -> dict:
     if not check.ok:
         raise HTTPException(409, {"problems": check.problems})
     if cluster.is_cluster(r):  # a half-started cluster hangs, so every node is checked first
-        bad = cluster.problems(await asyncio.to_thread(cluster.check, r, s.models_root))
+        bad = cluster.problems(await asyncio.to_thread(cluster.check, r, s.models_root,
+                                                       required_bytes=plan_memory_required(r, p)))
         if bad:
             raise HTTPException(409, {"problems": bad})
-    port = pick_port(s.runner.ports_in_use())
-    cmd = engine_command(r, p, port, s.models_root)
-    meta = {"context_tokens": p.context_tokens, "kv_pool_tokens": p.kv_pool_tokens,
-            "max_concurrency": p.concurrency, "port": port}
-    s.runner.start(r, cmd, port, s.models_root, meta)
-    watch(s, name, r.engine, port, meta)
-    s.quick_pending.add(name)  # the speed check runs once it answers
-    s.log("start", f"{name} on port {port}")
+    async with s.launch_lock:
+        if cancelled.is_set():
+            raise HTTPException(409, {"problems": ["start cancelled by Stop"]})
+        current = (await asyncio.to_thread(s.runner.status)).get(name) or {}
+        if current.get("state") in ("running", "restarting", "created"):
+            raise HTTPException(409, {"problems": ["model is already active; stop it first"]})
+        port = pick_port(await asyncio.to_thread(s.runner.ports_in_use))
+        cmd = engine_command(r, p, port, s.models_root)
+        meta = {"context_tokens": p.context_tokens, "kv_pool_tokens": p.kv_pool_tokens,
+                "max_concurrency": p.concurrency, "port": port}
+        if cancelled.is_set():
+            raise HTTPException(409, {"problems": ["start cancelled by Stop"]})
+        await asyncio.to_thread(s.runner.start, r, cmd, port, s.models_root, meta)
+        watch(s, name, r.engine, port, meta)
+        s.quick_pending.add(name)
+        s.log("start", f"{name} on port {port}")
     await sync_gateway(s)
     return {"port": port, "plan": asdict(p), "command": cmd}
 
 
-async def _start_when_image_is_ready(s, name: str, image: str) -> None:
+async def _start_when_image_is_ready(s, name: str, image: str, cancelled: asyncio.Event) -> None:
     """Follow the pull (or build) of a missing image, then start the model; a stop in the meantime cancels the start."""
     try:
         for _ in range(3600):  # two hours
-            if s.preparing.get(name) != image:
+            if cancelled.is_set():
                 return  # cancelled
             job = (await asyncio.to_thread(s.images.image_status, image))["job"]
             if job and job["state"] == "running":
@@ -453,15 +506,18 @@ async def _start_when_image_is_ready(s, name: str, image: str) -> None:
                 s.log("start", f"{name}: the image {image} couldn't be fetched: {job['error']}"[:300])
                 return
             break
-        if s.preparing.get(name) == image:
-            await _start_model(s, name)
+        else:
+            s.log("start", f"{name}: timed out waiting for {image}")
+            return
+        if not cancelled.is_set():
+            await _start_model(s, name, cancelled)
     except HTTPException as e:
         s.log("start", f"{name}: {e.detail}"[:300])
     except Exception as e:
         s.log("start", f"{name}: {e}"[:300])
     finally:
-        if s.preparing.get(name) == image:
-            s.preparing.pop(name, None)
+        s.preparing.pop(name, None)
+        s.starting.pop(name, None)
 
 
 @router.get("/models/{name}/cluster")
@@ -474,7 +530,12 @@ async def cluster_check(name: str, request: Request):
     if not cluster.is_cluster(r):
         raise HTTPException(422, "this model has no cluster settings")
     r.image = image_to_use(s, r)
-    return cluster.report(await asyncio.to_thread(cluster.check, r, s.models_root))
+    p = plan_for(s, r)
+    checks = await asyncio.to_thread(cluster.check, r, s.models_root,
+                                     required_bytes=plan_memory_required(r, p))
+    if not p.fits:
+        checks.append(cluster.Check("head: model fits", False, p.reason))
+    return cluster.report(checks)
 
 
 @router.post("/models/{name}/start")
@@ -484,21 +545,36 @@ async def start(name: str, request: Request):
     s = svc(request)
     if not _exists(s, name):
         raise HTTPException(404)
+    if name in s.stopping or name in s.stop_failures:
+        raise HTTPException(409, {"problems": ["finish stopping this model before starting it"]})
+    if name in s.preparing:
+        image = s.preparing[name]
+        job = (await asyncio.to_thread(s.images.image_status, image))["job"]
+        return JSONResponse(status_code=202, content={"preparing": {"image": image, **(job or {})}})
+    if name in s.starting:
+        raise HTTPException(409, {"problems": ["model is already starting"]})
     r = s.store.get(name)
     image = image_to_use(s, r)
-    if not s.images.is_ready(image) and name not in s.preparing:
+    cancelled = s.starting[name] = asyncio.Event()
+    background = False
+    try:
+        if s.images.is_ready(image):
+            return await _start_model(s, name, cancelled)
         plan_for(s, r)  # a model that can't be sized is refused before anything is downloaded
         status = await asyncio.to_thread(s.images.image_status, image)
+        if cancelled.is_set():
+            raise HTTPException(409, {"problems": ["start cancelled by Stop"]})
         if not (status["job"] and status["job"]["state"] == "running"):
             build = s.images.build_for(image)
             job = s.images.start_build(build) if build else s.images.start_pull_image(image)
             s.log("pull" if not build else "build", f"{image} for {name}")
         s.preparing[name] = image
-        asyncio.create_task(_start_when_image_is_ready(s, name, image))
-        return JSONResponse(status_code=202, content={"preparing": {"image": image, **((await asyncio.to_thread(s.images.image_status, image))["job"] or {})}})
-    if name in s.preparing:
-        return JSONResponse(status_code=202, content={"preparing": {"image": s.preparing[name], **((await asyncio.to_thread(s.images.image_status, s.preparing[name]))["job"] or {})}})
-    return await _start_model(s, name)
+        asyncio.create_task(_start_when_image_is_ready(s, name, image, cancelled))
+        background = True
+        return JSONResponse(status_code=202, content={"preparing": {"image": image, **(status["job"] or {})}})
+    finally:
+        if not background:
+            s.starting.pop(name, None)
 
 
 TEST_ORDER = _ALL.split(",")
@@ -654,31 +730,76 @@ async def stop(name: str, request: Request):
     busy = (live.get("running") or 0) + (live.get("waiting") or 0)
     if busy and request.query_params.get("force") != "1":
         raise HTTPException(409, {"problems": [f"{int(busy)} requests running or waiting"], "force": "?force=1"})
-    s.preparing.pop(name, None)  # stopping also cancels a start that was waiting for its image
-    before = (await asyncio.to_thread(s.runner.status)).get(name)
-    await asyncio.to_thread(stop_model, s, name)
-    if before and before.get("id"):
-        remember_stop(s, name, before["id"])
-    s.sampler.remove_engine(name)
-    s.log("stop", name)
-    await sync_gateway(s)
-    return {"stopped": True}
+    if name in s.stopping:
+        raise HTTPException(409, {"problems": ["model is already stopping"]})
+    s.stopping.add(name)
+    if pending := s.starting.get(name):
+        pending.set()
+    s.preparing.pop(name, None)
+    try:
+        async with s.launch_lock:
+            before = (await asyncio.to_thread(s.runner.status)).get(name)
+            failures = await asyncio.to_thread(stop_model, s, name)
+            after = (await asyncio.to_thread(s.runner.status)).get(name) if failures else None
+        if not after or after["state"] not in ("running", "restarting", "created"):
+            if before and before.get("id"):
+                remember_stop(s, name, before["id"])
+            s.quick_pending.discard(name)
+            s.sampler.remove_engine(name)
+        if failures:
+            s.stop_failures[name] = failures
+            s.log("stop incomplete", f"{name}: {', '.join(failures)}"[:300])
+        else:
+            s.stop_failures.pop(name, None)
+            s.log("stop", name)
+        await sync_gateway(s)
+        if failures:
+            raise HTTPException(503, {"stopped": False, "problems": failures})
+        return {"stopped": True}
+    finally:
+        s.stopping.discard(name)
 
 
 @router.get("/models/{name}/logs")
 async def logs(name: str, request: Request, tail: int = 200):
-    return {"logs": svc(request).runner.logs(name, tail=min(tail, 5000))}
+    s = svc(request)
+    tail = min(tail, 5000)
+    head = await asyncio.to_thread(s.runner.logs, name, tail)
+    ranks = await cluster_logs(s, name, tail)
+    return {"logs": head + "".join(f"\n--- {rank} ---\n{log}" for rank, log in ranks.items())}
+
+
+async def cluster_logs(s, name: str, tail: int) -> dict[str, str]:
+    if not _exists(s, name):
+        return {}
+    r = s.store.get(name)
+    if cluster.is_cluster(r) and hasattr(s.runner, "worker_logs"):
+        return await asyncio.to_thread(s.runner.worker_logs, r, tail)
+    return {}
+
+
+async def diagnose_model(s, name: str) -> dict | None:
+    from .diagnose import diagnose
+    r = s.store.get(name)
+    head = diagnose(await asyncio.to_thread(s.runner.logs, name, 800), r)
+    workers = await cluster_logs(s, name, 800)
+    findings = [(rank, diagnose(log, r)) for rank, log in workers.items()]
+    primary = next(((rank, d) for rank, d in findings if d and d["cause"] == "checkpoint_permission"), None)
+    if primary is None and (not head or head["cause"] == "unknown"):
+        primary = next(((rank, d) for rank, d in findings if d and d["cause"] != "unknown"), None)
+    if primary:
+        rank, diagnosis = primary
+        return {**diagnosis, "detail": f"{rank}: {diagnosis['detail']}"}
+    return head
 
 
 @router.get("/models/{name}/diagnosis")
 async def model_diagnosis(name: str, request: Request):
     """Why a model that isn't running stopped, from the end of its log, with fixes where one is known."""
-    from .diagnose import diagnose
     s = svc(request)
     if not _exists(s, name):
         raise HTTPException(404)
-    log = await asyncio.to_thread(s.runner.logs, name, 800)
-    d = diagnose(log, s.store.get(name)) if log else None
+    d = await diagnose_model(s, name)
     return {"found": d is not None, **(d or {})}
 
 
@@ -689,12 +810,12 @@ class FixBody(BaseModel):
 @router.post("/models/{name}/diagnosis/fix")
 async def apply_model_fix(name: str, body: FixBody, request: Request):
     """Apply one of the fixes the diagnosis offered, as a new version of the model's settings."""
-    from .diagnose import apply_fix, diagnose
+    from .diagnose import apply_fix
     s = svc(request)
     if not _exists(s, name):
         raise HTTPException(404)
     r = s.store.get(name)
-    d = diagnose(await asyncio.to_thread(s.runner.logs, name, 800), r)
+    d = await diagnose_model(s, name)
     if not d or not (0 <= body.index < len(d["fixes"])):
         raise HTTPException(404, "that fix isn't on offer any more")
     fix = d["fixes"][body.index]
@@ -709,8 +830,10 @@ async def delete(name: str, request: Request):
     s = svc(request)
     if not _exists(s, name):
         raise HTTPException(404)
-    if name in s.runner.status():
-        await asyncio.to_thread(stop_model, s, name)
+    if name in s.starting or name in s.stopping:
+        raise HTTPException(409, {"problems": ["finish starting or stopping this model before deleting its recipe"]})
+    if name in s.runner.status() or name in s.stop_failures or cluster.is_cluster(s.store.get(name)):
+        await stop(name, request)
         s.sampler.remove_engine(name)
     s.store.delete(name)
     s.log("delete", name)

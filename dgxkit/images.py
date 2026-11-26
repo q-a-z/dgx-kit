@@ -27,6 +27,7 @@ DEFAULTS = {
     "atlas": os.environ.get("DGXKIT_IMAGE_ATLAS", "avarok/atlas-gb10:latest"),
     # NVIDIA's TensorRT-LLM release container (arm64, with Blackwell kernels); serves with `trtllm-serve`.
     "trtllm": os.environ.get("DGXKIT_IMAGE_TRTLLM", "nvcr.io/nvidia/tensorrt-llm/release:1.2.1"),
+    "velogb10": os.environ.get("DGXKIT_IMAGE_VELOGB10", "dgx-kit/velogb10:0.8.0"),
     "litellm": os.environ.get("DGXKIT_IMAGE_LITELLM", "ghcr.io/berriai/litellm:main-stable"),
 }
 CATALOG = DEFAULTS  # kept for callers that only need the default names
@@ -64,6 +65,9 @@ BUILDS: dict[str, dict] = {
     # Lev and Bekko (dgxkit/lev.py, dgxkit/bekko.py) share one image: the extras they need on top of the same vLLM image.
     "decision-gb10": {"engine": "decision", "dir": "decision", "tag": "dgx-kit/decision:gb10", "args": {"BASE": DEFAULTS["vllm"], "REV": _revision("decision")},
                       "about": "Lev and Bekko, decision model servers, for the GB10"},
+    "velogb10-0.8.0": {"engine": "velogb10", "dir": "velogb10", "tag": "dgx-kit/velogb10:0.8.0",
+                       "args": {"VERSION": "v0.8.0"},
+                       "about": "veloGB10 v0.8.0 release binary with embedded kernels (ARM64 GB10)"},
 }
 
 

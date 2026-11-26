@@ -22,3 +22,16 @@ def test_draft_methods():
     assert detect_draft_method({"architectures": ["LlamaForCausalLMEagle3"]}) == "eagle3"
     assert detect_draft_method({"architectures": ["DFlashDraftModel"]}) == "dflash"
     assert detect_draft_method({"architectures": ["LlamaForCausalLM"]}) == "draft_model"
+
+
+def test_recipe_history_keeps_every_save_in_the_same_second(tmp_path, monkeypatch):
+    from dgxkit.recipes import Recipe
+    from dgxkit.store import ModelStore
+
+    monkeypatch.setattr("dgxkit.store.time.strftime", lambda *_: "20261127-120000")
+    store = ModelStore(str(tmp_path))
+    for i in range(3):
+        store.save(Recipe("demo", "org/demo", title=f"revision {i}"))
+    before = store.versions("demo")
+    assert len(before) == 2
+    assert [store.restore("demo", version).title for version in before] == ["revision 0", "revision 1"]

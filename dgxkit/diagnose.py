@@ -56,6 +56,11 @@ def diagnose(log: str, recipe) -> dict | None:
         return {"cause": "unsupported_architecture", "title": "This engine image doesn't know the model",
                 "detail": f"The engine doesn't support {arch}. It needs a newer or patched image (Settings → Engine images, or this model's own image setting).", "fixes": []}
 
+    m = re.search(r"PermissionError: \[Errno 13\] Permission denied: ['\"]([^'\"]+)['\"]", log)
+    if m and m[1].endswith((".safetensors", ".bin", ".pt", ".pth", ".gguf")):
+        return {"cause": "checkpoint_permission", "title": "The engine user cannot read a checkpoint",
+                "detail": f"Read access was denied to {m[1]}. Check the mount and the engine user's permissions, including NFS root mapping.", "fixes": []}
+
     m = re.search(r"(?:FileNotFoundError|No such file or directory)[^\n]*?['\"]?(/[\w./@+-]+)['\"]?", log)
     if m:
         return {"cause": "file_missing", "title": "A file the model needs isn't there",

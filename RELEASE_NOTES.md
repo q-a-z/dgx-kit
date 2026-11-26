@@ -2,6 +2,18 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.50
+
+### Fixed
+
+- Read-only mode blocks model-folder deletion.
+- Stop cancels a pending start and reports failed ranks so operators can retry. Repeated Start preserves active containers.
+- vLLM cluster preflight checks worker memory and reads checkpoints and drafts in the engine image under the launch identity. Diagnostics include worker logs.
+- LiteLLM retries a failed config reload and reconciles routes as engines come up or exit.
+- Duplicate downloads share one job, and Start refuses an incomplete draft.
+- Failed metrics responses no longer mark an engine up. Model samples and same-second recipe revisions retain their history.
+- Standalone veloGB10 recipes use `q8` for EXL3 and select the engine's supported default for NVFP4.
+
 ## 0.1.49
 
 ### Changed

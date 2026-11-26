@@ -79,10 +79,10 @@ A model is a **recipe**: the engine, the weights, and its options. Fields (all o
 | `GET /api/models/{name}/plan` | The memory plan for the saved recipe: `context_tokens`, `kv_pool_tokens`, `kv_bytes`, `concurrency`, `fits`, `reason`, and `total_bytes` (weights, KV cache and headroom: what the model should take in all). A GGUF model is sized from its file's header |
 | `POST /api/models/{name}/plan?own_bytes=N` | The same for unsaved edits in the body. `own_bytes` is memory the model holds now and would give back on restart |
 | `POST /api/models/{name}/start` | Start it. Answers `{"port", "plan", "command"}`; `409` with `problems` when it can't start (not downloaded, GGUF file missing, not enough memory). When its engine image isn't on the box it answers `202 {"preparing": {image, state, progress, tail}}`: the image is pulled (or built, for a local build with no other option) and the model starts by itself afterwards; the model's row shows `preparing` meanwhile, and `stop` cancels. A local build nobody built is replaced by the engine's own image. The gateway is updated and a ten-second speed check runs once it answers |
-| `POST /api/models/{name}/stop` | Stop it. `409` when requests are running or waiting, unless `?force=1` |
-| `GET /api/models/{name}/diagnosis` | Why a model that isn't running stopped, from the end of its log: `{found, cause, title, detail, fixes: [{label, ...}]}`; `{found: false}` when nothing in the log is recognised |
+| `POST /api/models/{name}/stop` | Stop the head and workers or cancel pending startup. `409` when requests are running or waiting unless `?force=1`. `503` with `detail.stopped: false` and `detail.problems` when any rank could not be stopped |
+| `GET /api/models/{name}/diagnosis` | Report a recognized crash from the head or worker logs. The response contains `{found, cause, title, detail, fixes: [{label, ...}]}`, or `{found: false}` when no cause is recognized |
 | `POST /api/models/{name}/diagnosis/fix` | Body `{"index"}`: apply one of the offered fixes as a new version of the model's settings. `404` when it isn't on offer any more |
-| `GET /api/models/{name}/logs?tail=200` | Container log tail (text) |
+| `GET /api/models/{name}/logs?tail=200` | Combined text containing the head and each worker's log tail |
 | `POST /api/models/{name}/publish` | Body `{"publish": true|false}`: list it on the gateway or not, without restarting it |
 | `POST /api/models/{name}/download` | Download its weights from Hugging Face |
 | `POST /api/recipes/inspect` | Body `{"repo", "draft_repo"?}`: read a repo's config and suggest a recipe |

@@ -51,6 +51,13 @@ class Services:
     actions: deque = field(default_factory=lambda: deque(maxlen=1000))
     updater: object = None  # dgxkit.updater.Updater; tests give a fake
     preparing: dict = field(default_factory=dict)  # model name -> the image it waits for before starting
+    starting: dict[str, asyncio.Event] = field(default_factory=dict)
+    stopping: set[str] = field(default_factory=set)
+    stop_failures: dict[str, list[str]] = field(default_factory=dict)
+    launch_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    gateway_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    gateway_applied: dict[str, int] | None = None
+    gateway_pull: asyncio.Task | None = None
     firmware_probe: object = None  # tests give a fake; normally fwupd is asked through system_info.probe_firmware
     quick_pending: set = field(default_factory=set)  # models DGX-kit just started, waiting for their first answer
     laya: object = None  # the decision model services (dgxkit/laya.py, lev.py, bekko.py), made on first use; tests give fakes
@@ -110,6 +117,7 @@ async def first_run(s: Services) -> None:
         if failed:
             s.log("pull failed", ", ".join(failed))
     try:
+        await s.sampler.wait_for_first_samples(running)
         await sync_gateway(s)
     except Exception as e:  # Docker down at boot; the next start or stop retries
         s.log("gateway", f"not started: {e}")
@@ -179,13 +187,18 @@ def create_app(services: Services | None = None) -> FastAPI:
         from .api_models import apply_slots
         await apply_slots(s)
         setup = asyncio.create_task(first_run(s))
-        from .api_models import watch_external
+        from .api_models import watch_external, watch_gateway
         watcher = asyncio.create_task(watch_external(s))
+        gateway_watch = None if os.environ.get("DGXKIT_READONLY") == "1" else asyncio.create_task(watch_gateway(s))
         fw_watch = asyncio.create_task(firmware_watch(s))
         up_watch = asyncio.create_task(update_watch(s))
         yield
         setup.cancel()
         watcher.cancel()
+        if gateway_watch:
+            gateway_watch.cancel()
+        if s.gateway_pull:
+            s.gateway_pull.cancel()
         fw_watch.cancel()
         up_watch.cancel()
         if s.slots:
@@ -218,6 +231,7 @@ def create_app(services: Services | None = None) -> FastAPI:
         if method == "PUT" and re.fullmatch(r"/api/images/[a-z]+", path):
             return False  # picks which tag DGX-kit uses; nothing on the box changes
         return (path.startswith(("/api/images", "/api/gateway", "/api/downloads", "/api/system/firmware", "/api/system/update", "/api/services"))
+                or path == "/api/library/delete"
                 or re.fullmatch(r"/api/models/[^/]+/(start|stop|download)", path) is not None
                 or (method == "DELETE" and path.startswith("/api/models/")))
 

@@ -20,7 +20,7 @@ export function useModelActions(entry: Entry, readonly: boolean, onChanged: () =
       await api(path, { method, json })
       return true
     } catch (e) {
-      if (retry && e instanceof ApiError && await ask({ title: 'Do it anyway?', body: e.message, label: 'Do it anyway', danger: true })) {
+      if (retry && e instanceof ApiError && e.force && await ask({ title: 'Do it anyway?', body: e.message, label: 'Do it anyway', danger: true })) {
         const ok = await api(`${path}${path.includes('?') ? '&' : '?'}force=1`, { method }).then(() => true, (x: Error) => { setMsg({ text: x.message, bad: true }); return false })
         return ok
       }

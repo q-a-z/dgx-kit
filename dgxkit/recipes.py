@@ -18,7 +18,7 @@ WEIGHT_SUFFIXES = (".safetensors", ".bin", ".gguf")
 class Recipe:
     name: str
     repo: str
-    engine: str = "vllm"            # vllm | sglang | llamacpp | atlas | trtllm
+    engine: str = "vllm"            # vllm | velogb10 | sglang | llamacpp | atlas | trtllm
     image: str | None = None        # set by the image manager
     revision: str | None = None
     quantization: str | None = None  # nvfp4 | fp8 | gguf | None
@@ -29,6 +29,7 @@ class Recipe:
     kv_cache_dtype: str = "auto"
     kv_cache_bytes: int | None = None     # fixed KV cache size; None lets DGX-kit size it from free memory
     gpu_memory_utilization: float | None = None  # fixed vLLM share of memory; None lets DGX-kit work it out
+    memory_reserve_bytes: int | None = None
     max_context: int | None = None
     min_context: int = 4096
     min_concurrency: float = 2.0
@@ -121,22 +122,25 @@ def build_recipe(repo: str, config: dict, siblings: list[tuple[str, int | None]]
     return r
 
 
-def inspect_repo(repo: str, draft_repo: str | None = None, token: str | None = None) -> Recipe:
+def inspect_repo(repo: str, draft_repo: str | None = None, token: str | None = None,
+                 revision: str | None = None) -> Recipe:
     """Read config.json and the file list from the Hub and build a recipe."""
     from huggingface_hub import HfApi, hf_hub_download
 
     api = HfApi(token=token)
 
-    def load(r):
-        info = api.model_info(r, files_metadata=True)
+    def load(r, ref: str | None = None):
+        info = api.model_info(r, files_metadata=True, revision=ref)
         siblings = [(s.rfilename, s.size) for s in info.siblings or []]
         cfg = {}
         if any(n == "config.json" for n, _ in siblings):
-            with open(hf_hub_download(r, "config.json", token=token)) as f:
+            with open(hf_hub_download(r, "config.json", token=token, revision=ref)) as f:
                 cfg = json.load(f)
         return cfg, siblings
 
-    config, siblings = load(repo)
+    config, siblings = load(repo, revision)
     draft_config, draft_siblings = load(draft_repo) if draft_repo else (None, None)
-    return build_recipe(repo, config, siblings, draft_repo=draft_repo, draft_config=draft_config,
-                        draft_siblings=draft_siblings)
+    recipe = build_recipe(repo, config, siblings, draft_repo=draft_repo, draft_config=draft_config,
+                          draft_siblings=draft_siblings)
+    recipe.revision = revision
+    return recipe
