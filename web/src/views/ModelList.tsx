@@ -38,6 +38,10 @@ export function ModelList({ switcher, history, entries, orphans, alerts, readonl
         const a = alerts.find((x) => x.model === e.name)
         const tone = STATE_TONE[e.state] ?? ''
         const engine = e.row?.engine ?? e.ext?.engine
+        const decodeNow = typeof l?.decode_tps === 'number' ? l.decode_tps : 0
+        const decodeRequest = typeof l?.decode_tps_req === 'number' ? l.decode_tps_req : null
+        const decodeRate = decodeNow > 0 ? decodeNow : decodeRequest
+        const decodeSource = decodeNow > 0 ? 'completed' : decodeRequest != null ? 'req avg' : 'idle'
         return (
           <div key={e.name} className={`item ${selected === e.name ? 'sel' : ''} ${a?.level ?? ''}`} style={{ ['--tint' as string]: TINTS[entries.indexOf(e) % TINTS.length] }} onClick={() => select(e.name)}>
             <div className="irow">
@@ -48,7 +52,9 @@ export function ModelList({ switcher, history, entries, orphans, alerts, readonl
             {on ? (
               <div className="imeta">
                 <span className="tag">{[engine && (ENGINES[engine] ?? engine), !e.managed && 'watch only'].filter(Boolean).join(' · ')}</span>
-                <span><b>{fmtNum(l.decode_tps, (l.decode_tps ?? 0) < 100 ? 1 : 0)}</b> tok/s</span>
+                <span title={decodeSource === 'req avg' ? 'Mean decode speed of completed requests; the server exposes no live token counter for in-flight requests.' : 'Output tokens per second from requests completed between sampler reads.'}>
+                  <b>{decodeRate == null ? '–' : fmtNum(decodeRate, decodeRate < 100 ? 1 : 0)}</b> tok/s <small>{decodeSource}</small>
+                </span>
                 {l.ttft_p95_s != null && <span>p95 <b>{fmtNum(l.ttft_p95_s * 1000)}</b> ms</span>}
                 <span className={(l.waiting ?? 0) > 0 ? 'warn' : ''}>{(l.waiting ?? 0) > 0 && '▲ '}queue <b>{fmtNum(l.waiting ?? 0)}</b></span>
                 {l.slot && <span className={l.slot === 'waiting' ? 'muted' : ''} title={l.slot === 'waiting' ? 'Frozen until its GPU slot; its cache and streams are kept' : 'Has the GPU now'}>{l.slot === 'waiting' ? '○ waiting' : '● GPU'}</span>}

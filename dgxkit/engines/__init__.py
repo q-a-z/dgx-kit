@@ -3,9 +3,10 @@ from .llamacpp import LlamaCppAdapter
 from .sglang import SglangAdapter
 from .trtllm import TrtllmAdapter
 from .vllm import VllmAdapter
+from .flare import FlareAdapter
 from .velogb10 import VeloGB10Adapter
 
-ADAPTERS = {"vllm": VllmAdapter, "sglang": SglangAdapter, "llamacpp": LlamaCppAdapter, "atlas": AtlasAdapter,
+ADAPTERS = {"vllm": VllmAdapter, "flare": FlareAdapter, "sglang": SglangAdapter, "llamacpp": LlamaCppAdapter, "atlas": AtlasAdapter,
             "trtllm": TrtllmAdapter, "velogb10": VeloGB10Adapter}
 
 

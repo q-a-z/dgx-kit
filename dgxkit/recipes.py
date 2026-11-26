@@ -18,7 +18,7 @@ WEIGHT_SUFFIXES = (".safetensors", ".bin", ".gguf")
 class Recipe:
     name: str
     repo: str
-    engine: str = "vllm"            # vllm | velogb10 | sglang | llamacpp | atlas | trtllm
+    engine: str = "vllm"            # vllm | flare | velogb10 | sglang | llamacpp | atlas | trtllm
     image: str | None = None        # set by the image manager
     revision: str | None = None
     quantization: str | None = None  # nvfp4 | fp8 | gguf | None

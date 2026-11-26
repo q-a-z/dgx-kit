@@ -57,9 +57,14 @@ field, or edit the model's YAML in the state folder):
       - host: q@192.168.100.11    # the SSH target
         ip: 192.168.100.11        # its address on the fiber link
 
-The engine must be vLLM. DGX-kit adds `--tensor-parallel-size`, `--nnodes`, `--node-rank` and `--master-addr` to the head,
-starts the workers with `--headless` and their own rank, sets `VLLM_HOST_IP` and the NCCL variables per node, and gives
-every container `/dev/infiniband`. The sizing plan divides the weights by the number of nodes.
+For vLLM, DGX-kit adds `--tensor-parallel-size`, `--nnodes`, `--node-rank` and `--master-addr` to the head.
+It starts the workers with `--headless` and their own rank, sets `VLLM_HOST_IP` and the NCCL variables per node,
+and binds the individual RDMA character devices. The sizing plan divides the weights by the number of nodes.
+Use `head_gid_index` and `worker_gid_index` when the address indices differ.
+
+Velo-Fabric recipes use `engine: velogb10` and an image containing the peer supervisor and, for explicit peers,
+`/opt/velogb10/run_tp_server.sh`. The `cluster` block accepts `node_port` and `rdma_dev`.
+The VeloGB10 engine determines effective cache and lane settings as it starts.
 
 ## Checking
 

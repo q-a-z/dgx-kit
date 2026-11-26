@@ -51,6 +51,48 @@ def test_unsupported_settings_refused(settings):
         engine_command(Recipe("test", "org/model", engine="velogb10", **settings), PLAN, 8100, "/models")
 
 
+def test_velo_fabric_uses_the_deployed_head_and_node_commands():
+    from dgxkit.control import DockerRunner, RDMA_DEVICES
+    from tests.test_cluster import Box
+
+    config = {"head_ip": "192.0.2.1", "workers": [{"host": "q@192.0.2.2"}], "node_port": 29542,
+              "rdma_dev": "roce0"}
+    r = Recipe("test", "org/model", engine="velogb10", image="img:1", cluster=config, quantization="exl3")
+    cmd = engine_command(r, PLAN, 8100, "/models")
+    assert cmd[0].endswith("/run_tp_server.sh")
+    assert cmd[cmd.index("--node") + 1] == "192.0.2.2:29542"
+    assert cmd[cmd.index("--tp") + 1] == "2"
+    assert docker_options(r, "/models")["devices"] == RDMA_DEVICES
+    local, worker = Box(), Box()
+    runner = DockerRunner(local)
+    runner.remote = lambda _: worker
+    runner.start(r, cmd, 8100, "/models")
+    assert worker.ran == [("dgxkit-test-w1", ["--node", "--host", "192.0.2.2", "--port", "29542",
+                                             "--rdma-dev", "roce0"],
+                           {"dgxkit.worker": "test", "dgxkit.engine": "velogb10-node"})]
+    config["discovery_wait"] = 5
+    cmd = engine_command(r, PLAN, 8100, "/models")
+    assert cmd[0].endswith("/gb10_inference")
+    assert cmd[cmd.index("--discover-wait") + 1] == "5"
+
+
+def test_loaded_velogb10_request_rates_are_reported_from_histograms():
+    async def check():
+        body = ("velogb10_decode_tokens_per_second_sum 110\n"
+                "velogb10_decode_tokens_per_second_count 2\n"
+                "velogb10_prefill_tokens_per_second_sum 3000\n"
+                "velogb10_prefill_tokens_per_second_count 2\n")
+        transport = httpx.MockTransport(lambda _: httpx.Response(200, text=body))
+        async with httpx.AsyncClient(transport=transport) as client:
+            adapter = adapter_for("velogb10", "http://velo")
+            await adapter.client.aclose()
+            adapter.client = client
+            result = await adapter.scrape()
+            assert result["decode_tps_req"] == 55 and result["prefill_tps_req"] == 1500
+
+    asyncio.run(check())
+
+
 def test_metrics_count_finished_requests_and_do_not_double_count_cached_prompt():
     adapter = adapter_for("velogb10", "http://localhost:8100")
     def metrics(gen):

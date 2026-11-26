@@ -51,9 +51,9 @@ function Dashboard({ readonly, canSignOut, onSignOut, version }: { readonly: boo
   const boxName = box?.name ?? latest?.gpu?.name
   const boxTitle = [box && [box.vendor, box.product].filter(Boolean).join(' '), box?.family, latest?.gpu?.name, box?.bios && `BIOS ${box.bios}`].filter(Boolean).join(' · ')
   const g = gateway.data
-  const gwUp = !!g && (g.reachable ?? g.state === 'running') && g.auth !== 'rejected'
+  const gwUp = !!g && (g.reachable ?? g.state === 'running') && !['rejected', 'missing'].includes(g.auth ?? '')
   const gwState = !g ? 'pending' : gwUp ? 'ok' : 'bad'
-  const gwTitle = !g ? 'LiteLLM gateway: checking' : gwUp ? 'LiteLLM gateway: answering' : `LiteLLM gateway: ${g.auth === 'rejected' ? 'rejects the key' : g.problem ?? 'not answering'}`
+  const gwTitle = !g ? 'LiteLLM gateway: checking' : gwUp ? 'LiteLLM gateway: answering' : `LiteLLM gateway: ${g.auth === 'rejected' ? 'rejects the key' : g.auth === 'missing' ? 'key is not configured' : g.problem ?? 'not answering'}`
   const alerts = alertsFor(fleet.entries, latest, gateway.data ?? undefined, readonly)
   const [view, setView] = useView()
   const [cost, setCost] = useState(false)

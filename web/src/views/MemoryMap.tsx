@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fmtBytes, fmtNum, type Download, type Snapshot } from '../api'
 import { MultiSpark } from '../components/Chart'
 
@@ -29,11 +30,19 @@ export function MemoryMap({ switcher, latest, history, entries, orphans, alerts,
   selected?: string; preview: Preview; ghost: Ghost; table: boolean; setTable: (v: boolean) => void
   onOpen: (name: string, tab: Tab) => void; onChanged: () => void
 }) {
+  const [recipeFilter, setRecipeFilter] = useState('')
   const m = latest.system?.memory
   if (!m) return <section className="mapwrap"><p className="muted">Memory readings aren’t available on this box.</p></section>
   const tint = (e: Entry) => TINTS[entries.indexOf(e) % TINTS.length]
   const resident = entries.filter((e) => e.memBytes != null || e.running)
   const away = entries.filter((e) => !resident.includes(e) && !fetching(e.state))
+  const recipes = away.filter((e) => {
+    const query = recipeFilter.trim().toLocaleLowerCase()
+    if (!query) return true
+    const text = [prettyName(e), e.row?.repo, e.row?.engine, e.row?.quantization, e.row?.kv_cache_dtype, e.state]
+      .filter(Boolean).join(' ').toLocaleLowerCase()
+    return text.includes(query)
+  })
   const held = resident.reduce((a, e) => a + (e.memBytes ?? 0), 0)
   const system = Math.max(0, m.total_bytes - m.available_bytes - held)
   const grow = preview && resident.some((e) => e.name === preview.name)
@@ -123,17 +132,49 @@ export function MemoryMap({ switcher, latest, history, entries, orphans, alerts,
           </div>
         </div>
       )}
-      {away.length > 0 && <div className="map-foot">
-        <span className="lbl">Not in memory</span>
-        {away.map((e) => (
-          <span key={e.name} className={`chip ${selected === e.name ? 'sel' : ''}`} onClick={() => select(e.name)}>
-            <span className={`dot ${STATE_TONE[e.state] ?? ''}`} aria-hidden />
-            <button className="name" onClick={(ev) => { ev.stopPropagation(); select(e.name) }} title={e.name}>{prettyName(e)}</button>
-            <span className={`state-word ${STATE_TONE[e.state] ?? ''}`}>{STATE_LABEL[e.state] ?? e.state}</span>
-            <ModelActions entry={e} readonly={readonly} onChanged={onChanged} onOpen={(t) => onOpen(e.name, t)} />
-          </span>
-        ))}
-      </div>}
+      {away.length > 0 && <section className="recipe-shelf" aria-labelledby="recipe-shelf-title">
+        <div className="recipe-shelf-head">
+          <div>
+            <h2 id="recipe-shelf-title">Saved recipes <span className="recipe-count">{away.length}</span></h2>
+            <p>Models outside GPU memory. Choose one to view its settings or start it.</p>
+          </div>
+          <label className="recipe-search">
+            <Icon name="search" size={15} />
+            <input type="search" value={recipeFilter} onChange={(e) => setRecipeFilter(e.target.value)}
+              placeholder="Find a model" aria-label="Find a saved recipe" />
+          </label>
+        </div>
+        {recipes.length > 0 ? <div className="recipe-grid" role="list">
+          {recipes.map((e) => {
+            const r = e.row
+            const tp = r?.cluster?.workers?.length ? `TP${r.cluster.workers.length + 1}` : null
+            const facts: string[] = r ? [
+              ENGINES[r.engine] ?? r.engine,
+              r.quantization && r.quantization.toUpperCase(),
+              tp,
+              r.kv_cache_dtype && r.kv_cache_dtype !== 'auto' && `${r.kv_cache_dtype.toUpperCase()} KV`,
+              r.max_context && `${fmtNum(r.max_context)} context`,
+              r.min_concurrency > 1 && `${fmtNum(r.min_concurrency)} parallel`,
+              (r.draft_repo || r.draft_method) && `Draft: ${base(r.draft_repo) ?? r.draft_method}`,
+            ].filter((fact): fact is string => typeof fact === 'string' && fact.length > 0)
+              : [e.ext ? (ENGINES[e.ext.engine] ?? e.ext.engine) : null].filter((fact): fact is string => typeof fact === 'string')
+            return (
+              <article key={e.name} role="listitem" className={`recipe-card ${selected === e.name ? 'sel' : ''}`} onClick={() => select(e.name)}>
+                <div className="recipe-card-head">
+                  <div className="recipe-card-title">
+                    <button className="recipe-name" onClick={(ev) => { ev.stopPropagation(); select(e.name) }} title={e.name}>{prettyName(e)}</button>
+                    <span className={`recipe-state ${STATE_TONE[e.state] ?? ''}`} title={stateTitle(e)}>
+                      <span className={`dot ${STATE_TONE[e.state] ?? ''}`} aria-hidden />{STATE_LABEL[e.state] ?? e.state}
+                    </span>
+                  </div>
+                  <ModelActions entry={e} readonly={readonly} onChanged={onChanged} onOpen={(t) => onOpen(e.name, t)} />
+                </div>
+                {facts.length > 0 && <div className="recipe-facts">{facts.map((fact) => <span key={fact}>{fact}</span>)}</div>}
+              </article>
+            )
+          })}
+        </div> : <p className="recipe-empty">No saved models match “{recipeFilter}”.</p>}
+      </section>}
     </section>
   )
 }
@@ -150,12 +191,16 @@ function MapTable({ latest, resident, tint, readonly, selected, onOpen, onChange
       <tbody>
         {resident.map((e) => {
           const p = procs.find((x) => x.key === e.name || x.model === e.name)
+          const decodeNow = typeof e.live?.decode_tps === 'number' ? e.live.decode_tps : 0
+          const decodeRequest = typeof e.live?.decode_tps_req === 'number' ? e.live.decode_tps_req : null
           return (
             <tr key={e.name} className={selected === e.name ? 'sel' : ''} onClick={() => select(e.name)}>
               <td><button className="link who" onClick={() => select(e.name)}><i style={{ background: tint(e) }} />{prettyName(e)}</button></td>
               <td className="acts-cell"><ModelActions entry={e} readonly={readonly} onChanged={onChanged} onOpen={(t) => onOpen(e.name, t)} /></td>
               <td><span className={`state-word ${STATE_TONE[e.state] ?? ''}`} title={stateTitle(e)}>{stateText(e)}</span></td>
-              <td className="num">{e.live?.decode_tps != null ? `${fmtNum(e.live.decode_tps, 1)} tok/s` : '–'}</td>
+              <td className="num">{decodeNow > 0
+                ? `${fmtNum(decodeNow, 1)} tok/s`
+                : decodeRequest != null ? `${fmtNum(decodeRequest, 1)} tok/s req avg` : '–'}</td>
               <td className="num">{fmtNum((e.live?.context_tokens as number | undefined) ?? p?.ctx ?? null)}</td>
               <td className="num muted">{p?.pid ?? '–'}</td>
               <td className="num">{fmtBytes(e.memBytes)}</td>

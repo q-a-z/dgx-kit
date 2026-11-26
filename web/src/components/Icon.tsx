@@ -12,6 +12,7 @@ const PATHS: Record<string, string> = {
   copy: 'M5.5 5.5h7v7h-7zM3.5 10.5v-7h7',
   more: 'M3.5 8h.01M8 8h.01M12.5 8h.01',
   close: 'M4.5 4.5l7 7M11.5 4.5l-7 7',
+  search: 'M6.8 2.5a4.3 4.3 0 1 0 0 8.6a4.3 4.3 0 1 0 0-8.6M10 10l3.5 3.5',
   publish: 'M8 11V3M4.5 6.5L8 3l3.5 3.5M3 13.5h10',
   unpublish: 'M8 3.5a4.5 4.5 0 1 0 0 9a4.5 4.5 0 1 0 0-9zM4.8 4.8l6.4 6.4',
   in: 'M8 2.5v8M4.5 7.5L8 11l3.5-3.5M3 13.5h10',

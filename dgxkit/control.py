@@ -20,6 +20,10 @@ from .sizing import Plan
 
 LABEL = "dgxkit.model"
 PORT_RANGE = range(8100, 8200)
+RDMA_DEVICES = [
+    "/dev/infiniband/rdma_cm:/dev/infiniband/rdma_cm:rwm",
+    *(f"/dev/infiniband/uverbs{i}:/dev/infiniband/uverbs{i}:rwm" for i in range(4)),
+]
 
 
 def model_dir(models_root: str, repo: str) -> str:
@@ -63,7 +67,7 @@ def jit_caches(engine: str) -> tuple[dict, dict]:
     jobs: uncapped, ninja and nvcc run one compiler per core and the container hits its memory limit and is
     killed mid-build (seen on a Nemotron start). Shared with llmctl's caches when it left them in ~/.cache.
     """
-    if engine in ("llamacpp", "atlas", "velogb10"):  # these engines ship precompiled kernels
+    if engine in ("llamacpp", "atlas", "velogb10"):  # llama.cpp is built ahead; Atlas ships its kernels precompiled, no runtime compilation
         return {}, {}
     root = Path(os.environ.get("DGXKIT_CACHE_DIR") or Path.home() / ".cache")
     vols = {}
@@ -80,13 +84,13 @@ def docker_options(r: Recipe, models_root: str, node_ip: str | None = None) -> d
     cache_vols, cache_env = jit_caches(r.engine)
     vols.update(cache_vols)
     vols.update(recipe_volumes(r))
-    cluster_env = cluster.env(r, node_ip or r.cluster["head_ip"]) if cluster.is_cluster(r) else {}
+    cluster_env = cluster.env(r, node_ip or r.cluster["head_ip"]) if cluster.is_cluster(r) and r.engine != "velogb10" else {}
+    if r.engine == "velogb10" and cluster.is_cluster(r):
+        vols["/home/q/.cache/gb10_tp"] = {"bind": "/root/.cache/gb10_tp", "mode": "rw"}
     out = {"volumes": vols, "environment": {**cache_env, **cluster_env, **(r.env or {})} or None}
-    if cluster_env or cluster.is_cluster(r):
-        out["devices"] = ["/dev/infiniband:/dev/infiniband:rwm"]  # RDMA for NCCL; without it NCCL falls back to TCP
-        # Verbs memory registration and NCCL's pinned buffers can hit the
-        # memlock limit even when the ulimit is raised; grant the capability
-        # explicitly for cluster containers.
+    if cluster_env or (r.engine == "velogb10" and cluster.is_cluster(r)):
+        out["devices"] = RDMA_DEVICES  # pass verbs character devices, not the /dev/infiniband directory
+    if cluster_env:
         out["cap_add"] = ["IPC_LOCK"]
     for key in ("mem_limit", "shm_size", "user"):
         if d.get(key):
@@ -119,10 +123,8 @@ def extra_tokens(lines: list[str]) -> list[str]:
 def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]:
     path = weights_path(r, models_root)
     draft = draft_path(r, models_root)
-    if cluster.is_cluster(r) and r.engine != "vllm":
-        if r.engine == "velogb10":
-            raise ValueError("managed veloGB10 recipes support single-node serving; Velo-Fabric needs its own peer launcher")
-        raise ValueError("a cluster needs the vLLM engine")
+    if cluster.is_cluster(r) and r.engine not in ("vllm", "velogb10"):
+        raise ValueError("managed cluster launches require vLLM or veloGB10")
     if r.engine == "velogb10":
         if r.kv_cache_bytes is not None or r.fill_memory:
             raise ValueError("veloGB10 allocates KV per lane; use context and concurrency instead of a fixed KV pool or fill_memory")
@@ -131,10 +133,28 @@ def engine_command(r: Recipe, p: Plan, port: int, models_root: str) -> list[str]
               {"auto": "bf16", "bf16": "bf16", "fp16": "bf16", "fp8": "k8v8"}).get(r.kv_cache_dtype)
         if kv is None:
             raise ValueError("veloGB10 KV type must be auto, q8, bf16, fp16 or fp8")
-        cmd = ["/opt/velogb10/gb10_inference", "--server", "--model-dir", path,
-               "--model-name", r.name, "--host", "0.0.0.0", "--port", str(port),
-               "--max-seq-len", str(p.context_tokens),
-               "--max-batch", str(max(1, int(p.concurrency))), "--kv-cache", kv]
+        if cluster.is_cluster(r):
+            addresses = [cluster.worker_ip(w) for w in cluster.workers(r)]
+            if not all(addresses):
+                raise ValueError("each Velo-Fabric peer needs a fabric IP")
+            discovery_wait = (r.cluster or {}).get("discovery_wait")
+            if discovery_wait is not None:
+                cmd = ["/opt/velogb10/gb10_inference", "--server", "--model-dir", path,
+                       "--model-name", r.name, "--host", "0.0.0.0", "--port", str(port),
+                       "--max-seq-len", str(p.context_tokens), "--max-batch", str(max(1, int(p.concurrency))),
+                       "--tp", str(cluster.size(r)), "--discover-wait", str(discovery_wait), "--kv-cache", kv]
+            else:
+                node_port = int((r.cluster or {}).get("node_port") or 29500)
+                nodes = ",".join(f"{address}:{node_port}" for address in addresses)
+                cmd = ["/opt/velogb10/run_tp_server.sh", "--model-dir", path,
+                       "--node", nodes, "--tp", str(cluster.size(r)), "--port", str(port),
+                       "--max-seq-len", str(p.context_tokens), "--max-batch", str(max(1, int(p.concurrency))),
+                       "--", "--model-name", r.name, "--kv-cache", kv]
+        else:
+            cmd = ["/opt/velogb10/gb10_inference", "--server", "--model-dir", path,
+                   "--model-name", r.name, "--host", "0.0.0.0", "--port", str(port),
+                   "--max-seq-len", str(p.context_tokens),
+                   "--max-batch", str(max(1, int(p.concurrency))), "--kv-cache", kv]
         if draft:
             if r.draft_method not in ("dflash", "dflash2"):
                 raise ValueError("veloGB10 external drafts require dflash or dflash2")
@@ -359,8 +379,25 @@ class DockerRunner:
             for rank, client, node_ip, worker_name, previous in targets:
                 for old in previous:
                     old.remove()
-                started.append(self._run(client, worker_name, r, cluster.worker_command(cmd, rank),
-                                         {"dgxkit.worker": r.name}, models_root, node_ip))
+                if r.engine == "velogb10":
+                    from docker.types import DeviceRequest, Ulimit
+                    node_port = int((r.cluster or {}).get("node_port") or 29500)
+                    node_cmd = ["/opt/velogb10/gb10_inference", "--node", "--host", str(node_ip), "--port", str(node_port)]
+                    rdma_dev = (r.cluster or {}).get("rdma_dev")
+                    if rdma_dev:
+                        node_cmd += ["--rdma-dev", str(rdma_dev)]
+                    node = client.containers.run(
+                        r.image, node_cmd[1:], entrypoint=[node_cmd[0]], name=worker_name, detach=True,
+                        labels={"dgxkit.worker": r.name, "dgxkit.engine": "velogb10-node"},
+                        network_mode="host", ipc_mode="host", ulimits=[Ulimit(name="memlock", soft=-1, hard=-1)],
+                        device_requests=[DeviceRequest(count=-1, capabilities=[["gpu"]])],
+                        volumes={"/home/q/.cache/gb10_tp": {"bind": "/root/.cache/gb10_tp", "mode": "rw"}},
+                        devices=RDMA_DEVICES,
+                    )
+                    started.append(node)
+                else:
+                    started.append(self._run(client, worker_name, r, cluster.worker_command(cmd, rank),
+                                             {"dgxkit.worker": r.name}, models_root, node_ip))
             for old in heads:
                 old.remove()
             # meta (planned context and KV pool) lets a restarted dashboard pick running models back up.

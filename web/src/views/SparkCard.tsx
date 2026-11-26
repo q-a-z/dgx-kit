@@ -37,6 +37,10 @@ function TrafficStats({ latest }: { latest: Snapshot }) {
   if (!up.length) return <div className="traffic-wrap"><span className="muted small">No model running</span></div>
   const dec = avgSpeed(up, 'gen_tokens_total', 'decode_tps_req')
   const pre = avgSpeed(up, 'prompt_tokens_total', 'prefill_tps_req')
+  const decNow = sum(up, 'decode_tps')
+  const preNow = sum(up, 'prefill_tps')
+  const decDisplay = decNow > 0 ? decNow : (dec ?? 0)
+  const preDisplay = preNow > 0 ? preNow : (pre ?? 0)
   const waiting = sum(up, 'waiting')
   const since = Math.max(0, ...up.map((x) => (typeof x.stats_since === 'number' ? x.stats_since : 0)))
   const stat = (k: string, v: string, sub?: string, tip?: string, arrow?: ReactNode) =>
@@ -47,8 +51,8 @@ function TrafficStats({ latest }: { latest: Snapshot }) {
         {stat('In', compact(sum(up, 'prompt_tokens_total')), 'tokens', 'Prompt tokens since the models started, or since the last reset')}
         {stat('Out', compact(sum(up, 'gen_tokens_total')), 'tokens', 'Generated tokens since the models started, or since the last reset')}
         {stat('Requests', compact(sum(up, 'requests_total')), undefined, 'Finished requests since the models started, or since the last reset')}
-        {stat('Decode', fmtNum(sum(up, 'decode_tps')), dec != null ? `/ avg ${fmtNum(dec)} t/s` : 't/s', 'Output tokens per second now, and the average per request. The arrow compares now with the average.', pace(sum(up, 'decode_tps'), dec))}
-        {stat('Prefill', fmtNum(sum(up, 'prefill_tps')), pre != null ? `/ avg ${fmtNum(pre)} t/s` : 't/s', 'Prompt tokens per second now, and the average per request. The arrow compares now with the average.', pace(sum(up, 'prefill_tps'), pre))}
+        {stat('Decode', fmtNum(decDisplay), decNow > 0 ? (dec != null ? `/ avg ${fmtNum(dec)} t/s` : 'aggregate') : dec != null ? 'avg / request' : 'tok/s', decNow > 0 ? 'Aggregate output rate from requests that completed between sampler reads; the smaller rate is the mean per completed request.' : 'No request completed in the latest sampler interval; showing the mean decode rate of completed requests instead.', pace(decNow, dec))}
+        {stat('Prefill', fmtNum(preDisplay), preNow > 0 ? (pre != null ? `/ avg ${fmtNum(pre)} t/s` : 'aggregate') : pre != null ? 'avg / request' : 'tok/s', preNow > 0 ? 'Aggregate prompt rate from requests that completed between sampler reads; the smaller rate is the mean per completed request.' : 'No request completed in the latest sampler interval; showing the mean prefill rate of completed requests instead.', pace(preNow, pre))}
         {stat('Busy', String(sum(up, 'running')), waiting ? `+${waiting} waiting` : undefined, 'Requests running now')}
       </dl>
       <button className="ghost icon-only reset-stats" aria-label="Reset stats"

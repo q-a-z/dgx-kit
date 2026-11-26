@@ -150,7 +150,7 @@ export function Editor({ model, onDone }: { model: ModelRow; onDone: (msg: strin
       </label>
       <label>Engine
         <select value={r.engine} onChange={(e) => set('engine', e.target.value)}>
-          <option value="vllm">vLLM</option><option value="sglang">SGLang</option><option value="llamacpp">llama.cpp</option><option value="atlas">Atlas</option><option value="trtllm">TensorRT-LLM</option>
+          <option value="vllm">vLLM</option><option value="flare">Flare (prepared package)</option><option value="sglang">SGLang</option><option value="llamacpp">llama.cpp</option><option value="atlas">Atlas</option><option value="velogb10">veloGB10 (single node)</option><option value="trtllm">TensorRT-LLM</option>
         </select>
       </label>
       <ImagePicker engine={r.engine} value={r.image ?? null} onChange={(v) => set('image', v)} />
@@ -158,7 +158,7 @@ export function Editor({ model, onDone }: { model: ModelRow; onDone: (msg: strin
       <label>Quantization<input value={r.quantization ?? ''} onChange={(e) => set('quantization', e.target.value || null)} /></label>
       <label>KV cache type
         <select value={r.kv_cache_dtype} onChange={(e) => set('kv_cache_dtype', e.target.value)}>
-          <option value="auto">auto</option><option value="fp8">fp8</option><option value="bf16">bf16</option>
+          <option value="auto">auto</option><option value="q8">q8</option><option value="fp8">fp8</option><option value="bf16">bf16</option>
         </select>
       </label>
       <label>Max context<input type="number" value={r.max_context ?? ''} placeholder="from model" onChange={(e) => set('max_context', numOrNull(e.target.value))} /></label>
@@ -292,6 +292,7 @@ export function GatewayCard() {
   const status = !data ? null
     : data.reachable === false ? { bad: !data.problem?.startsWith('pulling'), text: data.problem ?? `Not answering at ${data.url}${data.error ? `: ${data.error}` : ''}` }
     : data.auth === 'rejected' ? { bad: true, text: 'Answering, but it rejects this key. Models can’t be published until the key is right.' }
+    : data.auth === 'missing' ? { bad: true, text: 'Answering, but no gateway key is configured. Models can’t be published until the key is set.' }
     : data.reachable ? { bad: false, text: `Answering${data.external ? ` (LiteLLM already on this box: ${data.external})` : ''}. Serves ${data.served?.length ? data.served.join(', ') : 'no models yet'}.` }
     : null
   return (

@@ -54,7 +54,8 @@ def test_each_node_gets_its_own_address_and_the_rdma_device():
     assert head["environment"]["VLLM_HOST_IP"] == "192.168.100.10" and head["environment"]["X"] == "1"
     assert worker["environment"]["VLLM_HOST_IP"] == "192.168.100.11"
     assert worker["environment"]["NCCL_SOCKET_IFNAME"] == "enp1s0f1np1" and worker["environment"]["NCCL_IB_HCA"] == "rocep1s0f1"
-    assert worker["devices"] == ["/dev/infiniband:/dev/infiniband:rwm"]
+    assert worker["devices"] == [f"/dev/infiniband/{name}:/dev/infiniband/{name}:rwm" for name in
+                                 ("rdma_cm", "uverbs0", "uverbs1", "uverbs2", "uverbs3")]
     assert worker["cap_add"] == ["IPC_LOCK"]
     assert "devices" not in docker_options(Recipe(name="m", repo="org/M"), "/models")
 

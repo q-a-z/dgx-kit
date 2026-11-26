@@ -5,6 +5,7 @@ import asyncio
 import json
 import re
 import os
+import shlex
 import shutil
 import time
 from dataclasses import asdict, fields
@@ -66,6 +67,25 @@ DEFAULT_CONTEXT = 32768  # what a model gets when nobody asked for a context: en
 
 
 def plan_for(s, r: Recipe, extra_free: int = 0):
+    if r.engine == "velogb10":
+        ensure_config(s, r)
+        from .sizing import Plan, text_config
+        model_max = text_config(r.config).get("max_position_embeddings")
+        context = r.max_context or model_max or DEFAULT_CONTEXT
+        lanes = max(1, int(r.min_concurrency))
+        # VeloGB10's EXL3 sparse-attention KV and n-gram allocations are not represented
+        # by DGX-kit's generic dense-KV estimator. Keep the requested native context and
+        # lane count; the engine reports the effective lanes when it boots.
+        return Plan(context, 0, 0, float(lanes), True,
+                    "VeloGB10 sizes sparse KV and lanes at startup", total_bytes=r.weights_bytes)
+    if r.engine == "flare":
+        package = Path(weights_path(r, s.models_root))
+        size = r.weights_bytes or (package.stat().st_size if package.is_file() else 0)
+        ok = package.exists()
+        from .sizing import Plan
+        return Plan(r.max_context or DEFAULT_CONTEXT, 0, r.kv_cache_bytes or 0,
+                    r.min_concurrency, ok, "Flare model path is missing" if not ok else "",
+                    total_bytes=size)
     ensure_config(s, r)
     if r.engine == "llamacpp" and r.gguf_file:  # a split GGUF takes the memory of all its pieces, whatever the recipe was saved with
         from .gguf import total_size
@@ -87,6 +107,8 @@ def plan_for(s, r: Recipe, extra_free: int = 0):
 
 
 def plan_memory_required(r: Recipe, p) -> int:
+    if r.engine in ("flare", "velogb10"):
+        return 0  # distributed package residency is not described by the vLLM plan
     reserve = r.memory_reserve_bytes if r.memory_reserve_bytes is not None else 8 * 2**30
     return p.total_bytes + reserve if p.fits else 0
 
@@ -467,7 +489,23 @@ async def _start_model(s, name: str, cancelled: asyncio.Event) -> dict:
     check = check_start(r, p, s.models_root, s.images.is_ready(r.image))
     if not check.ok:
         raise HTTPException(409, {"problems": check.problems})
-    if cluster.is_cluster(r):  # a half-started cluster hangs, so every node is checked first
+    if cluster.is_cluster(r) and r.engine == "velogb10":
+        from .cluster import reachable, run as cluster_run, worker_ip
+        problems = []
+        for rank, worker in enumerate(cluster.workers(r), 1):
+            host, ip = worker.get("host"), worker_ip(worker)
+            if not host or not ip:
+                problems.append(f"Velo peer {rank} needs an SSH host and fabric IP")
+                continue
+            if not await asyncio.to_thread(reachable, ip, 22):
+                problems.append(f"Velo peer {rank} is unreachable on fabric address {ip}")
+            image = shlex.quote(r.image)
+            rc, out = await asyncio.to_thread(cluster_run, host, f"docker image inspect {image} >/dev/null && mkdir -p /home/q/.cache/gb10_tp")
+            if rc:
+                problems.append(f"Velo peer {rank} preflight failed: {out or 'image or SSH check failed'}")
+        if problems:
+            raise HTTPException(409, {"problems": problems})
+    elif cluster.is_cluster(r):  # a half-started cluster hangs, so every node is checked first
         bad = cluster.problems(await asyncio.to_thread(cluster.check, r, s.models_root,
                                                        required_bytes=plan_memory_required(r, p)))
         if bad:
@@ -969,15 +1007,22 @@ def gateway_key(s) -> str | None:
 
 async def probe_gateway(url: str, key: str | None) -> dict:
     """Ask the gateway itself: is it answering, and which models does it serve."""
+    # LiteLLM treats an absent Authorization header as an authentication error.
+    # Do not probe a configured remote gateway without its key: this is both
+    # noisy (every dashboard poll becomes a 401) and indistinguishable from a
+    # client making an unauthenticated model request in the gateway logs.
+    if not key:
+        return {"reachable": True, "auth": "missing", "served": [],
+                "error": "gateway key is not configured"}
     import httpx
-    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    headers = {"Authorization": f"Bearer {key}"}
     try:
         async with httpx.AsyncClient(timeout=2.0) as c:
             r = await c.get(f"{url}/models", headers=headers)
         if r.status_code in (401, 403):
             return {"reachable": True, "auth": "rejected", "served": []}
         r.raise_for_status()
-        return {"reachable": True, "auth": "ok" if key else "none", "served": sorted(m.get("id", "") for m in r.json().get("data", []))}
+        return {"reachable": True, "auth": "ok", "served": sorted(m.get("id", "") for m in r.json().get("data", []))}
     except Exception as e:
         return {"reachable": False, "auth": None, "served": [], "error": str(e)[:200]}
 
@@ -989,8 +1034,10 @@ async def gateway(request: Request):
     url = gateway_url(s, request, st.get("port"))
     # Probe over loopback when no address is set: the box may not route to its own LAN address.
     probe = await probe_gateway(gateway_url(s, request, st.get("port"), "127.0.0.1"), gateway_key(s))
-    if probe["reachable"]:
+    if probe["reachable"] and probe["auth"] not in ("missing", "rejected"):
         st["state"], st["problem"] = "running", None
+    elif probe["auth"] == "missing":
+        st["problem"] = "gateway key is not configured"
     return {**st, **probe, "url": url}
 
 

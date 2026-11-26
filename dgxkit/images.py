@@ -28,11 +28,13 @@ DEFAULTS = {
     # NVIDIA's TensorRT-LLM release container (arm64, with Blackwell kernels); serves with `trtllm-serve`.
     "trtllm": os.environ.get("DGXKIT_IMAGE_TRTLLM", "nvcr.io/nvidia/tensorrt-llm/release:1.2.1"),
     "velogb10": os.environ.get("DGXKIT_IMAGE_VELOGB10", "dgx-kit/velogb10:0.8.0"),
+    "flare": os.environ.get("DGXKIT_IMAGE_FLARE", "dgx-kit/flare:latest"),
     "litellm": os.environ.get("DGXKIT_IMAGE_LITELLM", "ghcr.io/berriai/litellm:main-stable"),
 }
 CATALOG = DEFAULTS  # kept for callers that only need the default names
 
 FLASHINFER = os.environ.get("DGXKIT_FLASHINFER", "0.7.0")  # what the vLLM builds install; empty keeps the release's own
+FLASHINFER_033 = os.environ.get("DGXKIT_FLASHINFER_033", "0.7.2.post1")
 
 # Local builds for the GB10. Each uses images/<dir>/Dockerfile with build args and produces one tag.
 # vLLM builds are an upstream release plus the patches under images/vllm/patches.
@@ -65,6 +67,12 @@ BUILDS: dict[str, dict] = {
     # Lev and Bekko (dgxkit/lev.py, dgxkit/bekko.py) share one image: the extras they need on top of the same vLLM image.
     "decision-gb10": {"engine": "decision", "dir": "decision", "tag": "dgx-kit/decision:gb10", "args": {"BASE": DEFAULTS["vllm"], "REV": _revision("decision")},
                       "about": "Lev and Bekko, decision model servers, for the GB10"},
+    "vllm-0.33-gb10": {"engine": "vllm", "dir": "vllm", "tag": "dgx-kit/vllm:0.33-gb10",
+                       "args": {"BASE": os.environ.get("DGXKIT_VLLM_033_BASE", "vllm/vllm-openai:latest-aarch64"), "SERIES": "0.33", "FLASHINFER": FLASHINFER_033},
+                       "about": "vLLM 0.33 with common GB10 patches and FlashInfer " + FLASHINFER_033},
+    "deberta-gb10": {"engine": "deberta", "dir": "deberta", "tag": "dgx-kit/deberta:gb10",
+                     "args": {"BASE": "dgx-kit/vllm:nightly-gb10", "REV": _revision("deberta")},
+                     "about": "Protect AI DeBERTa prompt-injection classifier"},
     "velogb10-0.8.0": {"engine": "velogb10", "dir": "velogb10", "tag": "dgx-kit/velogb10:0.8.0",
                        "args": {"VERSION": "v0.8.0"},
                        "about": "veloGB10 v0.8.0 release binary with embedded kernels (ARM64 GB10)"},

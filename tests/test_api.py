@@ -803,8 +803,8 @@ class FakeLaya:
 def test_the_laya_service_has_status_start_stop_logs_key_and_a_test(env):
     client, s, _ = env
     s.laya = fake = FakeLaya()
-    s.lev, s.bekko = FakeLaya(), FakeLaya()
-    assert [x["name"] for x in client.get("/api/services").json()] == ["laya", "laya", "laya"]  # the fakes all say "laya"
+    s.lev, s.bekko, s.deberta = FakeLaya(), FakeLaya(), FakeLaya()
+    assert [x["name"] for x in client.get("/api/services").json()] == ["laya"] * 4  # the fakes all say "laya"
     assert client.get("/api/services/nothing/logs").status_code == 404
     assert client.post("/api/services/laya/start").json() == {"started": True}
     fake.preparing = True
@@ -835,6 +835,19 @@ def test_a_service_without_a_key_has_none_to_give(env):
     s.lev.has_key, s.lev.title = False, "Lev"
     assert client.get("/api/services/laya/key").json() == {"key": "secret-key"}
     assert client.get("/api/services/lev/key").status_code == 404
+
+
+def test_gateway_probe_reports_a_missing_key_without_an_http_request(monkeypatch):
+    import asyncio
+    import httpx
+    from dgxkit.api_models import probe_gateway
+
+    def fail(*args, **kwargs):
+        raise AssertionError("a gateway without a key must not receive an unauthenticated probe")
+
+    monkeypatch.setattr(httpx, "AsyncClient", fail)
+    result = asyncio.run(probe_gateway("http://gateway.example/v1", None))
+    assert result["auth"] == "missing" and not result["served"]
 
 
 CLUSTER = {"workers": [{"host": "q@gx10-2", "ip": "192.168.100.11"}], "head_ip": "192.168.100.10", "interface": "enp1s0f1np1"}

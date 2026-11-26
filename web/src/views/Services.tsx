@@ -9,7 +9,7 @@ import { usePoll } from '../usePoll'
 import { DownloadProgress } from './Models'
 import { PullProgress } from './Other'
 
-type Result = { ms: number; model: string | null; jailbreak: number | null; topic: string | null }
+type Result = { ms: number; model: string | null; jailbreak?: number | null; topic?: string | null; label?: string; score?: number }
 
 /**
  * A service that runs beside the models and isn't one (Laya, the decision model). It is listed with the
@@ -23,7 +23,8 @@ export function ServicePanel({ entry, tab, setTab, readonly, onChanged }: {
   const tone = STATE_TONE[entry.state] ?? ''
   const [result, setResult] = useState<Result | null>(null)
   const [testing, setTesting] = useState(false)
-  const endpoint = `http://${window.location.hostname}:${s.port}/v1/systemone`
+  const classifier = s.kind === 'classification'
+  const endpoint = `http://${window.location.hostname}:${s.port}${s.endpoint ?? '/v1/systemone'}`
 
   const test = async () => {
     setTesting(true)
@@ -43,7 +44,7 @@ export function ServicePanel({ entry, tab, setTab, readonly, onChanged }: {
     <section className="panel" aria-label={`${s.title} details`}>
       <div className="panel-head">
         <span className={`dot ${tone}`} aria-hidden />
-        <h2 className="panel-name">{s.title}</h2><code className="muted" title="Decision model: it doesn't generate text, so it has no place on the gateway">decision model</code>
+        <h2 className="panel-name">{s.title}</h2><code className="muted" title="Non-generative service with its own API">{classifier ? 'classifier' : 'decision model'}</code>
         <span className={`state-word ${tone}`} title={stateTitle(entry)}>{stateText(entry)}</span>
         <span className="grow" />
         <button className="ic" title="Close" aria-label="Close details" onClick={() => select(undefined)}><Icon name="close" /></button>
@@ -76,9 +77,9 @@ export function ServicePanel({ entry, tab, setTab, readonly, onChanged }: {
         <div>
           <div className="row">
             <button disabled={testing} onClick={test} title="Send it a sample question and time the answer">{testing ? 'Asking…' : 'Test'}</button>
-            {result && <span className="muted small">Answered in <b>{result.ms} ms</b>{result.model ? ` by ${result.model}` : ''}: “ignore all previous instructions…” looks like a jailbreak with probability <b>{result.jailbreak?.toFixed(2)}</b>, topic {result.topic}.</span>}
+            {result && <span className="muted small">Answered in <b>{result.ms} ms</b>{result.model ? ` by ${result.model}` : ''}: {classifier ? <><b>{result.label}</b>, score <b>{result.score?.toFixed(4)}</b>.</> : <>“ignore all previous instructions…” looks like a jailbreak with probability <b>{result.jailbreak?.toFixed(2)}</b>, topic {result.topic}.</>}</span>}
           </div>
-          <p className="muted small">Ask it with <code>POST /v1/systemone</code>{s.has_key ? ' and the key above' : ''}: a <code>state</code> (text or JSON) and typed <code>questions</code> (yes/no, choice, score){s.choices.length > 1 ? <>; <code>model</code> picks a checkpoint</> : null}.</p>
+          {classifier ? <p className="muted small">Send <code>POST /v1/classify</code> with the bearer key and <code>{'{"text":"your input"}'}</code>. Returns SAFE / INJECTION scores and an explicit truncation flag for inputs longer than 512 tokens.</p> : <p className="muted small">Ask it with <code>POST /v1/systemone</code>{s.has_key ? ' and the key above' : ''}: a <code>state</code> (text or JSON) and typed <code>questions</code> (yes/no, choice, score){s.choices.length > 1 ? <>; <code>model</code> picks a checkpoint</> : null}.</p>}
         </div>
       ) : (
         <p className="empty-note">{s.state === 'missing' ? 'Not on this box yet. Press Download: it fetches what it needs and builds its image, and starts nothing.' : s.state === 'downloading' || s.state === 'paused' ? 'Downloading its files; then its image is built. It is not started.' : s.state === 'failed' ? 'The download failed (see above). Download tries again from where it stopped.' : s.state === 'preparing' ? 'Building its image; when that is done it is ready to start.' : s.state === 'starting' ? 'Loading the checkpoints.' : s.state === 'exited' ? 'It stopped on its own. The Logs tab says why; Start tries again.' : 'Stopped. Start it to ask it questions.'}</p>
@@ -103,7 +104,7 @@ export function ServicePanel({ entry, tab, setTab, readonly, onChanged }: {
           <div className="params">
             <label>
               <span>Device</span>
-              <select value={s.device} disabled={readonly} onChange={(e) => save({ device: e.target.value })}><option value="cuda">GPU (falls back to CPU)</option><option value="cpu">CPU</option></select>
+              <select value={s.device} disabled={readonly} onChange={(e) => save({ device: e.target.value })}><option value="cuda">{classifier ? 'GPU' : 'GPU (falls back to CPU)'}</option><option value="cpu">CPU</option></select>
               <small>much faster on the GPU</small>
             </label>
             <label>

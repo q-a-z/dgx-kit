@@ -9,10 +9,11 @@ from fastapi.responses import JSONResponse
 from .bekko import BekkoService
 from .laya import DecisionService, LayaService, Problems
 from .lev import LevService
+from .deberta import DebertaService
 
 router = APIRouter(prefix="/api/services")
 
-SERVICES: dict[str, type[DecisionService]] = {"laya": LayaService, "lev": LevService, "bekko": BekkoService}
+SERVICES: dict[str, type[DecisionService]] = {"laya": LayaService, "lev": LevService, "bekko": BekkoService, "deberta": DebertaService}
 
 
 def service(request: Request, name: str) -> DecisionService:

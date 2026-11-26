@@ -29,8 +29,9 @@ def to_text(r: Recipe) -> str:
     if r.kv_cache_dtype != "auto":
         lines.append(f"--kv-cache-dtype {r.kv_cache_dtype}")
     draft = r.draft_path or r.draft_repo
-    if draft:
-        spec = {"model": draft, **({"method": r.draft_method} if r.draft_method and r.draft_method != "auto" else {}),
+    if draft or r.draft_method:
+        spec = {**({"model": draft} if draft else {}),
+                **({"method": r.draft_method} if r.draft_method and r.draft_method != "auto" else {}),
                 "num_speculative_tokens": r.num_speculative_tokens, **(r.speculative_extra or {})}
         lines.append(f"--speculative-config {shlex.quote(json.dumps(spec))}")
     return "\n".join(lines + list(r.extra_args))

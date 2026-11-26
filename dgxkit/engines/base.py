@@ -132,7 +132,10 @@ class PromAdapter:
         return net
 
     def _lifetime(self, cur: dict, out: dict) -> None:
-        for key, total_key in (("prompt", "prompt_tokens_total"), ("gen", "gen_tokens_total"),
+        if cur.get("prompt") is not None:
+            # prompt totals include freshly prefilled and prefix-reused input tokens.
+            out["prompt_tokens_total"] = cur["prompt"] + (cur.get("reused") or 0)
+        for key, total_key in (("gen", "gen_tokens_total"),
                                ("done", "requests_total"), ("accepted", "spec_accepted_total"),
                                ("drafted", "spec_drafted_total")):
             if cur.get(key) is not None:

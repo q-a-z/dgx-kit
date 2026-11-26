@@ -82,6 +82,7 @@ export type Recipe = {
   notes?: string
   path?: string | null
   draft_path?: string | null
+  cluster?: { workers?: { host?: string; ip?: string }[] } | null
   publish: boolean
   weights_bytes: number
   draft_weights_bytes: number
@@ -190,6 +191,7 @@ export async function copyText(text: string): Promise<boolean> {
 /** A service that runs beside the models and isn't one (Laya, the decision model server). */
 export type ServiceJob = { kind: string; state: string; error: string | null; tail: string[]; progress?: number | null }
 export type Service = {
+  kind?: 'classification'; endpoint?: string
   name: string; title: string; about: string; state: string; started: number | null; port: number; device: 'cuda' | 'cpu'
   device_in_use: string | null; loaded: string[]; checkpoints: { dir: string | null; found: string[] }; selected: string[]
   /** What could be picked to run; one entry means there is nothing to pick. */

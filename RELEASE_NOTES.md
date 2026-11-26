@@ -2,6 +2,14 @@
 
 Newest first. Every commit adds its entry here.
 
+## 0.1.51
+
+### Fixed
+
+- Preserve Velo-Fabric peer launch and native sparse-KV planning, separate RoCE GID indices, and explicit RDMA character-device bindings.
+- Restore VeloGB10 completed-request speed metrics, Flare metrics support, and the optional DeBERTa service present on the fleet.
+- Preserve imported speculative options, the searchable compact recipe catalog, and gateway status for a missing API key.
+
 ## 0.1.50
 
 ### Fixed

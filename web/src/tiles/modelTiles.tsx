@@ -31,17 +31,25 @@ function throughput(kind: 'prefill' | 'decode', title: string, accent: boolean):
     id: kind, title, w: 2, options: [WINDOW],
     render: ({ marks, name, live, history }, o) => {
       const h = recent(history, o.window)
+      const aggregate = num(live, `${kind}_tps`)
+      const windowRate = num(live, `${kind}_tps_avg`)
+      const requestRate = num(live, `${kind}_tps_req`)
+      const useWindow = windowRate != null && windowRate > 0
+      const displayRate = useWindow ? windowRate : requestRate
+      const displayLabel = useWindow
+        ? `Completed-token aggregate, last ${live?.window_s ?? 60} s`
+        : 'Mean per completed request'
       return (
         <>
-          <Hero label={`Average, last ${live?.window_s ?? 60} s`} value={tps(num(live, `${kind}_tps_avg`))} unit="tok/s" accent={accent} />
+          <Hero label={displayLabel} value={tps(displayRate)} unit="tok/s" accent={accent} />
           <div className="metrics">
-            <Metric label="Now" value={tps(num(live, `${kind}_tps`))} unit="tok/s" />
-            <Metric label="Per request" value={tps(num(live, `${kind}_tps_req`))} unit="tok/s" />
+            <Metric label="Completed-token rate" value={tps(aggregate)} unit="tok/s" />
+            <Metric label="Per-request mean" value={tps(requestRate)} unit="tok/s" />
             <Metric label={kind === 'prefill' ? 'Tokens read' : 'Tokens written'} value={fmtNum(num(live, total))} />
           </div>
           <div className="chart-wrap">
             <Chart marks={marks} times={h.map((s) => s.t)} height={90} fmt={(v) => fmtNum(v)}
-              series={[{ label: 'Now', values: col(h, name, `${kind}_tps`) }, { label: 'Average', values: col(h, name, `${kind}_tps_avg`) }]} />
+              series={[{ label: 'Completed-token rate', values: col(h, name, `${kind}_tps`) }, { label: '60s aggregate', values: col(h, name, `${kind}_tps_avg`) }]} />
           </div>
         </>
       )
